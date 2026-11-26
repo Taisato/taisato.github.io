@@ -27,7 +27,7 @@ class FootballControls {
     this.poseInverse=new FT.Quaternion();this.poseVector=new FT.Vector3();
     this.trackingHoldSeconds=.12;
     this.keys=new Set();this.kickAge=10;
-    this.edges={ball:false,menu:false,calibrate:false};this.left={x:0,y:0};this.turn=0;this.sprint=false;
+    this.edges={ball:false,menu:false,calibrate:false};this.left={x:0,y:0};this.turn=0;this.turnSpeedMultiplier=1;this.sprint=false;
     this.hands=['left','right'].map((name,index)=>{
       const visual=field.makeFoot(name);scene.add(visual.root);visual.root.visible=false;
       const collider=this.colliderFor(visual);
@@ -60,6 +60,7 @@ class FootballControls {
     const listen=(type,fn)=>window.addEventListener(type,fn,{signal:this.abort.signal});
     listen('keydown',event=>{
       if(!this.desktop||event.repeat)return;
+      if(event.code!=='Escape'&&event.target?.closest?.('button,input,select,textarea,summary,[contenteditable]'))return;
       this.keys.add(event.code);
       if(event.code==='KeyB')this.edges.ball=true;
       if(event.code==='KeyX')this.edges.calibrate=true;
@@ -370,7 +371,7 @@ class FootballControls {
   move(dt,blocked) {
     this.refreshHead();
     if(blocked||!this.poseValid||!this.isCalibrated||(!this.desktop&&this.calibration.awaitRelease)){this.velocity.set(0,0,0);return;}
-    const yaw=-this.turn*FB.turnSpeed*dt;
+    const yaw=-this.turn*FB.turnSpeed*this.turnSpeedMultiplier*dt;
     if(Math.abs(yaw)>1e-6){
       this.temp.copy(this.headWorld);this.rig.rotation.y+=yaw;this.rig.updateMatrixWorld(true);
       this.temp2.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);

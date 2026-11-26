@@ -161,23 +161,48 @@ const UI_MAP_FRAGMENT = `
 #endif
 `;
 
+// Only the HUD opts into these measured text bounds. Padding includes the old
+// fringe outside each glyph, while icons, panel edges and other UI stay intact.
+const UI_TEXT_MAP_FRAGMENT = UI_MAP_FRAGMENT.replace(
+  '  vec4 opticalCentre =',
+  `  float opticalText = 0.0;
+  for(int i = 0; i < 5; i++) {
+    vec2 insideLow = step(uOpticalTextRegions[i].xy, vMapUv);
+    vec2 insideHigh = step(vMapUv, uOpticalTextRegions[i].zw);
+    opticalText = max(opticalText, insideLow.x * insideLow.y * insideHigh.x * insideHigh.y);
+  }
+  opticalShift *= 1.0 - .25 * opticalText;
+  vec4 opticalCentre =`
+);
+
 // A normal Three material: existing colour management, alpha and UI ordering stay
 // intact. CanvasTexture updates remain driven by UI state, never by this effect.
-function createOpticalMaterial(texture, {strength = .5} = {}) {
+const opticalMaterials = new WeakMap();
+function createOpticalMaterial(texture, {strength = .5, textRegions = null} = {}) {
   const width = Math.max(1, texture.image?.width || 1);
   const height = Math.max(1, texture.image?.height || 1);
   const material = new FT.MeshBasicMaterial({map:texture, transparent:true, depthTest:false, depthWrite:false});
   const texel = {value:new FT.Vector2(1 / width, 1 / height)};
   const amount = {value:OPTICS.uiSplitPixels * Math.max(0, Math.min(1, strength))};
+  opticalMaterials.set(material, {amount, strength:amount.value});
   material.name = 'Optical interface';
   material.userData.footballOpticsUI = true;
   material.onBeforeCompile = shader => {
     shader.uniforms.uOpticalTexel = texel;
     shader.uniforms.uOpticalStrength = amount;
+    if(textRegions) shader.uniforms.uOpticalTextRegions = {value:textRegions};
     shader.fragmentShader = 'uniform vec2 uOpticalTexel;\nuniform float uOpticalStrength;\n' +
-      shader.fragmentShader.replace('#include <map_fragment>', UI_MAP_FRAGMENT);
+      (textRegions ? 'uniform vec4 uOpticalTextRegions[5];\n' : '') +
+      shader.fragmentShader.replace('#include <map_fragment>', textRegions ? UI_TEXT_MAP_FRAGMENT : UI_MAP_FRAGMENT);
   };
-  material.customProgramCacheKey = () => 'football-optical-interface-v33';
+  material.customProgramCacheKey = textRegions ? () => 'football-optical-interface-text-v35' : () => 'football-optical-interface-v33';
+  return material;
+}
+
+function setOpticalEffects(material, {chromatic} = {}) {
+  const optical = opticalMaterials.get(material);
+  if(optical && typeof chromatic === 'boolean')
+    optical.amount.value = chromatic ? optical.strength : 0;
   return material;
 }
 
@@ -193,6 +218,8 @@ class FootballOptics {
     this.targetSize = new FT.Vector2();
     this.motionSources = [];
     this.motionEnabled = true;
+    this.chromaticEnabled = true;
+    this.noiseEnabled = true;
     this.hud = null;
     this._viewPosition = new FT.Vector3();
     this._corner = new FT.Vector3();
@@ -235,10 +262,22 @@ class FootballOptics {
     this.menuAmount += Math.max(-step, Math.min(step, goal - this.menuAmount));
     const t = this.menuAmount * this.menuAmount * (3 - 2 * this.menuAmount);
     this.time = (this.time + elapsed) % 4096;
-    this.uniforms.uSplit.value = OPTICS.playSplitPixels + (OPTICS.menuSplitPixels - OPTICS.playSplitPixels) * t;
-    this.uniforms.uGrain.value = OPTICS.playGrain + (OPTICS.menuGrain - OPTICS.playGrain) * t;
+    this._effects(t);
     this.uniforms.uVignette.value = OPTICS.playVignette + (OPTICS.menuVignette - OPTICS.playVignette) * t;
     this.uniforms.uNoiseFrame.value = Math.floor(this.time * 24);
+  }
+
+  setEffects({chromatic, noise} = {}) {
+    if(typeof chromatic === 'boolean') this.chromaticEnabled = chromatic;
+    if(typeof noise === 'boolean') this.noiseEnabled = noise;
+    this._effects(this.menuAmount * this.menuAmount * (3 - 2 * this.menuAmount));
+    if(!this.chromaticEnabled) this.uniforms.uMotionCount.value = 0;
+    return this;
+  }
+
+  _effects(t) {
+    this.uniforms.uSplit.value = this.chromaticEnabled ? OPTICS.playSplitPixels + (OPTICS.menuSplitPixels - OPTICS.playSplitPixels) * t : 0;
+    this.uniforms.uGrain.value = this.noiseEnabled ? OPTICS.playGrain + (OPTICS.menuGrain - OPTICS.playGrain) * t : 0;
   }
 
   setMotionSources(sources) { this.motionSources = sources || []; }
@@ -266,7 +305,7 @@ class FootballOptics {
     const u = this.uniforms, viewport = u.uViewport.value, p = camera.projectionMatrix.elements;
     const m = camera.matrixWorldInverse.elements, pixelScale = u.uPixelScale.value;
     let count = 0;
-    if(this.motionEnabled) for(let i = 0; i < this.motionSources.length && count < OPTICS.maxMotionSources; i++) {
+    if(this.motionEnabled && this.chromaticEnabled) for(let i = 0; i < this.motionSources.length && count < OPTICS.maxMotionSources; i++) {
       const source = this.motionSources[i], position = source?.position, velocity = source?.velocity;
       const radius = source?.radius;
       if(!source?.enabled || !position || !velocity || !(radius > 0) ||
@@ -396,4 +435,4 @@ class FootballOptics {
   }
 }
 
-export {FootballOptics, createOpticalMaterial, OPTICS, OPTICS_VERTEX, OPTICS_FRAGMENT, UI_MAP_FRAGMENT};
+export {FootballOptics, createOpticalMaterial, setOpticalEffects, OPTICS, OPTICS_VERTEX, OPTICS_FRAGMENT, UI_MAP_FRAGMENT};

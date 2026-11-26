@@ -1,10 +1,11 @@
-// Assets finish loading before either play button is available.
+// Assets finish loading before play and Settings become available.
 export let footballApp=null;
 async function bootstrap(){
   const status=document.querySelector('#status');
   const desktop=document.querySelector('#desktop');
   const enter=document.querySelector('#enter-vr');
-  desktop.disabled=true;enter.disabled=true;
+  const settings=document.querySelector('#settings');
+  desktop.disabled=true;enter.disabled=true;settings.disabled=true;
   status.textContent='Loading…';
   try{
     const [{FootballApp},{FootballKeeperMeshes},{FootballAudio}]=await Promise.all([
@@ -13,12 +14,12 @@ async function bootstrap(){
     await Promise.all([FootballKeeperMeshes.load(),FootballAudio.load()]);
     status.textContent='';
     footballApp=new FootballApp();
-    desktop.disabled=false;
+    desktop.disabled=false;settings.disabled=false;
     return footballApp;
   }catch(error){
     console.error('Football initialization failed',error);
     status.textContent='Could not load. Reload.';
-    desktop.disabled=true;enter.disabled=true;
+    desktop.disabled=true;enter.disabled=true;settings.disabled=true;
     return null;
   }
 }

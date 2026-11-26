@@ -1,17 +1,34 @@
 import { FT } from '../../vendor/three.js';
 import {UI,shape,label,tracked,heart,touch} from './theme.js';
 import {createOpticalMaterial} from '../render/optics.js';
-function drawHUD(c,s,width=900,height=250){
- c.clearRect(0,0,width,height);if(s.mode!=='challenge')return;shape(c,6,6,888,132,18);c.fillStyle='rgba(8,13,29,.94)';c.fill();c.strokeStyle=UI.line;c.lineWidth=2;c.stroke();c.fillStyle=UI.mint;c.fillRect(34,6,70,3);tracked(c,'TOUCHES',42,41,17,UI.muted,2);
+function textRegion(c,regions,index,value,x,y,size,spacing,width,height){
+ if(!regions)return;
+ let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
+ const parts=spacing?value:[value];
+ for(const part of parts){
+  const m=c.measureText(part),offset=c.textAlign==='center'?m.width*.5:c.textAlign==='right'?m.width:0;
+  left=Math.min(left,x-(Number.isFinite(m.actualBoundingBoxLeft)?m.actualBoundingBoxLeft:offset));
+  right=Math.max(right,x+(Number.isFinite(m.actualBoundingBoxRight)?m.actualBoundingBoxRight:m.width-offset));
+  top=Math.min(top,y-(Number.isFinite(m.actualBoundingBoxAscent)?m.actualBoundingBoxAscent:size*.65));
+  bottom=Math.max(bottom,y+(Number.isFinite(m.actualBoundingBoxDescent)?m.actualBoundingBoxDescent:size*.65));
+  x+=m.width+spacing;
+ }
+ // Two canvas pixels include bilinear filtering and the complete .35 px fringe.
+ regions[index].set((left-2)/width,1-(bottom+2)/height,(right+2)/width,1-(top-2)/height);
+}
+function drawHUD(c,s,width=900,height=250,textRegions=null){
+ if(textRegions)for(const region of textRegions)region.set(2,2,-1,-1);
+ c.clearRect(0,0,width,height);if(s.mode!=='challenge')return;shape(c,6,6,888,132,18);c.fillStyle='rgba(8,13,29,.94)';c.fill();c.strokeStyle=UI.line;c.lineWidth=2;c.stroke();c.fillStyle=UI.mint;c.fillRect(34,6,70,3);tracked(c,'TOUCHES',42,41,17,UI.muted,2);textRegion(c,textRegions,0,'TOUCHES',42,41,17,2,width,height);
  const touches=Math.max(0,Math.min(3,s.touches??s.touchesLeft??3)),lives=Math.max(0,Math.min(3,s.lives??3));for(let i=0;i<3;i++)touch(c,64+i*46,91,30,i<touches);
- c.fillStyle=UI.line;c.fillRect(296,30,1,84);tracked(c,'GOALS',338,42,17,UI.muted,2);label(c,String(s.score||0),338,94,54,UI.white,'left',800);c.fillStyle=UI.line;c.fillRect(592,30,1,84);tracked(c,'LIVES',634,42,17,UI.muted,2);for(let i=0;i<3;i++)heart(c,656+i*44,95,27,i<lives);
+ c.fillStyle=UI.line;c.fillRect(296,30,1,84);tracked(c,'GOALS',338,42,17,UI.muted,2);textRegion(c,textRegions,1,'GOALS',338,42,17,2,width,height);label(c,String(s.score||0),338,94,54,UI.white,'left',800);textRegion(c,textRegions,2,String(s.score||0),338,94,54,0,width,height);c.fillStyle=UI.line;c.fillRect(592,30,1,84);tracked(c,'LIVES',634,42,17,UI.muted,2);textRegion(c,textRegions,3,'LIVES',634,42,17,2,width,height);for(let i=0;i<3;i++)heart(c,656+i*44,95,27,i<lives);
  const over=s.phase==='gameover',result=s.phase==='result',word=over?'RUN OVER':result?({goal:'GOAL',out:'OUT',saved:'SAVED',touches:'NO TOUCHES',miss:'MISS'}[s.outcome]||'NEXT'):'';
- if(word){shape(c,250,158,400,78,13);c.fillStyle=s.outcome==='goal'&&!over?UI.mint:over?UI.lilac:UI.white;c.fill();label(c,word,450,197,35,UI.ink,'center',900);}
+ if(word){shape(c,250,158,400,78,13);c.fillStyle=s.outcome==='goal'&&!over?UI.mint:over?UI.lilac:UI.white;c.fill();label(c,word,450,197,35,UI.ink,'center',900);textRegion(c,textRegions,4,word,450,197,35,0,width,height);}
 }
 class FootballHUD{
  constructor(camera){
   this.canvas=document.createElement('canvas');this.canvas.width=900;this.canvas.height=250;this.context=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;
-  this.mesh=new FT.Mesh(new FT.PlaneGeometry(.9,.25),createOpticalMaterial(this.texture,{strength:.25}));this.mesh.position.set(0,0,-1.7);this.mesh.renderOrder=170;this.mesh.frustumCulled=false;this.mesh.visible=false;camera.add(this.mesh);this.camera=camera;this.upperSlope=0;this.fitToCamera(camera);
+  this.textRegions=Array.from({length:5},()=>new FT.Vector4(2,2,-1,-1));
+  this.mesh=new FT.Mesh(new FT.PlaneGeometry(.9,.25),createOpticalMaterial(this.texture,{strength:.25,textRegions:this.textRegions}));this.mesh.position.set(0,0,-1.7);this.mesh.renderOrder=170;this.mesh.frustumCulled=false;this.mesh.visible=false;camera.add(this.mesh);this.camera=camera;this.upperSlope=0;this.fitToCamera(camera);
   this.desktopCanvas=document.querySelector('#desktop-hud');this.desktopContext=this.desktopCanvas?.getContext?.('2d');if(this.desktopCanvas){this.desktopCanvas.width=900;this.desktopCanvas.height=250;this.desktopCanvas.hidden=true;}this.key='';
  }
  fitToCamera(camera=this.camera){
@@ -23,16 +40,16 @@ class FootballHUD{
    if(p&&p[5]>0){const slope=(1+p[9])/p[5];if(slope>0&&Number.isFinite(slope))upper=Math.min(upper,slope);}
   }
   if(!Number.isFinite(upper))upper=1;if(Math.abs(upper-this.upperSlope)<1e-6)return;this.upperSlope=upper;
-  // Fit the full canvas below the upper frustum, then move down by one visible
-  // strip height (132 of 250 canvas pixels = .132 m at this unchanged scale).
+  // Keep the frustum fit, with one further visible-strip drop from V35.
+  // Two 132-pixel strips total .264 m at this unchanged canvas scale.
   const depth=1.7,target=depth*Math.tan(39*Math.PI/180)-.053;
   const ceiling=depth*Math.tan(Math.atan(upper)-3*Math.PI/180)-.125;
-  this.mesh.position.y=Math.min(target,ceiling)-.132;
+  this.mesh.position.y=Math.min(target,ceiling)-.264;
  }
  update(snapshot={},visible=true,desktop=false,viewCamera=this.camera){
   const show=!!visible&&snapshot.mode==='challenge';this.mesh.visible=show&&!desktop;if(this.desktopCanvas)this.desktopCanvas.hidden=!(show&&desktop);if(!show)return;
   if(!desktop)this.fitToCamera(viewCamera);
-  const key=[snapshot.mode,snapshot.phase,snapshot.score,snapshot.lives,snapshot.touches??snapshot.touchesLeft,snapshot.outcome,desktop].join('|');if(key===this.key)return;this.key=key;drawHUD(this.context,snapshot);this.texture.needsUpdate=true;
+  const key=[snapshot.mode,snapshot.phase,snapshot.score,snapshot.lives,snapshot.touches??snapshot.touchesLeft,snapshot.outcome,desktop].join('|');if(key===this.key)return;this.key=key;drawHUD(this.context,snapshot,900,250,this.textRegions);this.texture.needsUpdate=true;
   if(this.desktopContext){this.desktopContext.clearRect(0,0,900,250);this.desktopContext.drawImage(this.canvas,0,0);}if(this.desktopCanvas)this.desktopCanvas.setAttribute?.('aria-label',(snapshot.score||0)+' goals, '+(snapshot.touches??snapshot.touchesLeft??3)+' touches, '+(snapshot.lives??3)+' lives');
  }
  hide(){this.mesh.visible=false;if(this.desktopCanvas)this.desktopCanvas.hidden=true;}

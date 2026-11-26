@@ -116,6 +116,16 @@ class FootballPhysics {
       // limit must not add energy when changing instep raises the displayed shoe.
       f.ankleVelocity.copy(foot.driveVelocity||foot.ankleVelocity||f.velocity);
       if(!Number.isFinite(f.ankleVelocity.lengthSq()))f.ankleVelocity.set(0,0,0);
+      if(foot.driveVelocity&&foot.ankleVelocity&&Number.isFinite(foot.ankleVelocity.y)){
+        const driveY=f.ankleVelocity.y,actualY=foot.ankleVelocity.y;
+        // At the turf penetration limit, raw controller motion can continue
+        // while the collision ankle is pinned. Block only that unavailable
+        // vertical drive; a clearance/instep pose adjustment must not supply
+        // power either. Unconstrained motion keeps its exact existing value.
+        if(Math.abs(driveY-actualY)>1e-7)
+          f.ankleVelocity.y=driveY>0?Math.min(driveY,Math.max(0,actualY)):
+            Math.max(driveY,Math.min(0,actualY));
+      }
       if(f.useAnkleVelocity&&!foot.driveVelocity&&!foot.ankleVelocity){
         // foot.velocity remains the supplied contact-centre average. Remove only
         // its rotating-offset chord; the contact lever below is then ankle-based.
