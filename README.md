@@ -1,6 +1,6 @@
 # First Touch — VR football
 
-**Build V38:** Added the supplied Normal wind ambience and a saved Normal / Heavy wind choice in Settings.
+**Build V39:** Restored the V36 ball physics and reduced both wind ambiences to 40% of their V38 playback level (2.5× quieter).
 
 ## Play
 
@@ -39,7 +39,7 @@ The two effects are independent. Disabling aberration removes world colour separ
 
 Normal wind plays as a continuous stereo background during gameplay. Select **Wind → Heavy** for the second recording. Switching blends between the ambiences smoothly, and the choice is remembered with the other settings. Older saved settings automatically use Normal without resetting any existing preferences.
 
-The wind follows menu slow motion along with the other sounds. Ball respawns and new chances do not restart it. Leaving the game or a true suspension stops the ambience. The wind setting changes sound only; the ball physics remains the V37 version.
+The wind follows menu slow motion along with the other sounds. Ball respawns and new chances do not restart it. Leaving the game or a true suspension stops the ambience. Both wind tracks now play at 40% of their previous level. The wind setting changes sound only.
 
 ## Modes
 
@@ -59,9 +59,7 @@ Use the menu to switch modes, restart or recalibrate. Recalibration preserves th
 
 ## Boot contact
 
-Fast side-foot strikes could treat the boot's upper edge as a rigid upward ramp. V37 blends the impact response across that edge for fast, predominantly horizontal, actively driven side contacts with a ball close to the turf. The correction fades in with speed and contact angle. Actual boot geometry still determines collision detection and separation; normal and friction impulses use the same corrected response direction.
-
-The change is local to that contact case. Ordinary touches, lower-angle strikes, deliberately rising kicks, airborne contacts and passive receiving retain the existing behavior. Gravity, drag, rolling resistance, spin decay, ball speed limits, instep lift and boot dimensions have not been retuned. The earlier protection against artificial kick energy from floor-constrained controller motion remains.
+Ball physics is restored byte-for-byte from V36, before the latest fast inside-foot contact adjustment. This restores that version's contact response, instep lift, curve, rolling resistance and receiving behavior.
 
 Returning from menu slow motion also preserves the real speed of controller swings, so the reduced simulation rate does not multiply foot-impact power.
 
@@ -89,10 +87,8 @@ The optical effect still uses one reusable scene target and one composite pass, 
 
 ## Verification
 
-Ball and net physics, calibrated controls, goalkeeper behavior, challenge rules, HUD placement and optical shaders remain byte-identical to V37, retaining the previous shot correction and gameplay checks.
+The complete ball-physics module matches the released V36 file. All other gameplay code, settings, rendering and audio playback code match V38. Only the two wind gains change in the audio manifest: Normal 0.112 and Heavy 0.048, both 40% of their previous values. All 15 supplied MP3 files remain byte-identical.
 
-Wind checks cover the original MP3 files, prepared stereo loops, seamless wrap points, balanced levels, smooth switching, rapid repeated selections, voice limits and slow-motion playback. Integration checks cover the Normal default, migration from older preferences, saved Heavy selection, launcher and VR menu controls, ball resets, mode changes, suspension and disposal. Existing gameplay and menu behavior are also checked.
-
-Validation uses native production JavaScript, calibrated controller traces, canvas renders, decoded audio and audio timing equations. It is **not a browser/GPU or physical-headset playtest**. Release checks compare unaffected files against V37 and verify every ZIP member.
+Validation checks the exact rollback, retained menu slow motion, gameplay integration, audio settings and every ZIP member. It uses native production JavaScript, controller traces, canvas output and decoded audio; it is **not a browser/GPU or physical-headset playtest**.
 
 Sound-file mapping: [SOUND_EFFECTS.md](SOUND_EFFECTS.md). Graphics library license: [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).

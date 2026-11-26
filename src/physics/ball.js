@@ -367,29 +367,6 @@ class FootballPhysics {
     b.velocity.x*=scale;b.velocity.z*=scale;b.velocity.y=vertical;
   }
 
-  sideStrikeNormal(f,grounded,approach) {
-    const n=this._normal,v=this._surface;
-    if(grounded<=0||f.contactPart!=='boot'||!f.foot.contactShape||n.y<=.42||approach<=0)return;
-    const planar=Math.hypot(v.x,v.z),horizontal=Math.hypot(n.x,n.z);
-    if(planar<=12||horizontal<1e-6)return;
-    const rise=Math.max(0,v.y)/planar,active=Math.max(0,v.dot(n))/approach;
-    if(rise>=.28||active<=.6)return;
-    // A fast side strike loads a broad compliant patch instead of treating
-    // the upper edge as a rigid ramp. Keep the geometric normal for overlap
-    // removal; use this averaged response normal for the coupled impact and
-    // friction impulses. Genuine rising kicks and receiving contacts bypass it.
-    this._footLocalNormal.copy(n).applyQuaternion(f.inverse);
-    const side=this.smoothContactBlend((Math.abs(this._footLocalNormal.x)-.45)/.4);
-    const blend=grounded*side*this.smoothContactBlend((planar-12)/10)*
-      this.smoothContactBlend((n.y-.42)/.18)*
-      (1-this.smoothContactBlend((rise-.08)/.20))*
-      this.smoothContactBlend((active-.6)/.3);
-    if(blend<=0)return;
-    const y=n.y-(n.y-.35)*.85*blend;
-    const scale=Math.sqrt(Math.max(0,1-y*y))/horizontal;
-    n.set(n.x*scale,y,n.z*scale);
-  }
-
   collideFoot(f, alpha, dt) {
     const b = this.ball, foot = f.foot, state = f.state, cfg = this.config;
     const instep=Number.isFinite(foot.instepAmount)?Math.max(0,Math.min(1,foot.instepAmount)):Number(!!foot.instep);
@@ -416,14 +393,12 @@ class FootballPhysics {
       else{this._normal.copy(f.velocity);this._normal.y=Math.max(0,this._normal.y);if(this._normal.lengthSq()<.0001)this._normal.set(0,0,-1);this._normal.normalize();}
     }
     state.seen = true;
-    const separationX=this._normal.x,separationY=this._normal.y,separationZ=this._normal.z;
     this.footSurfaceVelocity(f,this._point,this._surface);
     this._relative.subVectors(b.velocity, this._surface);
-    const grounded=1-this.smoothContactBlend((b.position.y-b.radius-.004)/.03);
-    this.sideStrikeNormal(f,grounded,-this._relative.dot(this._normal));
     const approach = -this._relative.dot(this._normal);
     const penetration = radius - distance;
     const liftRestore=this.liftRestoration();
+    const grounded=1-this.smoothContactBlend((b.position.y-b.radius-.004)/.03);
     const controlPunt=this.controlledPunt(f);
     const newTouch=!state.contact&&(approach>.045||(penetration>.008&&f.velocity.lengthSq()>.003));
     if (newTouch) {
@@ -436,10 +411,7 @@ class FootballPhysics {
     }
     // The two-millimetre skin bridges numerical gaps, not a hidden oversized foot.
     // A resting boot may support or trap a ball without repeated bounce impulses.
-    if (penetration > 0) {
-      const separation=penetration+.0001;
-      b.position.x+=separationX*separation;b.position.y+=separationY*separation;b.position.z+=separationZ*separation;
-    }
+    if (penetration > 0) b.position.addScaledVector(this._normal, penetration + .0001);
     let impulse=0;
     // Use the complete physical surface velocity, including the player's
     // motion once. A fast grazing swing must keep its tangential grip and curve
