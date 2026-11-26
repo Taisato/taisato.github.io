@@ -18,7 +18,7 @@ class FootballGoalNets {
     this._patchIds=new Uint16Array(64);this._patchWeights=new Float64Array(64);this._patchCount=0;this._patchSerial=0;
     this._seeds=[new FT.Vector3(),new FT.Vector3(),new FT.Vector3(),new FT.Vector3(),new FT.Vector3()];
     this._lastEvent=-10;this._disposed=false;this._freshContact=true;
-    this.stats={clothSteps:0,ballContacts:0,bootContacts:0,bootPasses:0,sleptSteps:0,invalidStates:0};
+    this.stats={clothSteps:0,ballContacts:0,bootContacts:0,bootPasses:0,sleptSteps:0,invalidStates:0,tears:0};
   }
   static relaxedOffsets() {
     if(this._relaxedOffsets)return this._relaxedOffsets;
@@ -60,20 +60,28 @@ class FootballGoalNets {
     panel('roof',nx,nz,(i,k)=>node(i,ny,k),1,-1);
     const rest=new Float32Array(nodes),relaxed=rest.slice(),offsets=FootballGoalNets.relaxedOffsets();let relaxedDisplacement=0;
     for(let i=0;i<rest.length;i+=3){const x=offsets[i]*.0001,y=offsets[i+1]*.0001,z=offsets[i+2]*.0001*-sign;relaxed[i]+=x;relaxed[i+1]+=y;relaxed[i+2]+=z;relaxedDisplacement=Math.max(relaxedDisplacement,Math.sqrt(x*x+y*y+z*z));}
-    const positions=relaxed.slice(),previous=relaxed.slice(),neighborSets=Array.from({length:pins.length},()=>new Set());
-    for(let k=0;k<constraints.length;k+=4)if(constraints[k+3]<.001){neighborSets[constraints[k]].add(constraints[k+1]);neighborSets[constraints[k+1]].add(constraints[k]);}
+    const positions=relaxed.slice(),previous=relaxed.slice(),neighborSets=Array.from({length:pins.length},()=>new Set()),constraintLookup=new Map();
+    for(let k=0;k<constraints.length;k+=4){const a=constraints[k],b=constraints[k+1];constraintLookup.set(Math.min(a,b)*4096+Math.max(a,b),k/4);if(constraints[k+3]<.001){neighborSets[a].add(b);neighborSets[b].add(a);}}
+    const neighbors=neighborSets.map(s=>new Uint16Array(s)),neighborLinks=neighbors.map((list,a)=>new Uint16Array(Array.from(list,b=>constraintLookup.get(Math.min(a,b)*4096+Math.max(a,b)))));
     return{sign,end:sign,rest,relaxed,relaxedDisplacement,positions,current:positions,previous,renderPrevious:previous,
       velocity:new Float32Array(rest.length),start:new Float32Array(rest.length),normals:new Float32Array(rest.length),inverseMass:new Float32Array(pins),
       indices:new Uint16Array(triangles),panels,constraints:new Float32Array(constraints),lambda:new Float32Array(constraints.length/4),
-      neighbors:neighborSets.map(s=>new Uint16Array(s)),visited:new Uint32Array(pins.length),
+      neighbors,neighborLinks,constraintLookup,visited:new Uint32Array(pins.length),
+      triangleActive:new Uint8Array(triangles.length/3).fill(1),constraintActive:new Uint8Array(constraints.length/4).fill(1),
+      nodeDamage:new Float32Array(pins.length),damageRest:rest.slice(),nodeSupport:new Uint16Array(pins.length),edgeSupport:new Uint8Array(constraints.length/4),
+      tornTriangles:new Uint16Array(triangles.length/3),tornCount:0,tearCount:0,damageRevision:0,tears:[],lastTearTime:-10,
       bootStates:[0,1].map(()=>({id:null,mask:0,sides:new Int8Array(4),lastTouch:new Float64Array(4)})),
       half,top,front:sign*FB.halfLength,back:sign*(FB.halfLength+FB.goalDepth),
       sleeping:true,revision:0,active:false,quietTime:0,maxDisplacement:relaxedDisplacement,maxSpeed:0,ballInside:null,exteriorMask:0,ballContact:false,footContact:false};
   }
-  reset() {
+  reset({repair=true}={}) {
     this.clearContacts(true);
-    for(const net of this.goals){net.positions.set(net.relaxed);net.previous.set(net.relaxed);net.velocity.fill(0);net.lambda.fill(0);net.sleeping=true;net.active=false;net.quietTime=0;net.maxDisplacement=net.relaxedDisplacement;net.maxSpeed=0;net.ballInside=null;net.exteriorMask=0;net.ballContact=false;net.footContact=false;net.revision++;}
-    this.time=0;
+    for(const net of this.goals){
+      if(!repair&&net.tearCount){net.ballInside=null;net.exteriorMask=0;net.revision++;continue;}
+      net.positions.set(net.relaxed);net.previous.set(net.relaxed);net.velocity.fill(0);net.lambda.fill(0);net.normals.fill(0);net.sleeping=true;net.active=false;net.quietTime=0;net.maxDisplacement=net.relaxedDisplacement;net.maxSpeed=0;net.ballInside=null;net.exteriorMask=0;net.ballContact=false;net.footContact=false;net.revision++;
+      if(repair){net.triangleActive.fill(1);net.constraintActive.fill(1);net.nodeDamage.fill(0);net.damageRest.set(net.rest);net.nodeSupport.fill(0);net.edgeSupport.fill(0);net.tornCount=0;net.tearCount=0;net.tears.length=0;net.lastTearTime=-10;net.damageRevision++;}
+    }
+    if(repair)this.time=0;
   }
   _releaseBoot(net,state){if(state.mask){net.sleeping=false;net.quietTime=0;}state.id=null;state.mask=0;state.sides.fill(0);state.lastTouch.fill(0);}
   clearContacts(resetBall=false){this.feet=[];this.footCount=0;this._lastEvent=-10;this._freshContact=true;for(const net of this.goals){for(const state of net.bootStates)this._releaseBoot(net,state);if(resetBall){net.ballInside=null;net.exteriorMask=0;}net.ballContact=false;net.footContact=false;}}
@@ -87,7 +95,7 @@ class FootballGoalNets {
     return Math.abs(depth-FB.goalDepth)<range||Math.abs(Math.abs(x)-net.half)<range||Math.abs(y-net.top)<range;
   }
   beginStep(dt,physics,footData=[],footCount=footData.length) {
-    if(this._disposed)return;this.dt=dt;this.time=physics.time;this.feet=footData;this.footCount=footCount;
+    if(this._disposed)return;this.dt=dt;this.time+=dt;this.feet=footData;this.footCount=footCount;
     let footTravel=0;for(let f=0;f<footCount;f++)footTravel=Math.max(footTravel,footData[f].distance);
     this._bootSamples=Math.max(1,Math.min(32,Math.ceil(footTravel/.025)));this._bootIndex=0;
     const b=physics.ball,p=b.position,travel=b.velocity.length()*dt;
@@ -119,12 +127,17 @@ class FootballGoalNets {
     start.set(p);const damping=Math.exp(-3.5*h),spring=16*h,sqrt=Math.sqrt;
     for(let i=0;i<w.length;i++){
       const j=i*3;if(!w[i]){p[j]=r[j];p[j+1]=r[j+1];p[j+2]=r[j+2];v[j]=v[j+1]=v[j+2]=0;continue;}
-      v[j]=(v[j]+(r[j]-p[j])*spring)*damping;v[j+1]=(v[j+1]+((r[j+1]-p[j+1])*26-9.81)*h)*damping;v[j+2]=(v[j+2]+(r[j+2]-p[j+2])*spring)*damping;
+      if(net.tearCount&&!net.nodeSupport[i]){p[j]=net.relaxed[j];p[j+1]=net.relaxed[j+1];p[j+2]=net.relaxed[j+2];v[j]=v[j+1]=v[j+2]=0;continue;}
+      if(net.nodeDamage[i]){
+        const target=net.damageRest;
+        v[j]=(v[j]+(target[j]-p[j])*spring*.35)*damping;v[j+1]=(v[j+1]+((target[j+1]-p[j+1])*17-9.81)*h)*damping;v[j+2]=(v[j+2]+(target[j+2]-p[j+2])*spring*.35)*damping;
+      }else{v[j]=(v[j]+(r[j]-p[j])*spring)*damping;v[j+1]=(v[j+1]+((r[j+1]-p[j+1])*26-9.81)*h)*damping;v[j+2]=(v[j+2]+(r[j+2]-p[j+2])*spring)*damping;}
       p[j]+=v[j]*h;p[j+1]+=v[j+1]*h;p[j+2]+=v[j+2]*h;
     }
     net.lambda.fill(0);const invH2=1/(h*h);
     for(let pass=0;pass<2;pass++)for(let order=0;order<c.length;order+=4){
       const k=pass?c.length-4-order:order;
+      if(!net.constraintActive[k>>2])continue;
       const a=c[k]|0,b=c[k+1]|0,wa=w[a],wb=w[b];if(wa+wb===0)continue;
       const ai=a*3,bi=b*3,dx=p[bi]-p[ai],dy=p[bi+1]-p[ai+1],dz=p[bi+2]-p[ai+2],length=sqrt(dx*dx+dy*dy+dz*dz);if(length<1e-7)continue;
       // Cord resists extension; a loose span folds instead of pushing apart
@@ -143,8 +156,11 @@ class FootballGoalNets {
       if(speedSq>256){const q=16/sqrt(speedSq);vx*=q;vy*=q;vz*=q;}v[j]=vx;v[j+1]=vy;v[j+2]=vz;
     }
     this.stats.clothSteps++;
-    const normals=net.normals,idx=net.indices;normals.fill(0);
-    for(let t=0;t<idx.length;t+=3){const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3,ax=p[b]-p[a],ay=p[b+1]-p[a+1],az=p[b+2]-p[a+2],bx=p[c]-p[a],by=p[c+1]-p[a+1],bz=p[c+2]-p[a+2],nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx;
+    this._updateNormals(net);
+  }
+  _updateNormals(net){
+    const p=net.positions,normals=net.normals,idx=net.indices;normals.fill(0);
+    for(let t=0;t<idx.length;t+=3){if(!net.triangleActive[t/3])continue;const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3,ax=p[b]-p[a],ay=p[b+1]-p[a+1],az=p[b+2]-p[a+2],bx=p[c]-p[a],by=p[c+1]-p[a+1],bz=p[c+2]-p[a+2],nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx;
       normals[a]+=nx;normals[a+1]+=ny;normals[a+2]+=nz;normals[b]+=nx;normals[b+1]+=ny;normals[b+2]+=nz;normals[c]+=nx;normals[c+1]+=ny;normals[c+2]+=nz;}
   }
   _closestTriangle(px,py,pz,p,ia,ib,ic) {
@@ -192,6 +208,122 @@ class FootballGoalNets {
     for(let k=0;k<3;k++)this._closest[k]=p[a+k]*wa+p[b+k]*wb+p[c+k]*wc;
     return true;
   }
+  _segmentTriangle(net,triangle,from,to){
+    const p=net.positions,idx=net.indices,a=idx[triangle]*3,b=idx[triangle+1]*3,c=idx[triangle+2]*3;
+    if(Math.max(from.x,to.x)<Math.min(p[a],p[b],p[c])||Math.min(from.x,to.x)>Math.max(p[a],p[b],p[c])||
+      Math.max(from.y,to.y)<Math.min(p[a+1],p[b+1],p[c+1])||Math.min(from.y,to.y)>Math.max(p[a+1],p[b+1],p[c+1])||
+      Math.max(from.z,to.z)<Math.min(p[a+2],p[b+2],p[c+2])||Math.min(from.z,to.z)>Math.max(p[a+2],p[b+2],p[c+2]))return false;
+    const ax=p[a],ay=p[a+1],az=p[a+2],ux=p[b]-ax,uy=p[b+1]-ay,uz=p[b+2]-az,vx=p[c]-ax,vy=p[c+1]-ay,vz=p[c+2]-az;
+    const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx,dx=to.x-from.x,dy=to.y-from.y,dz=to.z-from.z,den=nx*dx+ny*dy+nz*dz;
+    if(Math.abs(den)<1e-12)return false;
+    const t=(nx*(ax-from.x)+ny*(ay-from.y)+nz*(az-from.z))/den;if(t<0||t>1)return false;
+    const x=from.x+dx*t,y=from.y+dy*t,z=from.z+dz*t,px=x-ax,py=y-ay,pz=z-az;
+    const uu=ux*ux+uy*uy+uz*uz,uv=ux*vx+uy*vy+uz*vz,vv=vx*vx+vy*vy+vz*vz,pu=px*ux+py*uy+pz*uz,pv=px*vx+py*vy+pz*vz,det=uu*vv-uv*uv;
+    if(det<1e-15)return false;const wb=(pu*vv-pv*uv)/det,wc=(pv*uu-pu*uv)/det,wa=1-wb-wc;
+    if(wa<-1e-6||wb<-1e-6||wc<-1e-6)return false;
+    this._normal.set(nx,ny,nz).normalize();this._closest[0]=x;this._closest[1]=y;this._closest[2]=z;this._bary[0]=wa;this._bary[1]=wb;this._bary[2]=wc;this._sweepT=t;return true;
+  }
+  _updateHoleSide(net,physics){
+    if(!net.tornCount)return;const from=physics._previous,to=physics.ball.position;
+    if(from.distanceToSquared(to)<1e-14||!this._near(net,to.x,to.y,to.z,from.distanceTo(to)+physics.ball.radius))return;
+    let earliest=2,inside=net.ballInside,mask=net.exteriorMask;
+    for(const panel of net.panels){
+      const end=panel.triangleStart+panel.triangleCount;
+      for(let i=0;i<net.tornCount;i++){
+        const triangle=net.tornTriangles[i]*3;if(triangle<panel.triangleStart||triangle>=end||!this._segmentTriangle(net,triangle,from,to)||this._sweepT>=earliest)continue;
+        const n=this._normal;if(n.getComponent(panel.axis)*panel.inward<0)n.negate();
+        const entering=(to.x-from.x)*n.x+(to.y-from.y)*n.y+(to.z-from.z)*n.z>0;
+        earliest=this._sweepT;inside=entering;mask=entering?0:1<<net.panels.indexOf(panel);
+      }
+    }
+    if(earliest<=1){net.ballInside=inside;net.exteriorMask=mask;}
+  }
+  _linkCrossesTriangle(net,k,t,axis){
+    // Strict interior overlap: a surviving boundary cord stays attached, but
+    // diagonal/shear and two-knot bending links cannot bridge an open hole.
+    const p=net.rest,c=net.constraints,idx=net.indices,a=idx[t]*3,b=idx[t+1]*3,d=idx[t+2]*3,s=(c[k]|0)*3,e=(c[k+1]|0)*3;
+    if(Math.abs(p[s+axis]-p[a+axis])>1e-5||Math.abs(p[e+axis]-p[a+axis])>1e-5)return false;
+    const u=axis===0?1:0,v=axis===2?1:2,bx=p[b+u]-p[a+u],by=p[b+v]-p[a+v],cx=p[d+u]-p[a+u],cy=p[d+v]-p[a+v],det=bx*cy-by*cx;
+    if(Math.abs(det)<1e-12)return false;
+    const sx=p[s+u]-p[a+u],sy=p[s+v]-p[a+v],ex=p[e+u]-p[a+u],ey=p[e+v]-p[a+v],b0=(sx*cy-sy*cx)/det,c0=(bx*sy-by*sx)/det,b1=(ex*cy-ey*cx)/det,c1=(bx*ey-by*ex)/det;
+    let lo=0,hi=1;
+    for(let i=0;i<3;i++){
+      const start=i===0?1-b0-c0:i===1?b0:c0,finish=i===0?1-b1-c1:i===1?b1:c1,delta=finish-start;
+      if(Math.abs(delta)<1e-12){if(start<1e-6)return false;}
+      else{const edge=(1e-6-start)/delta;if(delta>0)lo=Math.max(lo,edge);else hi=Math.min(hi,edge);if(hi<=lo)return false;}
+    }
+    return hi-lo>1e-5;
+  }
+  _rebuildDamage(net,firstTorn){
+    const idx=net.indices,support=net.nodeSupport,damage=net.nodeDamage,edges=net.edgeSupport,c=net.constraints;
+    support.fill(0);damage.fill(0);edges.fill(0);
+    for(let t=0;t<idx.length;t+=3){
+      const a=idx[t],b=idx[t+1],d=idx[t+2];
+      if(net.triangleActive[t/3]){
+        support[a]++;support[b]++;support[d]++;
+        for(let e=0;e<3;e++){const x=e===0?a:e===1?b:d,y=e===0?b:e===1?d:a,key=net.constraintLookup.get(Math.min(x,y)*4096+Math.max(x,y));if(key!==undefined)edges[key]=1;}
+      }else{damage[a]=damage[b]=damage[d]=1;}
+    }
+    for(let k=0;k<c.length;k+=4){
+      if(!net.constraintActive[k/4]||edges[k/4])continue;
+      if(!support[c[k]|0]||!support[c[k+1]|0]){net.constraintActive[k/4]=0;continue;}
+      for(const panel of net.panels){
+        const end=panel.triangleStart+panel.triangleCount;
+        for(let i=firstTorn;i<net.tornCount;i++){const t=net.tornTriangles[i]*3;if(t>=panel.triangleStart&&t<end&&this._linkCrossesTriangle(net,k,t,panel.axis)){net.constraintActive[k/4]=0;break;}}
+        if(!net.constraintActive[k/4])break;
+      }
+    }
+  }
+  _tear(net,physics,panelIndex,triangle,speed){
+    if(!net.triangleActive[triangle/3]||this.time-net.lastTearTime<.12)return false;
+    const panel=net.panels[panelIndex],axis=panel.axis,u=axis===0?1:0,v=axis===2?1:2,rest=net.rest,idx=net.indices,bary=this._bary;
+    const point=new FT.Vector3(...this._closest),material=new FT.Vector3(),normal=this._normal.clone();
+    if(normal.getComponent(axis)*panel.inward>0)normal.negate();
+    for(let k=0;k<3;k++)material.setComponent(k,rest[idx[triangle]*3+k]*bary[0]+rest[idx[triangle+1]*3+k]*bary[1]+rest[idx[triangle+2]*3+k]*bary[2]);
+    const radius=.245+Math.min(.07,Math.max(0,speed-28)*.007),cu=material.getComponent(u),cv=material.getComponent(v),firstCell=panel.triangleStart+Math.floor((triangle-panel.triangleStart)/6)*6;
+    let removed=0;const firstTorn=net.tornCount;
+    for(let t=panel.triangleStart;t<panel.triangleStart+panel.triangleCount;t+=6){
+      const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3,d=idx[t+4]*3;
+      const minU=Math.min(rest[a+u],rest[b+u],rest[c+u],rest[d+u]),maxU=Math.max(rest[a+u],rest[b+u],rest[c+u],rest[d+u]),minV=Math.min(rest[a+v],rest[b+v],rest[c+v],rest[d+v]),maxV=Math.max(rest[a+v],rest[b+v],rest[c+v],rest[d+v]);
+      const dx=(minU+maxU)*.5-cu,dy=(minV+maxV)*.5-cv,ex=Math.max(minU-cu,0,cu-maxU),ey=Math.max(minV-cv,0,cv-maxV),jitter=.8+(((t*1103515245+net.tearCount*12345)>>>8)&255)/255*.42;
+      if(t!==firstCell&&ex*ex+ey*ey>.15*.15&&(dx*dx/(radius*radius*1.12)+dy*dy/(radius*radius*.9))>jitter)continue;
+      for(let j=0;j<2;j++){const id=t/3+j;if(net.triangleActive[id]){net.triangleActive[id]=0;net.tornTriangles[net.tornCount++]=id;removed++;}}
+    }
+    if(!removed)return false;
+    net.tearCount++;net.lastTearTime=this.time;net.damageRevision++;net.revision++;net.sleeping=false;net.active=true;net.quietTime=0;net.energyContact=true;
+    this._rebuildDamage(net,firstTorn);
+    for(let i=0;i<net.nodeDamage.length;i++){
+      if(!net.nodeDamage[i]||!net.nodeSupport[i]||!net.inverseMass[i])continue;const j=i*3,dx=rest[j+u]-cu,dy=rest[j+v]-cv,dist=Math.hypot(dx,dy);if(dist>radius+.38||dist<1e-6)continue;
+      const weight=Math.max(0,1-dist/(radius+.4)),radial=.045*weight;
+      net.damageRest[j+u]+=dx/dist*radial;net.damageRest[j+v]+=dy/dist*radial;net.damageRest[j+1]-=.025*weight;
+      for(let k=0;k<3;k++){const outward=normal.getComponent(k);net.damageRest[j+k]+=outward*.04*weight;net.positions[j+k]+=outward*.02*weight;net.velocity[j+k]+=outward*Math.min(5,speed*.13)*weight;}
+      net.positions[j+u]+=dx/dist*radial;net.positions[j+v]+=dy/dist*radial;
+      const rx=net.damageRest[j]-rest[j],ry=net.damageRest[j+1]-rest[j+1],rz=net.damageRest[j+2]-rest[j+2],offset=Math.hypot(rx,ry,rz);
+      if(offset>.2){const scale=.2/offset;net.damageRest[j]=rest[j]+rx*scale;net.damageRest[j+1]=rest[j+1]+ry*scale;net.damageRest[j+2]=rest[j+2]+rz*scale;}
+    }
+    // Breaking cords costs energy; it never boosts or redirects the shot.
+    physics.ball.velocity.multiplyScalar(.87);physics.ball.spin.multiplyScalar(.94);
+    const tear={panelIndex,position:point,restPosition:material,normal,radius,speed,time:this.time,firstTriangle:triangle/3};
+    if(net.tears.length===16)net.tears.shift();net.tears.push(tear);this.stats.tears++;
+    physics.events.push({type:'net',speed,position:point.clone(),torn:true});this._lastEvent=physics.time;
+    this._updateNormals(net);return true;
+  }
+  _sweptBreak(net,physics){
+    if(!net.ballInside||physics.ball.velocity.lengthSq()<144)return false;
+    const from=physics._previous,to=physics.ball.position;if(from.distanceToSquared(to)<1e-14)return false;
+    for(let pi=0;pi<net.panels.length;pi++){
+      const panel=net.panels[pi];if(-physics.ball.velocity.getComponent(panel.axis)*panel.inward<8)continue;
+      for(let t=panel.triangleStart;t<panel.triangleStart+panel.triangleCount;t+=3){
+        if(!net.triangleActive[t/3]||!this._segmentTriangle(net,t,from,to))continue;
+        const n=this._normal;if(n.getComponent(panel.axis)*panel.inward<0)n.negate();
+        const travel=(to.x-from.x)*n.x+(to.y-from.y)*n.y+(to.z-from.z)*n.z;if(travel>=0)continue;
+        const ids=net.indices,bary=this._bary,vel=net.velocity;let relative=-physics.ball.velocity.dot(n);
+        for(let j=0;j<3;j++){const k=ids[t+j]*3;relative+=(vel[k]*n.x+vel[k+1]*n.y+vel[k+2]*n.z)*bary[j];}
+        if(relative>=12&&this._tear(net,physics,pi,t,relative)){net.ballInside=false;net.exteriorMask=1<<pi;return true;}
+      }
+    }
+    return false;
+  }
   _contactPatch(net,ia,ib,ic,wa,wb,wc) {
     const rest=net.rest,rx=rest[ia*3]*wa+rest[ib*3]*wb+rest[ic*3]*wc,ry=rest[ia*3+1]*wa+rest[ib*3+1]*wb+rest[ic*3+1]*wc,rz=rest[ia*3+2]*wa+rest[ib*3+2]*wb+rest[ic*3+2]*wc;
     const ids=this._patchIds,weights=this._patchWeights,visited=net.visited,serial=++this._patchSerial;let count=0,sum=0;
@@ -199,7 +331,9 @@ class FootballGoalNets {
     for(let s=0;s<3;s++){
       const neighbors=net.neighbors[seeds[s]];
       for(let k=-1;k<neighbors.length;k++){
-        const id=k<0?seeds[s]:neighbors[k];if(visited[id]===serial)continue;visited[id]=serial;
+        const id=k<0?seeds[s]:neighbors[k];if(visited[id]===serial)continue;
+        if(net.tearCount&&(!net.nodeSupport[id]||(k>=0&&!net.constraintActive[net.neighborLinks[seeds[s]][k]])))continue;
+        visited[id]=serial;
         const j=id*3,dx=rest[j]-rx,dy=rest[j+1]-ry,dz=rest[j+2]-rz,weight=Math.max(0,1-(dx*dx+dy*dy+dz*dz)/.25);if(weight<=0)continue;
         ids[count]=id;weights[count]=weight*weight;sum+=weights[count];count++;
       }
@@ -219,10 +353,12 @@ class FootballGoalNets {
   _ball(net,physics,h) {
     const ball=physics.ball,bp=ball.position,p=net.positions,idx=net.indices,w=net.inverseMass,vel=net.velocity,r=ball.radius+.003,ballW=1/ball.mass;
     if(!this._near(net,bp.x,bp.y,bp.z,r+.15)&&!(net.ballInside&&bp.z*net.sign>=FB.halfLength&&Math.abs(bp.x)<net.half+.35&&bp.y<net.top+.35))return;
+    if(this._sweptBreak(net,physics))return;
     for(let panelIndex=0;panelIndex<net.panels.length;panelIndex++){
       const panel=net.panels[panelIndex],retainSide=net.ballInside||!!(net.exteriorMask&(1<<panelIndex));
       const end=panel.triangleStart+panel.triangleCount;
       for(let t=panel.triangleStart;t<end;t+=3){
+        if(!net.triangleActive[t/3])continue;
         const ia=idx[t],ib=idx[t+1],ic=idx[t+2];
         if(!this._triangleNear(p,ia,ib,ic,bp.x,bp.y,bp.z,r+.04,retainSide?panel.axis:-1))continue;
         if(!this._closestTriangle(bp.x,bp.y,bp.z,p,ia,ib,ic))continue;
@@ -252,6 +388,9 @@ class FootballGoalNets {
         response.set(0,0,0);for(let k=0;k<this._patchCount;k++){const j=patchIds[k]*3,pw=patchWeights[k];response.x+=normals[j]*pw;response.y+=normals[j+1]*pw;response.z+=normals[j+2]*pw;}
         if(response.lengthSq()<1e-12)response.copy(n);else response.normalize();if(response.dot(n)<0)response.negate();response.multiplyScalar(.97).addScaledVector(n,.03).normalize();
         const incoming=-(ball.velocity.x-this._surface.x)*response.x-(ball.velocity.y-this._surface.y)*response.y-(ball.velocity.z-this._surface.z)*response.z;
+        // The sphere has reached this finite sheet. A strong outward impact
+        // ruptures its local cords before the retention constraint pulls back.
+        if(net.ballInside&&incoming>=28&&nearestDistanceSq<=r*r&&this._tear(net,physics,panelIndex,t,incoming))return;
         const correction=(penetration+.00005)/total;
         bp.addScaledVector(n,correction*ballW);
         const ids=this._ids,weights=this._weights;ids[0]=ia;ids[1]=ib;ids[2]=ic;weights[0]=wa;weights[1]=wb;weights[2]=wc;
@@ -289,6 +428,7 @@ class FootballGoalNets {
       for(let panelIndex=0;panelIndex<net.panels.length;panelIndex++){
       const panel=net.panels[panelIndex],bit=1<<panelIndex,end=panel.triangleStart+panel.triangleCount;
       for(let t=panel.triangleStart;t<end;t+=3){
+        if(!net.triangleActive[t/3])continue;
         const ia=idx[t],ib=idx[t+1],ic=idx[t+2];if(!this._triangleNear(p,ia,ib,ic,this._ankle.x,this._ankle.y,this._ankle.z,.39))continue;
         for(let s=0;s<this._seeds.length;s++){
           const seed=this._seeds[s];if(!this._closestTriangle(seed.x,seed.y,seed.z,p,ia,ib,ic))continue;
@@ -330,7 +470,7 @@ class FootballGoalNets {
   substep(physics,alpha,h) {
     if(this._disposed)return;
     // A clear central entry can happen while both cloth meshes are asleep.
-    for(const net of this.goals)this._updateMouthSide(net,physics);
+    for(const net of this.goals){this._updateMouthSide(net,physics);this._updateHoleSide(net,physics);}
     // Sample the tracked translation and angular sweep at their own rate.
     // A stationary shoe takes one contact pass at 120 Hz even when a distant
     // fast ball requires many CCD substeps.
