@@ -1,5 +1,5 @@
 const SETTINGS_KEY='first-touch.settings.v1';
-const DEFAULT_SETTINGS=Object.freeze({turnSpeed:1,chromatic:true,noise:true});
+const DEFAULT_SETTINGS=Object.freeze({turnSpeed:1,chromatic:true,noise:true,wind:'normal'});
 const TURN_SPEED=Object.freeze({min:.25,max:4,step:.25});
 
 function normalizeSettings(value){
@@ -8,7 +8,8 @@ function normalizeSettings(value){
  return {
   turnSpeed:Math.max(TURN_SPEED.min,Math.min(TURN_SPEED.max,Math.round(speed/TURN_SPEED.step)*TURN_SPEED.step)),
   chromatic:typeof source.chromatic==='boolean'?source.chromatic:DEFAULT_SETTINGS.chromatic,
-  noise:typeof source.noise==='boolean'?source.noise:DEFAULT_SETTINGS.noise
+  noise:typeof source.noise==='boolean'?source.noise:DEFAULT_SETTINGS.noise,
+  wind:source.wind==='heavy'?'heavy':DEFAULT_SETTINGS.wind
  };
 }
 function readSettings(storage){

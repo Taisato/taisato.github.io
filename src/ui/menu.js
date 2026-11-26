@@ -4,7 +4,7 @@ import {createOpticalMaterial} from '../render/optics.js';
 class FootballInterface {
  constructor(scene,callbacks){
   this.callbacks=callbacks;this.hover=null;this.visible=false;this.snapshot={mode:'freeroam',phase:'ready',score:0};this.stateKey='';
-  this.page='main';this.settings={turnSpeed:1,chromatic:true,noise:true};this.settingsKey='1|true|true';
+  this.page='main';this.settings={turnSpeed:1,chromatic:true,noise:true,wind:'normal'};this.settingsKey='1|true|true|normal';
   this.canvas=document.createElement('canvas');this.canvas.width=960;this.canvas.height=660;this.ctx=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);
   this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;this.width=1.32;this.height=.9075;
   this.root=new FT.Mesh(new FT.PlaneGeometry(this.width,this.height),createOpticalMaterial(this.texture,{strength:.5}));this.root.visible=false;this.root.frustumCulled=false;this.root.renderOrder=90;scene.add(this.root);
@@ -17,8 +17,9 @@ class FootballInterface {
  setState(snapshot={}){this.snapshot={...this.snapshot,...snapshot};const key=[this.snapshot.mode,this.snapshot.phase,this.snapshot.score].join('|');if(key===this.stateKey)return;this.stateKey=key;if(this.visible)this.drawMenu();}
  setSettings(settings={}){
   const next={turnSpeed:Number.isFinite(settings.turnSpeed)?Math.max(.25,Math.min(4,settings.turnSpeed)):this.settings.turnSpeed,
-   chromatic:typeof settings.chromatic==='boolean'?settings.chromatic:this.settings.chromatic,noise:typeof settings.noise==='boolean'?settings.noise:this.settings.noise};
-  const key=[next.turnSpeed,next.chromatic,next.noise].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
+   chromatic:typeof settings.chromatic==='boolean'?settings.chromatic:this.settings.chromatic,noise:typeof settings.noise==='boolean'?settings.noise:this.settings.noise,
+   wind:settings.wind==='normal'||settings.wind==='heavy'?settings.wind:this.settings.wind};
+  const key=[next.turnSpeed,next.chromatic,next.noise,next.wind].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
   if(this.visible&&this.page==='settings')this.drawMenu();
  }
  setPage(page){
@@ -27,20 +28,21 @@ class FootballInterface {
  }
  drawSettings(){
   const c=this.ctx,s=this.settings;panel(c,960,660);brand(c,48,58);tracked(c,'SETTINGS',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
-  label(c,'Turn speed',48,176,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,176,38,UI.white,'center',800);
-  label(c,'Chromatic aberration',48,290,28);label(c,'Noise',48,404,28);
-  this.buttons=[{id:'turn-down',label:'−',x:492,y:136,w:112,h:80,disabled:s.turnSpeed<=.25},
-   {id:'turn-up',label:'+',x:800,y:136,w:112,h:80,disabled:s.turnSpeed>=4},
-   {id:'toggle-chromatic',label:s.chromatic?'On':'Off',x:720,y:250,w:192,h:80,on:s.chromatic},
-   {id:'toggle-noise',label:s.noise?'On':'Off',x:720,y:364,w:192,h:80,on:s.noise},
-   {id:'settings-back',label:'Back',x:48,y:490,w:864,h:76}];
+  label(c,'Turn speed',48,164,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,164,38,UI.white,'center',800);
+  label(c,'Chromatic aberration',48,260,28);label(c,'Noise',48,356,28);label(c,'Wind',48,452,28);
+  this.buttons=[{id:'turn-down',label:'−',x:492,y:128,w:112,h:72,disabled:s.turnSpeed<=.25},
+   {id:'turn-up',label:'+',x:800,y:128,w:112,h:72,disabled:s.turnSpeed>=4},
+   {id:'toggle-chromatic',label:s.chromatic?'On':'Off',x:720,y:224,w:192,h:72,on:s.chromatic},
+   {id:'toggle-noise',label:s.noise?'On':'Off',x:720,y:320,w:192,h:72,on:s.noise},
+   {id:'toggle-wind',label:s.wind==='heavy'?'Heavy':'Normal',x:720,y:416,w:192,h:72,on:true},
+   {id:'settings-back',label:'Back',x:48,y:520,w:864,h:66}];
   for(const b of this.buttons){c.save();if(b.disabled)c.globalAlpha=.32;button(c,b,{primary:b.on||b.id==='settings-back',hover:!b.disabled&&this.hover===b.id});c.restore();}
   label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
  }
  drawMenu(){
   if(this.page==='settings'){this.drawSettings();return;}
   const c=this.ctx,s=this.snapshot,over=s.mode==='challenge'&&s.phase==='gameover';panel(c,960,660);brand(c,48,58);tracked(c,s.mode==='challenge'?'3 TOUCH':'FREEROAM',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
-  tracked(c,over?'RUN OVER':'PAUSED',48,153,21,over?UI.lilac:UI.muted,3);
+  tracked(c,over?'RUN OVER':'SLOW MOTION',48,153,21,over?UI.lilac:UI.muted,3);
   if(s.mode==='challenge'){label(c,String(s.score||0),912,149,54,UI.white,'right',800);label(c,'GOALS',822,151,18,UI.muted,'right');}
   this.buttons=[{id:over?'restart':'resume',label:over?'Again':'Resume',x:48,y:196,w:864,h:88},{id:'freeroam',label:'Freeroam',x:48,y:310,w:420,h:154},{id:'challenge',label:'3 TOUCH',x:492,y:310,w:420,h:154}];
   button(c,this.buttons[0],{primary:true,hover:this.hover===this.buttons[0].id});

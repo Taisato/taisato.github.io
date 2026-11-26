@@ -4,7 +4,7 @@ import { FootballField } from "./world/field.js";
 import { FootballPhysics } from "./physics/ball.js";
 import { FootballGoalNets } from "./physics/nets.js";
 import { FootballGoalNetVisual } from "./render/net.js";
-import { FootballOptics, setOpticalEffects } from "./render/optics.js";
+import { FootballOptics, setOpticalEffects, OPTICS } from "./render/optics.js";
 import { FootballMotionSources } from "./render/motion.js";
 import { FootballGoalkeeper } from "./keeper/keeper.js";
 import { FootballControls } from "./player/controls.js";
@@ -41,14 +41,15 @@ class FootballApp {
       'turn-down':()=>this.changeSettings({turnSpeed:this.settings.turnSpeed-TURN_SPEED.step}),
       'turn-up':()=>this.changeSettings({turnSpeed:this.settings.turnSpeed+TURN_SPEED.step}),
       'toggle-chromatic':()=>this.changeSettings({chromatic:!this.settings.chromatic}),
-      'toggle-noise':()=>this.changeSettings({noise:!this.settings.noise})
+      'toggle-noise':()=>this.changeSettings({noise:!this.settings.noise}),
+      'toggle-wind':()=>this.changeSettings({wind:this.settings.wind==='normal'?'heavy':'normal'})
     });
     this.calibrationPanel=new FootballCalibrationPanel(this.camera);
     this.hud=new FootballHUD(this.camera);
     this.optics=new FootballOptics(this.renderer,this.scene,this.camera);
     this.motion=new FootballMotionSources(this.field,this.controls,this.goalkeeper);
     this.optics.setMotionSources(this.motion.sources);this.optics.setHUD(this.hud.mesh);
-    this.opticsState={menu:false,active:false};
+    this.opticsState={menu:false,active:false};this.timeScale=1;
     this.active=false;this.menu=false;this.pending=false;this.pendingInitialPlacement=false;
     this.session=null;this.reference=null;this.paused=false;this.contextLost=false;this.disposed=false;
     this.lastTime=0;this.accumulator=0;this.calibrationRevision=0;this.calibrationCompletePending=false;
@@ -65,7 +66,7 @@ class FootballApp {
       menuMain:document.querySelector('#menu-main'),settingsPage:document.querySelector('#settings-page'),
       settings:document.querySelector('#settings'),settingsBack:document.querySelector('#settings-back'),
       turnSpeed:document.querySelector('#turn-speed'),turnSpeedValue:document.querySelector('#turn-speed-value'),
-      chromatic:document.querySelector('#toggle-chromatic'),noise:document.querySelector('#toggle-noise')};
+      chromatic:document.querySelector('#toggle-chromatic'),noise:document.querySelector('#toggle-noise'),wind:document.querySelector('#toggle-wind')};
     const on=(el,event,fn)=>el?.addEventListener(event,fn,{signal:this.abort.signal});
     on(this.ui.enter,'click',()=>this.enterVR());on(this.ui.desktop,'click',()=>this.enterDesktop());
     on(this.ui.resume,'click',()=>this.setMenu(false));on(this.ui.exit,'click',()=>this.exit());
@@ -75,6 +76,7 @@ class FootballApp {
     on(this.ui.turnSpeed,'input',()=>this.changeSettings({turnSpeed:Number(this.ui.turnSpeed.value)}));
     on(this.ui.chromatic,'click',()=>this.changeSettings({chromatic:!this.settings.chromatic}));
     on(this.ui.noise,'click',()=>this.changeSettings({noise:!this.settings.noise}));
+    on(this.ui.wind,'click',()=>this.changeSettings({wind:this.settings.wind==='normal'?'heavy':'normal'}));
     on(window,'keydown',event=>{
       if(event.code==='Escape'&&this.settingsOpen){
         this.controls.edges.menu=false;this.controls.keys.delete('Escape');
@@ -84,7 +86,7 @@ class FootballApp {
     on(window,'resize',()=>this.resize());
     on(window,'pagehide',event=>{if(!event.persisted)this.dispose();});
     on(document,'visibilitychange',()=>{
-      if(!this.session){this.paused=document.hidden;this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;this.lastTime=0;this.audio.pause(this.paused||this.menu||!this.active);}
+      if(!this.session){this.paused=document.hidden;this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;this.lastTime=0;this.audio.pause(this.paused||!this.active);}
     });
     on(this.renderer.domElement,'webglcontextlost',event=>{
       event.preventDefault();this.contextLost=true;this.controls.invalidate();this.motion.reset();this.audio.pause(true);
@@ -93,7 +95,7 @@ class FootballApp {
     on(this.renderer.domElement,'webglcontextrestored',()=>{
       this.contextLost=false;this.lastTime=0;this.accumulator=0;this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();
       this.ui.status.textContent='';this.ui.launcher.hidden=this.active&&(!this.menu||!this.controls.desktop);
-      this.audio.pause(this.paused||this.menu||!this.active);
+      this.audio.pause(this.paused||!this.active);
     });
     on(this.renderer.domElement,'click',()=>{
       if(this.active&&this.controls.desktop&&!this.menu){
@@ -121,7 +123,7 @@ class FootballApp {
   get snapshot(){return this.mode==='challenge'?this.challenge.snapshot:this.freeSnapshot;}
   applySettings() {
     const settings=this.settings;
-    this.controls.turnSpeedMultiplier=settings.turnSpeed;this.optics.setEffects(settings);
+    this.controls.turnSpeedMultiplier=settings.turnSpeed;this.optics.setEffects(settings);this.audio.setWind(settings.wind);
     for(const material of [this.interface.root.material,this.calibrationPanel.mesh.material,this.hud.mesh.material])setOpticalEffects(material,settings);
     this.interface.setSettings(settings);
     this.ui.turnSpeed.value=String(settings.turnSpeed);
@@ -131,10 +133,13 @@ class FootballApp {
       element.setAttribute('aria-checked',String(enabled));element.textContent=enabled?'On':'Off';
     }
     this.ui.launcher.dataset.chromatic=String(settings.chromatic);
+    const wind=settings.wind==='heavy'?'Heavy':'Normal';
+    this.ui.wind.textContent=wind;this.ui.wind.dataset.wind=settings.wind;
+    this.ui.wind.setAttribute('aria-label','Wind: '+wind+'. Switch to '+(settings.wind==='heavy'?'Normal':'Heavy'));
   }
   changeSettings(patch) {
     const next=normalizeSettings({...this.settings,...patch}),old=this.settings;
-    if(next.turnSpeed===old.turnSpeed&&next.chromatic===old.chromatic&&next.noise===old.noise)return;
+    if(next.turnSpeed===old.turnSpeed&&next.chromatic===old.chromatic&&next.noise===old.noise&&next.wind===old.wind)return;
     this.settings=next;this.applySettings();saveSettings(next);
   }
   setSettingsPage(show,focus=true) {
@@ -151,7 +156,7 @@ class FootballApp {
     this.ui.enter.hidden=this.active;this.ui.desktop.hidden=this.active;
     this.ui.restart.hidden=!this.active||this.mode!=='challenge';
     this.ui.restart.textContent=over?'Again':'Restart';
-    this.ui.pauseLabel.textContent=over?'RUN OVER':'PAUSED';
+    this.ui.pauseLabel.textContent=over?'RUN OVER':'SLOW MOTION';
     this.ui.pauseScore.textContent=this.mode==='challenge'?String(this.snapshot.score)+' GOALS':'';
     this.ui.launcher.dataset.active=String(this.active);this.ui.launcher.dataset.mode=this.mode;
     this.ui.launcher.dataset.input=this.active&&this.controls.desktop?'desktop':'vr';
@@ -200,7 +205,7 @@ class FootballApp {
   onXRVisibility=()=>{
     this.paused=this.session?.visibilityState!=='visible';this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();
     this.motion.reset();
-    this.accumulator=0;this.lastTime=0;this.audio.pause(this.paused||this.menu);
+    this.accumulator=0;this.lastTime=0;this.audio.pause(this.paused||!this.active);
   };
   onReferenceReset=()=>{this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;this.lastTime=0;};
   onSessionEnd=()=>{
@@ -270,11 +275,11 @@ class FootballApp {
   }
   setMenu(show) {
     if(!show&&this.mode==='challenge'&&this.challenge.phase==='gameover'&&!this.calibrationFromGameover)show=true;
-    this.menu=show;this.controls.keys.clear();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;
+    this.menu=show;this.controls.keys.clear();this.controls.invalidate();this.motion.reset();
     this.setSettingsPage(false,false);
     this.interface.show(show&&!this.controls.desktop,this.controls);
     this.ui.launcher.hidden=!(show&&this.controls.desktop);this.ui.hint.hidden=!(this.active&&this.controls.desktop&&!show);
-    if(show)document.exitPointerLock?.();this.audio.pause(show||this.paused);this.syncPage();
+    if(show)document.exitPointerLock?.();this.audio.pause(this.paused||!this.active||this.contextLost);this.syncPage();
   }
   beginCalibration() {
     if(this.controls.desktop)return;
@@ -294,12 +299,38 @@ class FootballApp {
       if(event.footId)this.controls.pulse(event.footId,Math.min(.25,.07+(event.speed||0)*.018));
     }
   }
+  advanceTime(dt) {
+    // The visual transition owns the clock, even with chromatic effects off.
+    // Integrate its smoothstep exactly so changing refresh rate does not change
+    // the amount of simulated time during opening, closing or a quick reversal.
+    const before=this.optics.menuAmount;
+    this.opticsState.menu=this.menu;this.opticsState.active=this.active;
+    this.optics.update(dt,this.opticsState);
+    const after=this.optics.menuAmount,blend=after*after*(3-2*after),change=after-before;
+    this.timeScale=1-.75*blend;this.audio.setTimeScale(this.timeScale);
+    if(Math.abs(change)<1e-12)return dt*this.timeScale;
+    const rampTime=Math.min(dt,Math.abs(change)*OPTICS.fadeSeconds);
+    const integral=after*after*after*(1-after*.5)-before*before*before*(1-before*.5);
+    return Math.max(0,dt-.75*(rampTime*integral/change+(dt-rampTime)*blend));
+  }
+  simulationFeet(alpha,rate) {
+    const feet=this.controls.physicsFeet(alpha);
+    if(rate!==1)for(const foot of feet){
+      // Real tracked hands keep their real speed as the world eases back in.
+      // Fewer simulation steps must not turn one controller swing into a 4x hit.
+      foot.velocity.multiplyScalar(rate);foot.driveVelocity.multiplyScalar(rate);
+      foot.ankleVelocity.multiplyScalar(rate);foot.locomotionVelocity.multiplyScalar(rate);
+      foot.angularVelocity.multiplyScalar(rate);foot.shinAngularVelocity.multiplyScalar(rate);
+      foot.controlAngularVelocity.multiplyScalar(rate);
+    }
+    return feet;
+  }
   frame=(milliseconds,frame)=>{
     if(this.disposed)return;
     if(this.contextLost){this.audio.update(this.physics.ball,this.controls,false,0);return;}
     const now=milliseconds*.001,rawDt=this.lastTime?now-this.lastTime:0;this.lastTime=now;
     const dt=footballClamp(rawDt,0,.05);
-    let audioActive=false;
+    let audioActive=false,timeUpdated=false;
     if(rawDt>.1){this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;}
     if(this.active&&!this.paused){
       this.controls.calibrationPaused=this.menu;
@@ -330,27 +361,33 @@ class FootballApp {
         else if(this.mode==='freeroam'&&!this.menu)this.spawnBall();
       }
       this.controls.clearEdges();
+      // Menu rays follow fresh real-time poses. A selection may resume, restart,
+      // exit or recalibrate; resolve it before deciding what can simulate.
+      const pointedMenu=this.menu;
+      if(pointedMenu){this.controls.refreshHead();this.controls.prepareFeet(dt,true);this.interface.point(this.controls);}
+      const simulationDt=this.advanceTime(dt);timeUpdated=true;
       const calibrating=!this.controls.isCalibrated||(!this.controls.desktop&&!!this.controls.calibration.awaitRelease);
-      const blocked=this.menu||!tracked||calibrating||this.pendingInitialPlacement;
-      audioActive=!blocked;
+      const worldBlocked=!this.active||this.paused||!tracked||calibrating||this.pendingInitialPlacement;
+      const blocked=worldBlocked||this.menu||pointedMenu;
+      audioActive=!worldBlocked;
+      if(this.audio.paused===audioActive)this.audio.pause(!audioActive);
       const roundResult=this.mode==='challenge'&&(this.challenge.phase==='result'||this.challenge.phase==='gameover');
-      this.controls.move(dt,blocked||roundResult);this.controls.prepareFeet(dt,blocked);
-      if(this.menu)this.interface.point(this.controls);
-      if(!blocked){
-        const oldAccumulator=this.accumulator;this.accumulator+=dt;
+      this.controls.move(dt,blocked||roundResult);if(!pointedMenu)this.controls.prepareFeet(dt,blocked);
+      if(!worldBlocked){
+        const oldAccumulator=this.accumulator;this.accumulator+=simulationDt;
         const count=Math.min(8,Math.floor((this.accumulator+1e-9)/FB.fixedStep));
         for(let step=0;step<count;step++){
           this.syncBallHistory();
-          const sampleAlpha=dt>0?footballClamp(((step+1)*FB.fixedStep-oldAccumulator)/dt,0,1):1;
+          const sampleAlpha=simulationDt>0?footballClamp(((step+1)*FB.fixedStep-oldAccumulator)/simulationDt,0,1):1;
           this.goalkeeper.update(FB.fixedStep,this.physics.ball);
-          this.physics.step(FB.fixedStep,this.controls.physicsFeet(sampleAlpha),this.goalkeeper,this.nets,
+          this.physics.step(FB.fixedStep,this.simulationFeet(sampleAlpha,dt>0?simulationDt/dt:1),this.goalkeeper,this.nets,
             this.mode==='challenge'&&!roundResult?this.observeChallengeMotion:null);
           for(const event of this.physics.events)this.handleEvent(event);
           if(this.mode==='challenge'){
             this.modeInput.previous=this.ballBefore;
             const result=this.challenge.update(FB.fixedStep,this.modeInput);
             if(result){this.interface.setState(this.snapshot);this.syncPage();}
-            if(this.challenge.phase==='gameover'){this.setMenu(true);break;}
+            if(this.challenge.phase==='gameover'&&!this.menu){this.setMenu(true);this.accumulator-=FB.fixedStep;break;}
           }
           this.accumulator-=FB.fixedStep;
         }
@@ -358,31 +395,32 @@ class FootballApp {
       }else this.accumulator=0;
       // Rendering interpolates the fixed-step ball without changing its physical position.
       const alpha=footballClamp(this.accumulator/FB.fixedStep,0,1);
-      if(blocked){this.ballDraw.copy(this.physics.ball.position);this.renderBall.orientation.copy(this.physics.ball.orientation);}
+      if(worldBlocked){this.ballDraw.copy(this.physics.ball.position);this.renderBall.orientation.copy(this.physics.ball.orientation);}
       else{
         this.ballDraw.lerpVectors(this.ballBefore,this.physics.ball.position,alpha);
         this.renderBall.orientation.slerpQuaternions(this.orientationBefore,this.physics.ball.orientation,alpha);
       }
       // Height, rotation and the contact shadow all use the same rendered pose.
       this.field.updateBall(this.renderBall);
-      this.goalkeeper.render(blocked?1:alpha);
-      this.netVisual.render(blocked?1:alpha);
-      this.calibrationPanel.update(this.controls,!this.menu);
-      if(this.mode==='challenge'&&this.challenge.phase==='result'&&this.challenge.resultAge>=1.6&&!blocked){
+      this.goalkeeper.render(worldBlocked?1:alpha);
+      this.netVisual.render(worldBlocked?1:alpha);
+      this.calibrationPanel.update(this.controls,this.active&&!this.menu);
+      if(this.mode==='challenge'&&this.challenge.phase==='result'&&this.challenge.resultAge>=1.6&&!worldBlocked&&!this.menu){
         this.placeChance(this.challenge.next());
       }
-      this.hud.update(this.snapshot,!blocked&&!this.menu,this.controls.desktop,
+      this.hud.update(this.snapshot,!worldBlocked&&!this.menu,this.controls.desktop,
         this.renderer.xr.isPresenting?this.renderer.xr.getCamera():this.camera);
     }else{
       for(const hand of this.controls.hands){hand.visual.root.visible=false;hand.ray.visible=false;}
       this.calibrationPanel.hide();
       this.hud.hide();
     }
+    if(!timeUpdated)this.advanceTime(dt);
+    if(this.audio.paused===audioActive)this.audio.pause(!audioActive);
     this.audio.update(this.physics.ball,this.controls,audioActive,dt);
     if(audioActive&&this.pendingStartWhistle&&this.audio.whistle())this.pendingStartWhistle=false;
     this.motion.update(dt,this.physics.ball,this.active&&audioActive&&!this.menu&&!this.paused);
-    this.opticsState.menu=this.menu;this.opticsState.active=this.active;
-    this.optics.update(dt,this.opticsState);this.optics.render();
+    this.optics.render();
   };
   dispose(){
     if(this.disposed)return;this.disposed=true;this.pendingStartWhistle=false;this.renderer.setAnimationLoop(null);

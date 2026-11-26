@@ -1,6 +1,8 @@
 import { FT } from '../vendor/three.js';
 import { footballClamp } from './config.js';
 
+const WIND_TYPES=['normal','heavy'];
+
 // Decode recordings before play. Frames only adjust already prepared voices.
 class FootballAudio {
   static bank=new Map();
@@ -86,6 +88,8 @@ class FootballAudio {
   constructor(){
     this.context=null;this.gain=null;this.ceiling=null;this.masterLevel=.55;
     this.paused=true;this.disposed=false;this.voices=new Set();this.maxVoices=12;
+    this.timeScale=1;this.timeDetune=0;
+    this.wind='normal';this.windActive=false;this.windApplied=null;this.windVoices=new Map();
     this.rolling=null;this.strongVariant=0;this.netVariant=0;this.seed=3729;
     this.forward=new FT.Vector3();this.up=new FT.Vector3();this.listenerPosition=new FT.Vector3();
     this.fallbackKick=null;this.fallbackNet=null;this.decoding=null;
@@ -129,6 +133,51 @@ class FootballAudio {
     }
   }
   available(){return !this.disposed&&!this.paused&&this.context?.state==='running';}
+  setTimeScale(scale){
+    if(this.disposed||!Number.isFinite(scale))return;
+    const next=footballClamp(scale,.25,1);if(next===this.timeScale)return;
+    this.timeScale=next;this.timeDetune=1200*Math.log2(next);
+    // Detune compounds with playbackRate, stretching the recording without
+    // overwriting its pitch variation or the rolling loop's existing smoothing.
+    // The app supplies the eased menu factor; voices keep their playback phase.
+    for(const voice of this.voices)voice.source.detune.value=this.timeDetune;
+  }
+  setWind(kind){
+    if(this.disposed||!WIND_TYPES.includes(kind)||this.wind===kind)return;
+    this.wind=kind;if(this.windActive&&this.available())this.updateWind(true);
+  }
+  fadeWind(voice,level){
+    const now=this.context.currentTime,duration=.5;
+    // Hold the real point of an interrupted fade, not its previously scheduled
+    // destination. Rapid switching reuses both loops without gain jumps.
+    const elapsed=footballClamp((now-voice.windFadeStart)/duration,0,1);
+    const current=voice.windFrom+(voice.windTo-voice.windFrom)*elapsed;
+    voice.windFrom=current;voice.windTo=level;voice.windFadeStart=now;
+    voice.gain.gain.cancelScheduledValues(now);voice.gain.gain.setValueAtTime(current,now);
+    voice.gain.gain.linearRampToValueAtTime(level,now+duration);
+  }
+  updateWind(active){
+    this.windActive=!!active;
+    if(!active||!this.available()){
+      this.windApplied=null;for(const voice of this.windVoices.values())this.stopVoice(voice,.015);
+      return;
+    }
+    let created=false;
+    for(const kind of WIND_TYPES){
+      const entry=FootballAudio.bank.get('wind_'+kind);if(!entry?.buffer)continue;
+      const previous=this.windVoices.get(kind);
+      if(previous&&!previous.finished&&!previous.stopping)continue;
+      const voice=this.voice(entry.buffer,0,null,1,true,kind);
+      if(voice){voice.windFrom=0;voice.windTo=0;voice.windFadeStart=this.context.currentTime;created=true;}
+    }
+    if(!created&&this.windApplied===this.wind)return;
+    const selected=this.windVoices.has(this.wind)?this.wind:WIND_TYPES.find(kind=>this.windVoices.has(kind));
+    for(const [kind,voice]of this.windVoices){
+      const entry=FootballAudio.bank.get('wind_'+kind);
+      this.fadeWind(voice,kind===selected?footballClamp(entry?.definition.gain??0,0,1):0);
+    }
+    this.windApplied=this.wind;
+  }
   speed(value){return Number.isFinite(value)?Math.max(0,value):0;}
   variation(){this.seed=(this.seed*1664525+1013904223)>>>0;return .985+this.seed/4294967296*.03;}
   position(panner,position){
@@ -146,6 +195,7 @@ class FootballAudio {
   finish(voice){
     if(voice.finished)return;voice.finished=true;this.voices.delete(voice);
     if(this.rolling===voice)this.rolling=null;
+    if(voice.wind&&this.windVoices.get(voice.wind)===voice)this.windVoices.delete(voice.wind);
     voice.source.onended=null;voice.source.disconnect();voice.gain.disconnect();voice.panner?.disconnect();
   }
   stopVoice(voice,fade=.015){
@@ -159,13 +209,19 @@ class FootballAudio {
       voice.source.stop(stopAt);
     }else{try{voice.source.stop(now);}catch{}this.finish(voice);}
   }
-  voice(buffer,level,position,rate=1,loop=false){
+  voice(buffer,level,position,rate=1,loop=false,wind=null){
     if(!this.available()||!buffer||!(level>=0))return null;
-    while(this.voices.size>=this.maxVoices)this.stopVoice(this.voices.values().next().value,0);
+    if(wind){
+      const previous=this.windVoices.get(wind);if(previous)this.stopVoice(previous,0);
+    }else while(this.voices.size-this.windVoices.size>=this.maxVoices){
+      // Continuous ambience has its own two slots; impact bursts cannot evict it.
+      for(const candidate of this.voices)if(!candidate.wind){this.stopVoice(candidate,0);break;}
+    }
     const context=this.context,source=context.createBufferSource(),gain=context.createGain(),panner=this.makePanner(position);
-    source.buffer=buffer;source.playbackRate.value=rate;source.loop=loop;
+    source.buffer=buffer;source.playbackRate.value=rate;source.detune.value=this.timeDetune;source.loop=loop;
     gain.gain.value=level;source.connect(gain);if(panner){gain.connect(panner);panner.connect(this.gain);}else gain.connect(this.gain);
-    const voice={source,gain,panner,loop,stopping:false,finished:false};this.voices.add(voice);
+    const voice={source,gain,panner,loop,wind,stopping:false,finished:false};this.voices.add(voice);
+    if(wind)this.windVoices.set(wind,voice);
     source.onended=()=>this.finish(voice);source.start(context.currentTime);return voice;
   }
   play(id,level,position,rate=1){
@@ -211,6 +267,7 @@ class FootballAudio {
   update(ball,controls,active,dt){
     if(!this.context||this.disposed)return;
     this.updateListener(controls);
+    this.updateWind(active&&this.available());
     if(!active||!this.available()||!ball){this.resetBall();return;}
     const speed=Math.hypot(ball.velocity.x,ball.velocity.z),grounded=ball.position.y<=ball.radius+.018&&Math.abs(ball.velocity.y)<.25;
     if(!Number.isFinite(speed)||!grounded||speed<(this.rolling ? .1 : .18)){this.resetBall();return;}
@@ -226,12 +283,12 @@ class FootballAudio {
   resetBall(){if(this.rolling){const voice=this.rolling;this.rolling=null;this.stopVoice(voice,.08);}}
   pause(paused){
     this.paused=!!paused;if(!this.context)return;
-    if(this.paused){this.resetBall();for(const voice of this.voices)this.stopVoice(voice,.015);}
+    if(this.paused){this.windActive=false;this.windApplied=null;this.resetBall();for(const voice of this.voices)this.stopVoice(voice,.015);}
     this.gain.gain.setTargetAtTime(this.paused?0:this.masterLevel,this.context.currentTime,.02);
     if(!this.paused&&this.context.state==='suspended')this.context.resume().catch(()=>{});
   }
   dispose(){
-    if(this.disposed)return;this.disposed=true;this.rolling=null;
+    if(this.disposed)return;this.disposed=true;this.rolling=null;this.windActive=false;this.windApplied=null;
     for(const voice of this.voices)this.stopVoice(voice,0);
     this.gain?.disconnect();this.ceiling?.disconnect();this.context?.close().catch(()=>{});
   }
