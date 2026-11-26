@@ -15,13 +15,13 @@ class FootballPhysics {
       groundFriction: .53, footRadius: .075, footHalfLength: .095,
       footRestitution: .6, footFriction: .4, contactSkin: .002,
       footSoftImpactSpeed: .25, footFirmImpactSpeed: 4.5,
-      footPowerCompressionSpeed: 24, footReceiveRestitution: .45, footShotPower: .9,
+      footPowerCompressionSpeed: 24, footReceiveRestitution: .45,
       footControlRestitutionScale: .06, footControlFrictionScale: .10,
       footStrikeBlendStart: 4.4, footStrikeBlendEnd: 6.4,
       footLiftRestoration: .35,
       instepLaunchStartSpeed: 4.4, instepLaunchFullSpeed: 6,
       instepLaunchAngle: Math.PI/15,
-      airSpinDecay: .13, magnus: .0032, sideCurveMultiplier: 1.12, maxCurveAcceleration: 7.5, maxUpwardCurveAcceleration: 2.4
+      airSpinDecay: .13, magnus: .0032, sideCurveMultiplier: 1.12, maxCurveAcceleration: 7.5
     }, config);
     const V = FT.Vector3;
     this.ball = {
@@ -47,7 +47,7 @@ class FootballPhysics {
     this._previous = new V(); this._axis = new V(); this._normal = new V();
     this._point = new V(); this._segment = new V(); this._relative = new V();
     this._tangent = new V(); this._impulse = new V(); this._cross = new V();
-    this._surface = new V(); this._responseSurface = new V(); this._footCenter = new V(); this._a = new V(); this._b = new V();
+    this._surface = new V(); this._footCenter = new V(); this._a = new V(); this._b = new V();
     this._ankleCenter = new V(); this._shoePoint = new V(); this._shoeNormal = new V();
     this._spinAxis = new V(); this._rotation = new FT.Quaternion();
     this._footLocal = new V(); this._footLocalNormal = new V(); this._contactArm = new V();
@@ -142,14 +142,15 @@ class FootballPhysics {
       f.distance=f.previousAnkle.distanceTo(f.targetAnkle)+Math.max(f.previousOrientation.angleTo(f.targetOrientation)*sweepRadius,f.previousShinOrientation.angleTo(f.targetShinOrientation)*shinRadius);
       let state = this.footStates.get(f.id);
       if (!state) {
-        state = {contact: false, seen: false, present: true};
+        state = {contact: false, seen: false, present: true, strikeUntil: 0, releaseUntil: 0,
+          strikeSpeed:0,strikeNormalY:0,strikeSurfaceY:0,correctDirection:false,releaseDirection:new FT.Vector3()};
         this.footStates.set(f.id, state);
       }
       state.seen = false; state.present = true; f.state = state;
       count++;
     }
     for (const state of this.footStates.values()) if (!state.present) {
-      state.contact = false;
+      state.contact = false; state.strikeUntil = state.releaseUntil = 0;
     }
     return count;
   }
@@ -208,7 +209,11 @@ class FootballPhysics {
           this.closestPoint(b.position, this._a, this._b, this._point);
           separated=b.position.distanceToSquared(this._point)>(b.radius+f.radius+.025)**2;
         }
-        if(separated)f.state.contact=false;
+        if(separated){
+          f.state.contact=false;
+          if(f.state.strikeUntil>this.time&&f.foot.contactShape&&
+            this.contactDistance(f,b.radius+.08)>b.radius+.08)f.state.strikeUntil=f.state.releaseUntil=0;
+        }
       }
     }
   }
@@ -223,9 +228,6 @@ class FootballPhysics {
     this._cross.x+=sideCurve*b.velocity.z;
     this._cross.z-=sideCurve*b.velocity.x;
     this._cross.clampLength(0, this.config.maxCurveAcceleration);
-    // Side-spin keeps its existing bend. Strong backspin must not cancel most
-    // of gravity and turn a low release angle into a rapidly climbing shot.
-    this._cross.y=Math.min(this._cross.y,this.config.maxUpwardCurveAcceleration);
     b.velocity.addScaledVector(this._cross, dt);
     b.velocity.multiplyScalar(1 / (1 + drag * speed * dt));
     b.velocity.y -= this.config.gravity * dt;
@@ -357,12 +359,7 @@ class FootballPhysics {
       this.smoothContactBlend((Math.min(1,active/Math.max(approach,.0001))-.35)/.4);
     const shallow=this.smoothContactBlend((n.y+.10)/.10)*
       (1-this.smoothContactBlend((n.y-.20)/.35));
-    // A square hit through the equator stays square even at full trigger.
-    // An actual lower contact or rising foot can still unlock the instep aid.
-    const placement=this.smoothContactBlend((n.y-.04)/.32);
-    const rising=this.smoothContactBlend((this._surface.y-.2)/1.8);
-    const intent=1-(1-placement)*(1-rising);
-    const angle=cfg.instepLaunchAngle*instep*grounded*effort*drive*shallow*intent;
+    const angle=cfg.instepLaunchAngle*instep*grounded*effort*drive*shallow;
     if(angle<=0)return;
     const speed=b.velocity.length(),planar=Math.hypot(b.velocity.x,b.velocity.z);
     const vertical=speed*Math.sin(angle);
@@ -373,6 +370,33 @@ class FootballPhysics {
     // natural higher launches, passive arrivals and detached flight are untouched.
     const scale=Math.sqrt(Math.max(0,speed*speed-vertical*vertical))/planar;
     b.velocity.x*=scale;b.velocity.z*=scale;b.velocity.y=vertical;
+  }
+
+  releaseFootStrike(f, penetration) {
+    const state=f.state,b=this.ball,cfg=this.config;
+    state.correctDirection=false;
+    if(state.strikeUntil<=this.time)return false;
+    const direction=state.releaseDirection,outgoing=b.velocity.dot(direction);
+    const drive=this._surface.dot(direction),alignment=this._normal.dot(direction);
+    if(outgoing<6||drive< -1){state.strikeUntil=state.releaseUntil=0;return false;}
+    // A stroke that accelerates after contact can scoop a released ball before
+    // either reaches the ceiling. Preserve the established direction only for
+    // this fast, upward-turning continuation of an initially level strike.
+    const surfaceSpeedSq=this._surface.lengthSq();
+    state.correctDirection=alignment>.35&&drive>Math.max(16,state.strikeSpeed*.65)&&
+      surfaceSpeedSq>400&&(surfaceSpeedSq>state.strikeSpeed*state.strikeSpeed*1.3225||
+        this._surface.y-state.strikeSurfaceY>Math.max(8,state.strikeSpeed*.25))&&
+      this._normal.y>state.strikeNormalY+.08&&
+      state.strikeSurfaceY<=Math.max(1.5,state.strikeSpeed*.15);
+    if(state.releaseUntil<=this.time||outgoing<cfg.maxSpeed*.5)return false;
+    if(drive<cfg.maxSpeed*.5||alignment<.35)return false;
+    // The tracked shoe can outrun a ball at its speed ceiling. Its continuing
+    // sweep belongs to the strike already resolved, not another powered kick.
+    // Separate along that launch direction so the rotating boot cannot scoop
+    // the ball upward through either impulses or position corrections.
+    state.contact=true;
+    if(penetration>0)b.position.addScaledVector(direction,(penetration+.0001)/alignment);
+    return true;
   }
 
   collideFoot(f, alpha, dt) {
@@ -402,6 +426,7 @@ class FootballPhysics {
     }
     state.seen = true;
     this.footSurfaceVelocity(f,this._point,this._surface);
+    if(this.releaseFootStrike(f,radius-distance))return;
     this._relative.subVectors(b.velocity, this._surface);
     const approach = -this._relative.dot(this._normal);
     const penetration = radius - distance;
@@ -419,27 +444,20 @@ class FootballPhysics {
     }
     // The two-millimetre skin bridges numerical gaps, not a hidden oversized foot.
     // A resting boot may support or trap a ball without repeated bounce impulses.
-    if (penetration > 0) b.position.addScaledVector(this._normal, penetration + .0001);
+    if (penetration > 0) {
+      if(state.correctDirection)b.position.addScaledVector(state.releaseDirection,
+        (penetration+.0001)/this._normal.dot(state.releaseDirection));
+      else b.position.addScaledVector(this._normal, penetration + .0001);
+    }
     let impulse=0;
     // Use the complete physical surface velocity, including the player's
     // motion once. A fast grazing swing must keep its tangential grip and curve
     // even when only a small part of that speed points into the ball.
     const surfaceSpeed=this._surface.length();
-    const activeSpeed=Math.max(0,this._surface.dot(this._normal));
-    const share=approach>0?Math.min(1,activeSpeed/approach):0;
-    const strike=f.contactPart==='boot'?this.smoothContactBlend((surfaceSpeed-cfg.footStrikeBlendStart)/
-      (cfg.footStrikeBlendEnd-cfg.footStrikeBlendStart))*(1-controlPunt)*share:0;
-    const power=1-(1-cfg.footShotPower)*strike;
-    const drivenSpeedLimit=Math.max(b.velocity.length(),cfg.maxSpeed*power);
-    this._responseSurface.copy(this._surface).multiplyScalar(power);
-    // Reduce the driven response, not the ball's accumulated velocity. Repeated
-    // CCD contacts therefore neither multiply the reduction nor restore power.
-    // A receding or tangential receiving foot supplies no positive drive and
-    // retains its receiving response, however fast the incoming ball is.
-    const drivenApproach=Math.max(0,approach-(1-power)*activeSpeed);
     if (approach > 0) {
       // Contact velocity already includes running once. High-energy impacts
       // compress the boot/ball instead of reaching a low artificial speed cap.
+      const activeSpeed=Math.max(0,this._surface.dot(this._normal)),share=Math.min(1,activeSpeed/approach);
       const compression=Math.max(0,Math.min(1,(activeSpeed-cfg.footFirmImpactSpeed)/(cfg.footPowerCompressionSpeed-cfg.footFirmImpactSpeed)));
       const receiveBlend=Math.max(0,Math.min(1,(approach-.40)/(cfg.footFirmImpactSpeed-.40)));
       const firmness=this.contactFirmness(approach);
@@ -453,7 +471,7 @@ class FootballPhysics {
       const receivingCompliance=this.contactCompliance(incomingSpeed,cfg.footControlRestitutionScale,Math.max(surfaceSpeed,incomingSpeed));
       const receiving=(receivingCompliance+(1-receivingCompliance)*liftRestore)*(cfg.footRestitution+(cfg.footReceiveRestitution-cfg.footRestitution)*receiveBlend*receiveBlend*(3-2*receiveBlend))*firmness;
       const restitution=share>=1?active:receiving+(active-receiving)*share;
-      impulse = (1 + restitution) * drivenApproach;
+      impulse = (1 + restitution) * approach;
       b.velocity.addScaledVector(this._normal, impulse);
     }
     // Gravity supplies a normal load while a ball is supported on a sole/toe.
@@ -467,14 +485,30 @@ class FootballPhysics {
       const frictionFull=this.contactCompliance(surfaceSpeed,cfg.footControlFrictionScale);
       const friction=frictionFull+(this.contactCompliance(surfaceSpeed,
         cfg.footControlFrictionScale,0)-frictionFull)*controlPunt;
-      this.surfaceFriction(this._normal,this._responseSurface,Math.max(impulse,support)*cfg.footFriction*friction);
+      this.surfaceFriction(this._normal,this._surface,Math.max(impulse,support)*cfg.footFriction*friction);
     }
     if(newTouch&&approach>.045&&impulse>0&&instep>0&&grounded>0&&f.contactPart==='boot')
       this.liftInstepLaunch(instep,grounded,approach,surfaceSpeed);
-    // Extreme driven shots used to saturate at the unchanged world speed cap.
-    // Limit only added boot energy; an incoming ball is never slowed below its
-    // pre-contact speed by this cap, and passive/shin contacts keep their tune.
-    if(strike>0&&impulse>0)b.velocity.clampLength(0,drivenSpeedLimit);
+    if(state.correctDirection&&impulse>0){
+      const speed=b.velocity.length();b.velocity.copy(state.releaseDirection).multiplyScalar(speed);
+    }
+    // Remember a firm stroke's launch, but leave ordinary steady contacts unchanged.
+    // An accelerating follow-through can outrun the ceiling after its first
+    // impact; it must not gain a new upward direction at that later overlap.
+    const drive=this._surface.dot(this._normal),speedSq=b.velocity.lengthSq();
+    const continuing=state.strikeUntil>this.time;
+    if(!continuing&&f.contactPart==='boot'&&approach>cfg.footFirmImpactSpeed&&
+      drive>cfg.footStrikeBlendEnd&&drive>surfaceSpeed*.5&&drive/approach>.65&&
+      speedSq>cfg.footStrikeBlendEnd**2&&controlPunt<.1){
+      state.releaseDirection.copy(b.velocity).normalize();state.strikeUntil=this.time+.09;
+      state.strikeSpeed=surfaceSpeed;state.strikeNormalY=this._normal.y;state.strikeSurfaceY=this._surface.y;
+    }
+    if(state.strikeUntil>this.time&&impulse>0&&drive>cfg.maxSpeed*.8&&
+      this._normal.dot(state.releaseDirection)>.35&&
+      (speedSq>=cfg.maxSpeed*cfg.maxSpeed||surfaceSpeed>=cfg.maxSpeed)&&controlPunt<.1){
+      if(continuing)b.velocity.copy(state.releaseDirection).multiplyScalar(Math.sqrt(speedSq));
+      state.releaseUntil=state.strikeUntil;
+    }
   }
 
   surfaceFriction(normal, surfaceVelocity, limit) {

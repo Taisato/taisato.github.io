@@ -1,6 +1,6 @@
 # First Touch — VR football
 
-**Build V41:** Contact-led instep lift, less excessive backspin rise, and approximately 10% less power from deliberate strikes.
+**Build V42:** Previous shot tuning restored, targeted follow-through correction, stronger net seams, rarer tears and damage that lasts for the whole 3 TOUCH run.
 
 ## Play
 
@@ -59,21 +59,19 @@ Use the menu to switch modes, restart or recalibrate. Recalibration preserves th
 
 ## Net damage
 
-A sufficiently hard ball impact or a detected fast crossing can rupture the back, side or roof of the net. The opening belongs to the existing deformable cloth: torn faces stop colliding, severed links release, and loose cord ends remain attached around the uneven edge. Ordinary catches still use the existing net response.
+An exceptionally fast ball impact can rupture the back, side or roof of the net. The opening belongs to the existing deformable cloth: torn faces stop colliding, severed links release, and loose cord ends remain attached around the uneven edge. Ordinary catches still use the existing net response.
 
-Damage survives successful 3 TOUCH chances and free-ball respawns. The next attempt after a lost chance repairs the nets. Starting a new run or launching Freeroam again also repairs them. Opening the menu, recalibrating or recovering tracking does not repair damage. A legal goal still counts when the ball subsequently breaks through the net.
+The impact and swept-crossing paths both require at least **33 m/s** of ball speed and outward impact speed relative to the cloth. The previous low-speed escape fallback has been removed. A lower-speed numerical crossing is contained. Shared material edges between panels are explicitly retained, including the corner where the side and back meet. Existing holes remain open and passable.
+
+Damage lasts for the **whole 3 TOUCH run**. Scoring, losing one life and advancing to another chance do not repair the nets. After all three lives are lost, the holes remain visible on the game-over screen. Choosing **Again**, pressing right-controller **A** at game over, or explicitly restarting begins a new run with repaired nets. Launching Freeroam again also repairs them. Free-ball respawns, menus, recalibration and tracking recovery preserve damage. A legal goal still counts when the ball subsequently breaks through the net.
 
 ## Boot contact and flight
 
-Launch direction follows the actual ball/boot contact. Full instep no longer imposes a 12-degree minimum angle on a level centre hit. The existing lift assistance now depends on a genuinely lower contact or an upward-moving foot, so intentional loft, chips and keep-ups remain possible.
+The V41 changes to shot power, instep assistance and upward aerodynamic lift have been reverted. Shot strength, the 38 m/s general speed ceiling, instep launch tuning, curve, ground rolling and receiving response use the previous tuning again.
 
-Deliberate boot-strike drive is reduced by 10% before the collision response. The reduction acts on the boot's driving contribution, rather than repeatedly multiplying the ball's accumulated speed. It fades out for controlled touches and weak driving shares; receding or purely tangential receiving contacts and incidental shin contacts keep their previous response. Running and controller movement still contribute once.
+The follow-through correction addresses repeated contact after a firm strike. A tracked boot can outrun the ball at its speed ceiling, or accelerate and turn upward while the ball is still below that ceiling. These continuing overlaps can redirect an already-launched shot. The contact episode now releases that shot along its established direction rather than treating every overlap as another powered kick. The release also handles position separation, so correcting velocity alone cannot leave an upward position jump.
 
-The strongest fresh boot strikes are also limited to approximately 34.2 m/s, so reaching the previous 38 m/s ceiling cannot erase the power reduction. This local limit only restricts added strike energy and cannot push an incoming ball below its pre-contact speed. The general world-speed limit remains unchanged.
-
-Excessive upward backspin lift is limited to 2.4 m/s² after the existing aerodynamic force limit. Sideways curve and downward topspin forces keep their previous calculation. This prevents high backspin from cancelling most of gravity while preserving natural lift and curved trajectories.
-
-Returning from menu slow motion preserves the real speed of controller swings, so the reduced simulation rate does not multiply foot-impact power.
+Genuinely separate kicks remain available. Ordinary controlled touches, rising kicks and curved shots continue through the existing contact solver. Returning from menu slow motion preserves the real speed of controller swings, so reduced simulation time does not multiply foot-impact power.
 
 ## Interface and rendering
 
@@ -99,17 +97,22 @@ The optical effect still uses one reusable scene target and one composite pass, 
 
 ## Verification
 
-Verification compares the previous and current physics using actual convex boots and repeatable calibrated-controller traces. Cases include centre and lower contacts, full instep, intentional rising kicks, left/right curved shots, incoming-ball reception, controlled punts, floor-constrained motion and whole-flight trajectories. Application checks cover the existing modes, scoring, menu slow motion and VR input replay. The net-damage system and its repair rules remain as in V40.
+Verification uses the actual production physics, calibrated controller motion and convex boot geometry. Matched replays separate the first impact from subsequent follow-through impulses and position corrections. Additional checks cover curved shots, deliberate loft, separate follow-up kicks, close control, receiving and unchanged free flight.
 
-All 48 validation checks passed: 11 focused physics checks, 14 independent physics/integration checks and 23 application checks. These include 48 power comparisons and centre/lower contact replays at 72, 90 and 120 Hz. Selected matched 90 Hz, 32 m/s swing replays:
+Net tests cover both goals, side/back seams, other joined edges, intact catches below the rupture threshold, exceptional hard impacts, finite open-mouth boundaries and existing holes. Application checks exercise scoring, lost lives, life recovery, complete run loss, the game-over screen and restart, with real damaged topology retained until the new run begins.
 
-| Contact | V40 launch angle | V41 launch angle | V40 peak height | V41 peak height |
-| --- | --- | --- | --- | --- |
-| Centre, full instep, level swing | 12.14° | 1.50° | 2.45 m | 0.16 m |
-| Deliberate lower contact, 35° boot roll | 23.74° | 23.49° | 10.80 m | 5.23 m |
+All **72 checks** passed on the final source: 11 focused follow-through checks, 12 net checks, 16 independent physics/integration checks, 23 full-application checks and 10 net-lifetime checks. The follow-through suite includes 14 strong steady strokes and 18 accelerating variants. The first-impact position, velocity and spin match the restored V40 response in the compared traces.
 
-Heights refer to the ball centre above the pitch. These are individual matched examples, not a universal launch angle for every kick. Mirrored curved shots from 16 m scored at approximately ±2.99 m horizontally from the goal centre and 1.90 m above the pitch, bending 0.53 m relative to their initial horizontal direction. A real boot shot from 14 m still ruptured the net at its unchanged threshold; the same stroke from 16 m was caught normally after the power reduction. Tested passive receivers, slow punts, rolling, gentle lifts, kick-ups and incidental shin follow-through retained their previous trajectories exactly.
+| Matched contact replay | V40 maximum upward speed | V42 maximum upward speed |
+| --- | --- | --- |
+| Strong shallow contact, 40 m/s stroke at 10° | 9.484 m/s | 4.441 m/s |
+| Strong shallow contact, 44 m/s stroke at 8°, full instep | 19.015 m/s | 7.890 m/s |
+| Accelerating 24→44 m/s stroke at 15°, full instep | 16.696 m/s | 7.028 m/s |
 
-Validation uses native production JavaScript and geometry, not a browser/GPU or physical-headset playtest. The controller traces are repeatable test movements rather than recordings of the latest user session.
+These are specific generated controller replays, not universal angles or speeds imposed on every kick. The correction retains the first strike direction and its intended loft. Affected final release speeds can differ because the erroneous extra-contact sequence is removed; there is no global shot-power reduction. Ordinary mirrored curved shots retain their previous trajectories and score from 16 m at approximately ±2.97 m from the goal centre, 1.91 m above the pitch, with 0.52 m of sideways bend.
+
+The reported 27 m/s diagonal side/back-corner escape is reproduced in V40 and contained by V42. The 90-shot seam discovery grid changed from 10 intact escapes to zero. The focused final suite separately checks 14 mirrored/ground corner cases and 32 panel/speed cases. Existing seam-adjacent holes remain passable in both directions. A valid calibrated 38 m/s boot stroke from 8 m reaches the cloth at 33.694 m/s and tears it; the same stroke from 10 or 16 m is caught. The net-lifetime test keeps both goals damaged through scoring, a missed chance, life recovery and all three lost lives, then verifies full repair on Again.
+
+Validation runs native production JavaScript and geometry, not a browser/GPU or physical-headset playtest. The controller replays are repeatable test movements rather than recordings from the latest user session.
 
 Sound-file mapping: [SOUND_EFFECTS.md](SOUND_EFFECTS.md). Graphics library license: [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).

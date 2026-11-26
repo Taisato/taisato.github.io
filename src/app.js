@@ -249,14 +249,13 @@ class FootballApp {
     this.syncBallHistory();this.field.updateBall(this.physics.ball);this.setMenu(false);this.audio.pause(false);
   }
   syncBallHistory(){this.ballBefore.copy(this.physics.ball.position);this.orientationBefore.copy(this.physics.ball.orientation);}
-  placeChance(chance,repairNet=true) {
+  placeChance(chance) {
     if(!chance)return;
     this.motion.reset();
     this.spawnPoint.set(chance.player.x,0,chance.player.z);this.controls.place(this.spawnPoint,chance.yaw);
     this.spawnPoint.set(chance.ball.x,chance.ball.y,chance.ball.z);
     this.audio.resetBall();this.physics.reset(this.spawnPoint);
     this.goalkeeper.setDifficulty(chance.difficulty);this.goalkeeper.reset();
-    if(repairNet)this.nets.reset();
     // Automatic chances advance after this frame's feet were prepared. Move
     // the scene-root leg meshes now, then seed zero-motion contact histories
     // before the new rig position can be rendered or used by the next step.
@@ -407,10 +406,9 @@ class FootballApp {
       this.netVisual.render(worldBlocked?1:alpha);
       this.calibrationPanel.update(this.controls,this.active&&!this.menu);
       if(this.mode==='challenge'&&this.challenge.phase==='result'&&this.challenge.resultAge>=1.6&&!worldBlocked&&!this.menu){
-        // A scored chance keeps the damaged cloth. Losing a life repairs it
-        // for the next attempt; next() clears outcome, so capture it first.
-        const repairNet=this.challenge.outcome!=='goal';
-        this.placeChance(this.challenge.next(),repairNet);
+        // Net damage belongs to the whole run, including lost lives. Only
+        // start() repairs it when a new run or Freeroam session begins.
+        this.placeChance(this.challenge.next());
       }
       this.hud.update(this.snapshot,!worldBlocked&&!this.menu,this.controls.desktop,
         this.renderer.xr.isPresenting?this.renderer.xr.getCamera():this.camera);

@@ -6,9 +6,10 @@ import { FB } from "../config.js";
 class FootballGoalNets {
   constructor() {
     this.goals=[this._makeGoal(-1),this._makeGoal(1)];
-    this.feet=[];this.footCount=0;this.dt=FB.fixedStep;this.time=0;
+    this.feet=[];this.footCount=0;this.dt=FB.fixedStep;this.time=0;this.tearSpeed=33;
     this._normal=new FT.Vector3();this._surface=new FT.Vector3();this._point=new FT.Vector3();
     this._impulseNormal=new FT.Vector3();
+    this._seamNormalA=new FT.Vector3();this._seamNormalB=new FT.Vector3();
     this._local=new FT.Vector3();this._shoePoint=new FT.Vector3();this._shoeNormal=new FT.Vector3();
     this._bootDirection=new FT.Vector3();
     this._ankle=new FT.Vector3();this._seed=new FT.Vector3();this._velocity=new FT.Vector3();this._arm=new FT.Vector3();
@@ -63,10 +64,19 @@ class FootballGoalNets {
     const positions=relaxed.slice(),previous=relaxed.slice(),neighborSets=Array.from({length:pins.length},()=>new Set()),constraintLookup=new Map();
     for(let k=0;k<constraints.length;k+=4){const a=constraints[k],b=constraints[k+1];constraintLookup.set(Math.min(a,b)*4096+Math.max(a,b),k/4);if(constraints[k+3]<.001){neighborSets[a].add(b);neighborSets[b].add(a);}}
     const neighbors=neighborSets.map(s=>new Uint16Array(s)),neighborLinks=neighbors.map((list,a)=>new Uint16Array(Array.from(list,b=>constraintLookup.get(Math.min(a,b)*4096+Math.max(a,b)))));
+    const seamEdges=[],faceEdges=new Map();
+    for(let pi=0;pi<panels.length;pi++){
+      const panel=panels[pi];
+      for(let t=panel.triangleStart;t<panel.triangleStart+panel.triangleCount;t+=3)for(let e=0;e<3;e++){
+        const a=triangles[t+e],b=triangles[t+(e+1)%3],key=Math.min(a,b)*4096+Math.max(a,b),other=faceEdges.get(key);
+        if(other&&other.pi!==pi)seamEdges.push(a,b,other.t,t,other.pi,pi);
+        else if(!other)faceEdges.set(key,{pi,t});
+      }
+    }
     return{sign,end:sign,rest,relaxed,relaxedDisplacement,positions,current:positions,previous,renderPrevious:previous,
       velocity:new Float32Array(rest.length),start:new Float32Array(rest.length),normals:new Float32Array(rest.length),inverseMass:new Float32Array(pins),
       indices:new Uint16Array(triangles),panels,constraints:new Float32Array(constraints),lambda:new Float32Array(constraints.length/4),
-      neighbors,neighborLinks,constraintLookup,visited:new Uint32Array(pins.length),
+      neighbors,neighborLinks,constraintLookup,seamEdges:new Uint16Array(seamEdges),visited:new Uint32Array(pins.length),
       triangleActive:new Uint8Array(triangles.length/3).fill(1),constraintActive:new Uint8Array(constraints.length/4).fill(1),
       nodeDamage:new Float32Array(pins.length),damageRest:rest.slice(),nodeSupport:new Uint16Array(pins.length),edgeSupport:new Uint8Array(constraints.length/4),
       tornTriangles:new Uint16Array(triangles.length/3),tornCount:0,tearCount:0,damageRevision:0,tears:[],lastTearTime:-10,
@@ -280,7 +290,7 @@ class FootballGoalNets {
     const point=new FT.Vector3(...this._closest),material=new FT.Vector3(),normal=this._normal.clone();
     if(normal.getComponent(axis)*panel.inward>0)normal.negate();
     for(let k=0;k<3;k++)material.setComponent(k,rest[idx[triangle]*3+k]*bary[0]+rest[idx[triangle+1]*3+k]*bary[1]+rest[idx[triangle+2]*3+k]*bary[2]);
-    const radius=.245+Math.min(.07,Math.max(0,speed-28)*.007),cu=material.getComponent(u),cv=material.getComponent(v),firstCell=panel.triangleStart+Math.floor((triangle-panel.triangleStart)/6)*6;
+    const radius=.245+Math.min(.07,Math.max(0,speed-this.tearSpeed)*.007),cu=material.getComponent(u),cv=material.getComponent(v),firstCell=panel.triangleStart+Math.floor((triangle-panel.triangleStart)/6)*6;
     let removed=0;const firstTorn=net.tornCount;
     for(let t=panel.triangleStart;t<panel.triangleStart+panel.triangleCount;t+=6){
       const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3,d=idx[t+4]*3;
@@ -309,17 +319,17 @@ class FootballGoalNets {
     this._updateNormals(net);return true;
   }
   _sweptBreak(net,physics){
-    if(!net.ballInside||physics.ball.velocity.lengthSq()<144)return false;
+    if(!net.ballInside||physics.ball.velocity.lengthSq()<this.tearSpeed*this.tearSpeed)return false;
     const from=physics._previous,to=physics.ball.position;if(from.distanceToSquared(to)<1e-14)return false;
     for(let pi=0;pi<net.panels.length;pi++){
-      const panel=net.panels[pi];if(-physics.ball.velocity.getComponent(panel.axis)*panel.inward<8)continue;
+      const panel=net.panels[pi];if(-physics.ball.velocity.getComponent(panel.axis)*panel.inward<=0)continue;
       for(let t=panel.triangleStart;t<panel.triangleStart+panel.triangleCount;t+=3){
         if(!net.triangleActive[t/3]||!this._segmentTriangle(net,t,from,to))continue;
         const n=this._normal;if(n.getComponent(panel.axis)*panel.inward<0)n.negate();
         const travel=(to.x-from.x)*n.x+(to.y-from.y)*n.y+(to.z-from.z)*n.z;if(travel>=0)continue;
         const ids=net.indices,bary=this._bary,vel=net.velocity;let relative=-physics.ball.velocity.dot(n);
         for(let j=0;j<3;j++){const k=ids[t+j]*3;relative+=(vel[k]*n.x+vel[k+1]*n.y+vel[k+2]*n.z)*bary[j];}
-        if(relative>=12&&this._tear(net,physics,pi,t,relative)){net.ballInside=false;net.exteriorMask=1<<pi;return true;}
+        if(relative>=this.tearSpeed&&this._tear(net,physics,pi,t,relative)){net.ballInside=false;net.exteriorMask=1<<pi;return true;}
       }
     }
     return false;
@@ -390,7 +400,7 @@ class FootballGoalNets {
         const incoming=-(ball.velocity.x-this._surface.x)*response.x-(ball.velocity.y-this._surface.y)*response.y-(ball.velocity.z-this._surface.z)*response.z;
         // The sphere has reached this finite sheet. A strong outward impact
         // ruptures its local cords before the retention constraint pulls back.
-        if(net.ballInside&&incoming>=28&&nearestDistanceSq<=r*r&&this._tear(net,physics,panelIndex,t,incoming))return;
+        if(net.ballInside&&incoming>=this.tearSpeed&&ball.velocity.lengthSq()>=this.tearSpeed*this.tearSpeed&&nearestDistanceSq<=r*r&&this._tear(net,physics,panelIndex,t,incoming))return;
         const correction=(penetration+.00005)/total;
         bp.addScaledVector(n,correction*ballW);
         const ids=this._ids,weights=this._weights;ids[0]=ia;ids[1]=ib;ids[2]=ic;weights[0]=wa;weights[1]=wb;weights[2]=wc;
@@ -409,6 +419,47 @@ class FootballGoalNets {
         }
         net.ballContact=true;this.stats.ballContacts++;
       }
+    }
+  }
+  _retainSeams(net,physics) {
+    if(!net.ballInside)return;
+    const ball=physics.ball,bp=ball.position,p=net.positions,idx=net.indices,seams=net.seamEdges,r=ball.radius+.003,ballW=1/ball.mass;
+    // The welded panels move together, but separate face projections can miss
+    // the outside wedge of their common edge. Retain that finite material seam,
+    // never an extended plane across the open mouth or an already torn face.
+    for(let k=0;k<seams.length;k+=6){
+      const a=seams[k],b=seams[k+1],ta=seams[k+2],tb=seams[k+3],pa=net.panels[seams[k+4]],pb=net.panels[seams[k+5]];
+      if(!net.triangleActive[ta/3]||!net.triangleActive[tb/3])continue;
+      const ai=a*3,bi=b*3,ex=p[bi]-p[ai],ey=p[bi+1]-p[ai+1],ez=p[bi+2]-p[ai+2],lengthSq=ex*ex+ey*ey+ez*ez;
+      if(lengthSq<1e-10)continue;
+      const t=Math.max(0,Math.min(1,((bp.x-p[ai])*ex+(bp.y-p[ai+1])*ey+(bp.z-p[ai+2])*ez)/lengthSq));
+      const qx=p[ai]+ex*t,qy=p[ai+1]+ey*t,qz=p[ai+2]+ez*t,dx=bp.x-qx,dy=bp.y-qy,dz=bp.z-qz;
+      if(dx*dx+dy*dy+dz*dz>(r+.35)*(r+.35))continue;
+      if(!this._closestTriangle(qx,qy,qz,p,idx[ta],idx[ta+1],idx[ta+2]))continue;
+      const na=this._seamNormalA.copy(this._normal);if(na.getComponent(pa.axis)*pa.inward<0)na.negate();
+      if(!this._closestTriangle(qx,qy,qz,p,idx[tb],idx[tb+1],idx[tb+2]))continue;
+      const nb=this._seamNormalB.copy(this._normal);if(nb.getComponent(pb.axis)*pb.inward<0)nb.negate();
+      const sa=dx*na.x+dy*na.y+dz*na.z,sb=dx*nb.x+dy*nb.y+dz*nb.z;if(sa>=r||sb>=r)continue;
+      if((sa>=0||sb>=0)&&dx*dx+dy*dy+dz*dz>r*r*2)continue;
+      const n=this._normal.copy(na).add(nb);if(n.lengthSq()<1e-8)continue;n.normalize();
+      const da=n.dot(na),db=n.dot(nb);if(da<.15||db<.15)continue;
+      // Engage at the sphere surface and recover one small step at a time;
+      // a retracting folded knot must not teleport the ball across the pocket.
+      const correction=Math.min(.06,Math.max((r-sa)/da,(r-sb)/db)+.00005);
+      this._surface.set(net.velocity[ai]*(1-t)+net.velocity[bi]*t,net.velocity[ai+1]*(1-t)+net.velocity[bi+1]*t,net.velocity[ai+2]*(1-t)+net.velocity[bi+2]*t);
+      const incoming=-(ball.velocity.x-this._surface.x)*n.x-(ball.velocity.y-this._surface.y)*n.y-(ball.velocity.z-this._surface.z)*n.z;
+      const wa=idx[ta]===a?1-t:idx[ta]===b?t:0,wb=idx[ta+1]===a?1-t:idx[ta+1]===b?t:0,wc=1-wa-wb;
+      this._closest[0]=qx;this._closest[1]=qy;this._closest[2]=qz;this._bary[0]=wa;this._bary[1]=wb;this._bary[2]=wc;
+      if(incoming>=this.tearSpeed&&ball.velocity.lengthSq()>=this.tearSpeed*this.tearSpeed&&this._tear(net,physics,seams[k+4],ta,incoming)){net.ballInside=false;net.exteriorMask=1<<seams[k+4];return;}
+      bp.addScaledVector(n,correction);
+      if(incoming>0){
+        const invPatch=this._contactPatch(net,idx[ta],idx[ta+1],idx[ta+2],wa,wb,wc),impulse=incoming*1.04/(ballW+invPatch);
+        ball.velocity.addScaledVector(n,impulse*ballW);
+        for(let j=0;j<this._patchCount;j++){const id=this._patchIds[j],offset=id*3,d=-impulse*this._patchWeights[j]*net.inverseMass[id];net.velocity[offset]+=n.x*d;net.velocity[offset+1]+=n.y*d;net.velocity[offset+2]+=n.z*d;}
+        if(incoming>.2)net.energyContact=true;
+      }
+      net.ballContact=true;this.stats.ballContacts++;
+      return;
     }
   }
   _boots(net,physics,alpha,h) {
@@ -480,6 +531,7 @@ class FootballGoalNets {
     for(const net of this.goals){
       if(!net.active)continue;
       this._ball(net,physics,h);
+      this._retainSeams(net,physics);
     }
   }
   endStep() {
