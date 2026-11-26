@@ -1,6 +1,6 @@
 # First Touch — VR football
 
-**Build V32:** Cleaner panels, a higher HUD, half-second touch counting, longer chances and a restrained optical finish.
+**Build V33:** A lower tracker, clearly visible chromatic separation, stronger effects on moving objects and more grain in the dark.
 
 ## Play
 
@@ -26,11 +26,13 @@ Pause to switch modes, start a new run or recalibrate. Recalibration preserves a
 
 ## Interface
 
-The launcher, VR pause menu, calibration panels and challenge HUD share a navy, mint and lilac style without decorative background arcs. The HUD shows only touches, goals and lives. It sits near the top of the view and adjusts to narrower or asymmetric headset projections to avoid clipping. Result messages are brief; control instructions stay in the help section.
+The launcher, VR pause menu, calibration panels and challenge HUD share a navy, mint and lilac style without decorative background arcs. The HUD shows only touches, goals and lives. It now sits one visible tracker-height below its V32 position, in both VR and the desktop view, while retaining its adjustment for narrower or asymmetric headset projections. Result messages are brief; control instructions stay in the help section.
 
-The optical treatment combines subtle edge chromatic separation, fine grain and cooler shadows. Opening the menu eases into stronger separation and edge shading over 0.6 seconds. The aiming area and upper HUD remain clear. Menu and calibration surfaces receive a much smaller local colour fringe.
+Chromatic separation is visibly stronger across the view, with extra separation following fast ball movement, boot swings and the goalkeeper's body and gloves. The effect uses actual object motion; rotating the camera alone does not generate object streaks. Scene depth confines the motion treatment to visible objects. The HUD is protected using its actual projected position in each eye.
 
-The rendering effect uses one reusable scene target and one composite pass, with each eye sampled separately in VR. The target resizes only when the output size changes; no additional image or sound assets are needed.
+Monochrome grain is stronger, especially in dark areas and the black sky. Opening the menu eases into stronger separation, grain and edge shading over 0.6 seconds. Menu and calibration surfaces receive their own local colour fringe. The desktop menu no longer blurs away the background effects.
+
+The rendering effect uses one reusable scene target with depth and one composite pass, with each eye sampled separately in VR. Motion records and shader vectors are reused; only nearby projected objects require extra depth samples. The target resizes only when the output size changes. No additional image or sound assets are needed.
 
 The HUD and menu textures update only when their displayed state changes. No extra font, texture or audio download is required.
 
@@ -43,7 +45,7 @@ The HUD and menu textures update only when their displayed state changes. No ext
 | `src/game/challenge.js` | Chances, touches, lives and scoring |
 | `src/ui/` | Shared theme, menus, HUD and calibration |
 | `src/player/` | Controls, calibrated legs and boots |
-| `src/physics/`, `src/render/` | Ball, interactive goal nets and optical rendering |
+| `src/physics/`, `src/render/` | Ball, interactive goal nets, optical rendering and motion sources |
 | `src/keeper/`, `assets/models/keeper/` | Keeper behavior, animation and geometry |
 | `src/world/`, `src/config.js` | Pitch and dimensions |
 | `src/audio.js`, `assets/audio/` | Sound playback and all 13 recordings |
@@ -53,10 +55,10 @@ For a local desktop preview, run `python3 -m http.server 8000` from the extracte
 
 ## Verification
 
-Checks cover 12,000 seeded chance placements, the exact half-second touch boundary, opposite-foot contact sequences, whole-ball goal and out detection at physics substeps, a completed third-touch shot, fourth-touch rejection, keeper parries and recovery, life restoration, game over, restart, mode switching and recalibration. The existing 414-frame VR input replay still passes in freeroam.
+Checks cover complete game flow, third-touch shots, life recovery, game over, restart, mode switching and recalibration. The existing 414-frame VR input replay still passes in freeroam. The V32 challenge rules and all physical simulation files are unchanged.
 
 The keeper improves continuously while accurate high-corner shots remain possible. Switching to freeroam restores the previous keeper's exact behavior. This update changes neither ball/contact/rolling/curve/lift tuning nor the keeper, boot geometry, calibration, net physics or audio files.
 
-The production canvas panels were rendered and visually inspected; native checks cover ray selection and HUD projection bounds. Optical verification covers per-eye sample boundaries, output routing, transition timing, target reuse and shader construction, with CPU previews used to compare strengths. The complete module graph and all sounds load without new fetches or audio decoding during play. These are native production-code replays, canvas renders and shader checks, not a browser/GPU or headset playtest.
+The production canvas panels were rendered and visually inspected; native checks cover the exact tracker displacement, ray selection and HUD projection bounds. Optical verification covers per-eye sample boundaries, actual source velocities, fast axial shots, inward/outward motion, foreground occlusion, dark-grain amplitude, output routing, transition timing, target reuse and shader construction. CPU sampling previews compare the visible V32 and V33 responses. The complete module graph and all sounds load without new fetches or audio decoding during play. These are native production-code replays, canvas renders and shader checks, not a browser/GPU or headset playtest.
 
 Sound-file mapping: [SOUND_EFFECTS.md](SOUND_EFFECTS.md). Library license: [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).

@@ -5,6 +5,7 @@ import { FootballPhysics } from "./physics/ball.js";
 import { FootballGoalNets } from "./physics/nets.js";
 import { FootballGoalNetVisual } from "./render/net.js";
 import { FootballOptics } from "./render/optics.js";
+import { FootballMotionSources } from "./render/motion.js";
 import { FootballGoalkeeper } from "./keeper/keeper.js";
 import { FootballControls } from "./player/controls.js";
 import { FootballInterface } from "./ui/menu.js";
@@ -38,6 +39,8 @@ class FootballApp {
     this.calibrationPanel=new FootballCalibrationPanel(this.camera);
     this.hud=new FootballHUD(this.camera);
     this.optics=new FootballOptics(this.renderer,this.scene,this.camera);
+    this.motion=new FootballMotionSources(this.field,this.controls,this.goalkeeper);
+    this.optics.setMotionSources(this.motion.sources);this.optics.setHUD(this.hud.mesh);
     this.opticsState={menu:false,active:false};
     this.active=false;this.menu=false;this.pending=false;this.pendingInitialPlacement=false;
     this.session=null;this.reference=null;this.paused=false;this.contextLost=false;this.disposed=false;
@@ -60,14 +63,14 @@ class FootballApp {
     on(window,'resize',()=>this.resize());
     on(window,'pagehide',event=>{if(!event.persisted)this.dispose();});
     on(document,'visibilitychange',()=>{
-      if(!this.session){this.paused=document.hidden;this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;this.lastTime=0;this.audio.pause(this.paused||this.menu||!this.active);}
+      if(!this.session){this.paused=document.hidden;this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;this.lastTime=0;this.audio.pause(this.paused||this.menu||!this.active);}
     });
     on(this.renderer.domElement,'webglcontextlost',event=>{
-      event.preventDefault();this.contextLost=true;this.controls.invalidate();this.audio.pause(true);
+      event.preventDefault();this.contextLost=true;this.controls.invalidate();this.motion.reset();this.audio.pause(true);
       this.ui.status.textContent='Graphics interrupted. Reload.';this.ui.launcher.hidden=false;
     });
     on(this.renderer.domElement,'webglcontextrestored',()=>{
-      this.contextLost=false;this.lastTime=0;this.accumulator=0;this.physics.clearContacts();this.nets.clearContacts();
+      this.contextLost=false;this.lastTime=0;this.accumulator=0;this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();
       this.ui.status.textContent='';this.ui.launcher.hidden=this.active&&(!this.menu||!this.controls.desktop);
       this.audio.pause(this.paused||this.menu||!this.active);
     });
@@ -148,15 +151,16 @@ class FootballApp {
   enterDesktop(){if(this.session||this.pending)return;this.audio.start();this.controls.setDesktop(true);this.active=true;this.paused=false;this.lastTime=0;this.start();}
   onXRVisibility=()=>{
     this.paused=this.session?.visibilityState!=='visible';this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();
+    this.motion.reset();
     this.accumulator=0;this.lastTime=0;this.audio.pause(this.paused||this.menu);
   };
-  onReferenceReset=()=>{this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;this.lastTime=0;};
+  onReferenceReset=()=>{this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;this.lastTime=0;};
   onSessionEnd=()=>{
     this.reference?.removeEventListener('reset',this.onReferenceReset);
     this.session?.removeEventListener('end',this.onSessionEnd);this.session?.removeEventListener('visibilitychange',this.onXRVisibility);
     this.session=null;this.reference=null;this.active=false;this.menu=false;this.paused=false;this.pendingInitialPlacement=false;this.pendingStartWhistle=false;
     this.calibrationFromGameover=false;
-    this.pendingChance=null;this.challenge.stop();this.hud.hide();
+    this.pendingChance=null;this.challenge.stop();this.hud.hide();this.motion.reset();
     this.interface.show(false,this.controls);this.calibrationPanel.hide();this.controls.setDesktop(true);this.controls.invalidate();
     this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;this.audio.pause(true);
     this.ui.launcher.hidden=false;this.ui.hint.hidden=true;this.ui.status.textContent='';this.syncPage();this.resize();this.lastTime=0;
@@ -166,12 +170,13 @@ class FootballApp {
     if(this.session){this.session.end().catch(()=>{this.ui.status.textContent='Use the headset menu to leave VR.';});return;}
     document.exitPointerLock?.();this.active=false;this.menu=false;this.pendingInitialPlacement=false;
     this.calibrationFromGameover=false;
-    this.pendingChance=null;this.challenge.stop();this.hud.hide();
+    this.pendingChance=null;this.challenge.stop();this.hud.hide();this.motion.reset();
     this.controls.keys.clear();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;
     this.interface.show(false,this.controls);this.calibrationPanel.hide();
     this.ui.launcher.hidden=false;this.ui.hint.hidden=true;this.audio.pause(true);this.syncPage();
   }
   start() {
+    this.motion.reset();
     // The first tracked pose and calibration must be available before centering a VR player.
     this.pendingInitialPlacement=!this.controls.desktop;this.calibrationCompletePending=false;
     this.calibrationFromGameover=false;
@@ -191,6 +196,7 @@ class FootballApp {
   syncBallHistory(){this.ballBefore.copy(this.physics.ball.position);this.orientationBefore.copy(this.physics.ball.orientation);}
   placeChance(chance) {
     if(!chance)return;
+    this.motion.reset();
     this.spawnPoint.set(chance.player.x,0,chance.player.z);this.controls.place(this.spawnPoint,chance.yaw);
     this.spawnPoint.set(chance.ball.x,chance.ball.y,chance.ball.z);
     this.audio.resetBall();this.physics.reset(this.spawnPoint);
@@ -201,6 +207,7 @@ class FootballApp {
     this.syncPage();
   }
   spawnBall() {
+    this.motion.reset();
     this.audio.resetBall();
     this.controls.refreshHead();this.spawnPoint.copy(this.controls.headWorld).addScaledVector(this.controls.forward,.72);
     this.spawnPoint.x=footballClamp(this.spawnPoint.x,-FB.halfWidth+.5,FB.halfWidth-.5);
@@ -209,7 +216,7 @@ class FootballApp {
   }
   setMenu(show) {
     if(!show&&this.mode==='challenge'&&this.challenge.phase==='gameover'&&!this.calibrationFromGameover)show=true;
-    this.menu=show;this.controls.keys.clear();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;
+    this.menu=show;this.controls.keys.clear();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;
     this.interface.show(show&&!this.controls.desktop,this.controls);
     this.ui.launcher.hidden=!(show&&this.controls.desktop);this.ui.hint.hidden=!(this.active&&this.controls.desktop&&!show);
     if(show)document.exitPointerLock?.();this.audio.pause(show||this.paused);this.syncPage();
@@ -238,7 +245,7 @@ class FootballApp {
     const now=milliseconds*.001,rawDt=this.lastTime?now-this.lastTime:0;this.lastTime=now;
     const dt=footballClamp(rawDt,0,.05);
     let audioActive=false;
-    if(rawDt>.1){this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;}
+    if(rawDt>.1){this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;}
     if(this.active&&!this.paused){
       this.controls.calibrationPaused=this.menu;
       const tracked=this.controls.sample(frame,this.reference,this.session,dt),cal=this.controls.calibration;
@@ -318,6 +325,7 @@ class FootballApp {
     }
     this.audio.update(this.physics.ball,this.controls,audioActive,dt);
     if(audioActive&&this.pendingStartWhistle&&this.audio.whistle())this.pendingStartWhistle=false;
+    this.motion.update(dt,this.physics.ball,this.active&&audioActive&&!this.menu&&!this.paused);
     this.opticsState.menu=this.menu;this.opticsState.active=this.active;
     this.optics.update(dt,this.opticsState);this.optics.render();
   };

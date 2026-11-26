@@ -23,11 +23,11 @@ class FootballHUD{
    if(p&&p[5]>0){const slope=(1+p[9])/p[5];if(slope>0&&Number.isFinite(slope))upper=Math.min(upper,slope);}
   }
   if(!Number.isFinite(upper))upper=1;if(Math.abs(upper-this.upperSlope)<1e-6)return;this.upperSlope=upper;
-  // The main strip is centred 53 mm above the canvas centre; leave 3 degrees
-  // above the entire plane, including transparent pixels and the result badge.
+  // Fit the full canvas below the upper frustum, then move down by one visible
+  // strip height (132 of 250 canvas pixels = .132 m at this unchanged scale).
   const depth=1.7,target=depth*Math.tan(39*Math.PI/180)-.053;
   const ceiling=depth*Math.tan(Math.atan(upper)-3*Math.PI/180)-.125;
-  this.mesh.position.y=Math.min(target,ceiling);
+  this.mesh.position.y=Math.min(target,ceiling)-.132;
  }
  update(snapshot={},visible=true,desktop=false,viewCamera=this.camera){
   const show=!!visible&&snapshot.mode==='challenge';this.mesh.visible=show&&!desktop;if(this.desktopCanvas)this.desktopCanvas.hidden=!(show&&desktop);if(!show)return;
