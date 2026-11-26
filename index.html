@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#14211f">
+<link rel="icon" href="data:,">
+<title>First Touch · VR Football</title>
+<link rel="stylesheet" href="./styles/main.css">
+</head>
+<body>
+<main id="launcher">
+<section class="card" aria-label="Free play">
+<p class="eyebrow">FREE PLAY / VR</p>
+<h1>FIRST TOUCH</h1>
+<button class="primary" id="enter-vr" disabled>Enter VR</button>
+<button class="secondary" id="desktop" disabled>Play on screen</button>
+<button class="primary" id="resume" hidden>Resume</button>
+<button class="secondary" id="exit" hidden>Exit</button>
+<div class="controls"><span><b>L stick</b> Move</span><span><b>R stick</b> Turn</span><span><b>Trigger</b> Instep</span><span><b>Grip</b> Sprint</span><span><b>B</b> New ball</span><span><b>X</b> Recalibrate · <b>Y</b> Menu</span></div>
+<p class="status" id="status" role="status">Loading…</p>
+</section>
+</main>
+<div id="desktop-hint" hidden>WASD Move · Shift Sprint · Mouse / ← → Turn · Space / Click Kick · E Instep · B Ball · Esc Menu</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

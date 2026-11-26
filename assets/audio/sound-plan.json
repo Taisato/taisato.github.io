@@ -1,0 +1,490 @@
+{
+  "purpose": "recording_brief_only",
+  "runtimeLoadsThisFile": false,
+  "audioPlaybackChanged": false,
+  "currentRuntimeAudio": "Two procedural synth voices: kick and net; no sample files loaded.",
+  "sourceVersion": "V25",
+  "sourceBundleSHA256": "8cf22f8451510a8caa8dd47347d967cc461df1da14195ab71f35e1f733b9bf4a",
+  "baseDirectory": "assets/audio/",
+  "familyCount": 17,
+  "coreFamilyCount": 13,
+  "optionalFamilyCount": 4,
+  "minimumCoreFiles": 13,
+  "minimumAllFamiliesFiles": 17,
+  "existingEventRecordingFamilies": 8,
+  "proposedCoreRecordingFamilies": 5,
+  "notes_pl": [
+    "Pliki MP3 są planem do kolejnej integracji; obecna gra nadal używa syntezy.",
+    "P1: rozdzielenie i podmiana wspólnych dźwięków istniejących zdarzeń; P2: nowe podstawowe wyzwalanie; P3: efekty opcjonalne.",
+    "Trzy siły kontaktu z piłką obecnie korzystają z tego samego syntezatora o zmiennej głośności.",
+    "Warstwy obecnego syntetycznego uderzenia nie wymagają osobnych nagrań MP3.",
+    "Długości, liczby wariantów, kanały i umiejscowienie są zaleceniami produkcyjnymi.",
+    "Warianty _02 i _03 są opcjonalne; na początek wystarczy plik _01 z każdej wybranej rodziny."
+  ],
+  "recordingRecommendations": {
+    "dry": true,
+    "trimLeadingSilence": true,
+    "retainNaturalTail": true,
+    "consistentBallAndSurface": true,
+    "oneEventPerOneShot": true,
+    "suggestedSampleRatesHz": [
+      44100,
+      48000
+    ],
+    "suggestedBitrateKbps": [
+      128,
+      192
+    ],
+    "loopBoundary": "Aim for continuous sound across endpoints; final trimming/crossfade can be set during integration."
+  },
+  "assets": [
+    {
+      "id": "ball_touch_soft",
+      "file": "ball_touch_soft_01.mp3",
+      "path": "assets/audio/ball_touch_soft_01.mp3",
+      "status": "existing_event_shared_synthesis",
+      "priority": "P1",
+      "requiredForCoreSet": true,
+      "description_pl": "Delikatny kontakt buta z piłką: prowadzenie, przyjęcie, drobne przesunięcie.",
+      "suggestedDurationSeconds": [
+        0.08,
+        0.25
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "ball_touch_soft_01.mp3",
+        "ball_touch_soft_02.mp3",
+        "ball_touch_soft_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": "touch",
+      "currentSynthesis": "kick()",
+      "futureTriggerOrSelection": "low relative normal impact speed",
+      "recordingProvided": false
+    },
+    {
+      "id": "ball_kick_medium",
+      "file": "ball_kick_medium_01.mp3",
+      "path": "assets/audio/ball_kick_medium_01.mp3",
+      "status": "existing_event_shared_synthesis",
+      "priority": "P1",
+      "requiredForCoreSet": true,
+      "description_pl": "Zwykłe podanie lub średnio mocne kopnięcie.",
+      "suggestedDurationSeconds": [
+        0.12,
+        0.35
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "ball_kick_medium_01.mp3",
+        "ball_kick_medium_02.mp3",
+        "ball_kick_medium_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": "touch",
+      "currentSynthesis": "kick()",
+      "futureTriggerOrSelection": "medium relative normal impact speed",
+      "recordingProvided": false
+    },
+    {
+      "id": "ball_kick_hard",
+      "file": "ball_kick_hard_01.mp3",
+      "path": "assets/audio/ball_kick_hard_01.mp3",
+      "status": "existing_event_shared_synthesis",
+      "priority": "P1",
+      "requiredForCoreSet": true,
+      "description_pl": "Mocny strzał z wyraźnym atakiem i głębszym odgłosem piłki.",
+      "suggestedDurationSeconds": [
+        0.15,
+        0.5
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "ball_kick_hard_01.mp3",
+        "ball_kick_hard_02.mp3",
+        "ball_kick_hard_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": "touch",
+      "currentSynthesis": "kick()",
+      "futureTriggerOrSelection": "high relative normal impact speed",
+      "recordingProvided": false
+    },
+    {
+      "id": "goal_frame_hit",
+      "file": "goal_frame_hit_01.mp3",
+      "path": "assets/audio/goal_frame_hit_01.mp3",
+      "status": "existing_event_shared_synthesis",
+      "priority": "P1",
+      "requiredForCoreSet": true,
+      "description_pl": "Piłka uderza w metalowy słupek lub poprzeczkę.",
+      "suggestedDurationSeconds": [
+        0.4,
+        1.4
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "goal_frame_hit_01.mp3",
+        "goal_frame_hit_02.mp3",
+        "goal_frame_hit_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": "frame",
+      "currentSynthesis": "kick(2)",
+      "futureTriggerOrSelection": "any goal frame impact; real event speed available",
+      "recordingProvided": false
+    },
+    {
+      "id": "keeper_glove_save",
+      "file": "keeper_glove_save_01.mp3",
+      "path": "assets/audio/keeper_glove_save_01.mp3",
+      "status": "existing_event_shared_synthesis",
+      "priority": "P1",
+      "requiredForCoreSet": true,
+      "description_pl": "Tłumiony plask piłki o rękawicę bramkarza.",
+      "suggestedDurationSeconds": [
+        0.1,
+        0.4
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "keeper_glove_save_01.mp3",
+        "keeper_glove_save_02.mp3",
+        "keeper_glove_save_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": "save",
+      "currentSynthesis": "kick(min(16, event.speed || 4))",
+      "futureTriggerOrSelection": "event.surface === glove",
+      "recordingProvided": false
+    },
+    {
+      "id": "keeper_body_hit",
+      "file": "keeper_body_hit_01.mp3",
+      "path": "assets/audio/keeper_body_hit_01.mp3",
+      "status": "existing_event_shared_synthesis",
+      "priority": "P1",
+      "requiredForCoreSet": true,
+      "description_pl": "Głuchy odgłos odbicia piłki ciałem, ramieniem lub nogą bramkarza.",
+      "suggestedDurationSeconds": [
+        0.1,
+        0.35
+      ],
+      "loop": false,
+      "recommendedVariantCount": 2,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "keeper_body_hit_01.mp3",
+        "keeper_body_hit_02.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": "save",
+      "currentSynthesis": "kick(min(16, event.speed || 4))",
+      "futureTriggerOrSelection": "event.surface !== glove",
+      "recordingProvided": false
+    },
+    {
+      "id": "goal_net_ball",
+      "file": "goal_net_ball_01.mp3",
+      "path": "assets/audio/goal_net_ball_01.mp3",
+      "status": "existing_event_shared_synthesis",
+      "priority": "P1",
+      "requiredForCoreSet": true,
+      "description_pl": "Piłka wpada w luźną siatkę: kontakt i szelest sznurków.",
+      "suggestedDurationSeconds": [
+        0.3,
+        1.0
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "goal_net_ball_01.mp3",
+        "goal_net_ball_02.mp3",
+        "goal_net_ball_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": "net",
+      "currentSynthesis": "net()",
+      "futureTriggerOrSelection": "event.footId absent",
+      "recordingProvided": false
+    },
+    {
+      "id": "goal_net_boot",
+      "file": "goal_net_boot_01.mp3",
+      "path": "assets/audio/goal_net_boot_01.mp3",
+      "status": "existing_event_shared_synthesis",
+      "priority": "P1",
+      "requiredForCoreSet": true,
+      "description_pl": "But porusza i rozciąga sznurki siatki.",
+      "suggestedDurationSeconds": [
+        0.25,
+        0.9
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "goal_net_boot_01.mp3",
+        "goal_net_boot_02.mp3",
+        "goal_net_boot_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": "net",
+      "currentSynthesis": "net()",
+      "futureTriggerOrSelection": "event.footId present",
+      "recordingProvided": false
+    },
+    {
+      "id": "ball_bounce_grass",
+      "file": "ball_bounce_grass_01.mp3",
+      "path": "assets/audio/ball_bounce_grass_01.mp3",
+      "status": "proposed_new_trigger",
+      "priority": "P2",
+      "requiredForCoreSet": true,
+      "description_pl": "Odbicie piłki od murawy.",
+      "suggestedDurationSeconds": [
+        0.1,
+        0.4
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "ball_bounce_grass_01.mp3",
+        "ball_bounce_grass_02.mp3",
+        "ball_bounce_grass_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": null,
+      "currentSynthesis": null,
+      "futureTriggerOrSelection": "new one-shot from ground impact; preserve contact debounce",
+      "recordingProvided": false
+    },
+    {
+      "id": "ball_roll_grass",
+      "file": "ball_roll_grass_loop.mp3",
+      "path": "assets/audio/ball_roll_grass_loop.mp3",
+      "status": "proposed_new_trigger",
+      "priority": "P2",
+      "requiredForCoreSet": true,
+      "description_pl": "Ciche ciągłe toczenie piłki po murawie, słyszalne głównie blisko.",
+      "suggestedDurationSeconds": [
+        2,
+        6
+      ],
+      "loop": true,
+      "recommendedVariantCount": 1,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "ball_roll_grass_loop.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": null,
+      "currentSynthesis": null,
+      "futureTriggerOrSelection": "new speed-controlled loop while grounded and moving",
+      "recordingProvided": false
+    },
+    {
+      "id": "boot_step_grass",
+      "file": "boot_step_grass_01.mp3",
+      "path": "assets/audio/boot_step_grass_01.mp3",
+      "status": "proposed_new_trigger",
+      "priority": "P2",
+      "requiredForCoreSet": true,
+      "description_pl": "Krok korkiem po murawie; wspólna rodzina dla chodu, biegu i bramkarza.",
+      "suggestedDurationSeconds": [
+        0.1,
+        0.35
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "boot_step_grass_01.mp3",
+        "boot_step_grass_02.mp3",
+        "boot_step_grass_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": null,
+      "currentSynthesis": null,
+      "futureTriggerOrSelection": "new ground-aware cadence markers; not arbitrary controller movement",
+      "recordingProvided": false
+    },
+    {
+      "id": "boot_scuff_grass",
+      "file": "boot_scuff_grass_01.mp3",
+      "path": "assets/audio/boot_scuff_grass_01.mp3",
+      "status": "proposed_new_trigger",
+      "priority": "P2",
+      "requiredForCoreSet": true,
+      "description_pl": "Szurnięcie butem przy zatrzymaniu lub zmianie kierunku.",
+      "suggestedDurationSeconds": [
+        0.15,
+        0.6
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "boot_scuff_grass_01.mp3",
+        "boot_scuff_grass_02.mp3",
+        "boot_scuff_grass_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": null,
+      "currentSynthesis": null,
+      "futureTriggerOrSelection": "new grounded scuff marker; not every camera turn",
+      "recordingProvided": false
+    },
+    {
+      "id": "keeper_land_grass",
+      "file": "keeper_land_grass_01.mp3",
+      "path": "assets/audio/keeper_land_grass_01.mp3",
+      "status": "proposed_new_trigger",
+      "priority": "P2",
+      "requiredForCoreSet": true,
+      "description_pl": "Lądowanie ciała bramkarza po rzucie, ze szelestem stroju i trawy.",
+      "suggestedDurationSeconds": [
+        0.3,
+        0.9
+      ],
+      "loop": false,
+      "recommendedVariantCount": 3,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "keeper_land_grass_01.mp3",
+        "keeper_land_grass_02.mp3",
+        "keeper_land_grass_03.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "world_position",
+      "currentEvent": null,
+      "currentSynthesis": null,
+      "futureTriggerOrSelection": "new once-per-dive grounded landing marker",
+      "recordingProvided": false
+    },
+    {
+      "id": "calibration_confirm",
+      "file": "calibration_confirm_01.mp3",
+      "path": "assets/audio/calibration_confirm_01.mp3",
+      "status": "optional_new_trigger",
+      "priority": "P3",
+      "requiredForCoreSet": false,
+      "description_pl": "Krótkie potwierdzenie poprawnie przyjętego etapu kalibracji.",
+      "suggestedDurationSeconds": [
+        0.12,
+        0.35
+      ],
+      "loop": false,
+      "recommendedVariantCount": 1,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "calibration_confirm_01.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "listener_relative",
+      "currentEvent": null,
+      "currentSynthesis": null,
+      "futureTriggerOrSelection": "one cue per genuinely accepted calibration stage",
+      "recordingProvided": false
+    },
+    {
+      "id": "ui_click",
+      "file": "ui_click_01.mp3",
+      "path": "assets/audio/ui_click_01.mp3",
+      "status": "optional_new_trigger",
+      "priority": "P3",
+      "requiredForCoreSet": false,
+      "description_pl": "Dyskretne potwierdzenie wybrania przycisku menu.",
+      "suggestedDurationSeconds": [
+        0.03,
+        0.12
+      ],
+      "loop": false,
+      "recommendedVariantCount": 1,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "ui_click_01.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "listener_relative",
+      "currentEvent": null,
+      "currentSynthesis": null,
+      "futureTriggerOrSelection": "menu selection; not hover",
+      "recordingProvided": false
+    },
+    {
+      "id": "ball_spawn",
+      "file": "ball_spawn_01.mp3",
+      "path": "assets/audio/ball_spawn_01.mp3",
+      "status": "optional_new_trigger",
+      "priority": "P3",
+      "requiredForCoreSet": false,
+      "description_pl": "Krótkie potwierdzenie przywołania nowej piłki pod B.",
+      "suggestedDurationSeconds": [
+        0.08,
+        0.25
+      ],
+      "loop": false,
+      "recommendedVariantCount": 1,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "ball_spawn_01.mp3"
+      ],
+      "suggestedChannels": "mono",
+      "suggestedPlaybackLocation": "listener_relative",
+      "currentEvent": null,
+      "currentSynthesis": null,
+      "futureTriggerOrSelection": "one cue on accepted ball respawn action",
+      "recordingProvided": false
+    },
+    {
+      "id": "ambience_pitch_night",
+      "file": "ambience_pitch_night_loop.mp3",
+      "path": "assets/audio/ambience_pitch_night_loop.mp3",
+      "status": "optional_new_trigger",
+      "priority": "P3",
+      "requiredForCoreSet": false,
+      "description_pl": "Ciche tło otwartego nocnego boiska: wiatr i odległe otoczenie.",
+      "suggestedDurationSeconds": [
+        20,
+        60
+      ],
+      "loop": true,
+      "recommendedVariantCount": 1,
+      "minimumVariantCount": 1,
+      "recommendedVariantFiles": [
+        "ambience_pitch_night_loop.mp3"
+      ],
+      "suggestedChannels": "stereo",
+      "suggestedPlaybackLocation": "ambient_stereo",
+      "currentEvent": null,
+      "currentSynthesis": null,
+      "futureTriggerOrSelection": "ambient bed while game is active",
+      "recordingProvided": false
+    }
+  ]
+}
