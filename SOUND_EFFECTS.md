@@ -20,7 +20,7 @@ Every destination below is inside **`assets/audio/`**.
 | `net 3.mp3` | `goal_net_03.mp3` | Net contact, variant 3 |
 | `Goalkeeper being hit.mp3` | `keeper_hit_01.mp3` | Goalkeeper contact; currently shared by gloves and body |
 | `roll.mp3` | `ball_roll_grass_loop.mp3` | Continuous rolling while the ball moves on the ground |
-| `Whistle.mp3` | `whistle_start_01.mp3` | Once when a fresh free-play session becomes ready |
+| `Whistle.mp3` | `whistle_start_01.mp3` | Once when a fresh mode entry or new run becomes ready |
 
 ## Playback behavior
 
@@ -30,7 +30,7 @@ Every destination below is inside **`assets/audio/`**.
 - Physical sounds come from their world positions and follow the player's head direction and distance. The starting whistle stays centred and keeps its stereo recording.
 - Leading low-level padding is removed from decoded impact samples, preserving 4 ms before the detected onset. The MP3 files themselves are unchanged.
 - Rolling uses a crossfaded middle section of `roll.mp3`, avoiding its initial thump. Its level is 24.4 dB below the original mix, making it a faint close-range detail. One loop follows the ball, with volume and rate adjusted smoothly. Airborne motion, stopping, respawning with A in VR (B on the keyboard), menus, calibration and interrupted play stop it.
-- The whistle plays once per fresh entry into free play. In VR it waits for calibration and trigger release. Ball respawn, menu resume and manual recalibration do not repeat it.
+- The whistle plays once per fresh mode entry or new run. In VR it waits for calibration and trigger release. Ball respawn, menu resume, manual recalibration and automatically advancing a chance do not repeat it.
 - Recordings are fetched once during startup. They are decoded before play when offline audio decoding is available; the compatibility path decodes once when audio is unlocked. No fetch or decoding happens in contact handlers or the frame loop.
 - If an individual impact recording fails to load, a quiet synthesized impact fallback keeps the interaction audible. Missing audio never prevents the football simulation from starting.
 

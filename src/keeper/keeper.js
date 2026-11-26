@@ -3,6 +3,13 @@ import { FB, footballClamp } from "../config.js";
 import { FootballPhysics } from "../physics/ball.js";
 import { FootballGoalkeeperVisual } from "./visuals.js";
 
+const FREEROAM_KEEPER = Object.freeze({
+  reaction: .115, predictionInterval: .045,
+  trackingSpeed: 3.9, idleSpeed: 1.65, acceleration: 13,
+  diveLead: .45, diveTravel: 2.10, pushDuration: .075,
+  diveDuration: .64, landDuration: .25, recoveryDuration: 1.05
+});
+
 /* One keeper, one real body. Shot prediction only chooses the animation;
    the ball is saved exclusively by contact with its moving gloves and limbs. */
 class FootballGoalkeeper {
@@ -40,8 +47,30 @@ class FootballGoalkeeper {
     this._velocityA = new V(); this._velocityB = new V(); this._relative = new V();
     this._predictPrevious = new V();
     this._fixedDt = FB.fixedStep;
+    this.setDifficulty(null);
     this.reset();
   }
+
+  setDifficulty(level = null) {
+    this.difficultyLevel = level == null ? null : Math.max(0, Math.floor(Number.isFinite(level) ? level : 0));
+    if (this.difficultyLevel === null) this._tuning = FREEROAM_KEEPER;
+    else {
+      const t = 1 - Math.exp(-this.difficultyLevel / 5);
+      // Only decisions and visible movement improve. Collision geometry and
+      // rebound response stay the same; no difficulty level can force a save.
+      this._tuning = Object.freeze({
+        reaction: .38 - .305 * t, predictionInterval: .09 - .055 * t,
+        trackingSpeed: 2.05 + 2.5 * t, idleSpeed: 1.05 + .8 * t,
+        acceleration: 7 + 9 * t, diveLead: .31 + .18 * t,
+        diveTravel: 1.15 + 1.25 * t, pushDuration: .14 - .08 * t,
+        diveDuration: .80 - .24 * t, landDuration: .32 - .10 * t,
+        recoveryDuration: 1.35 - .53 * t
+      });
+    }
+    return this;
+  }
+
+  get tuning() { return this._tuning; }
 
   _newState() {
     return {position: new FT.Vector3(), yaw: 0, phase: 'ready', phaseProgress: 0,
@@ -133,7 +162,7 @@ class FootballGoalkeeper {
     this._diveStart.copy(this.position);
     // The body covers part of the distance; the remaining reach is the visible
     // bent arm. Both are bounded, so hard shots into the corner can beat him.
-    const lateral = footballClamp(Math.abs(dx) - .86, .32, 2.10);
+    const lateral = footballClamp(Math.abs(dx) - .86, .32, this._tuning.diveTravel);
     this._diveEnd.copy(this.position);
     this._diveEnd.x = footballClamp(this.position.x + s.side * lateral, -3.28, 3.28);
     this._diveEnd.z -= this.goalEnd * .12;
@@ -143,21 +172,22 @@ class FootballGoalkeeper {
   update(dt, ball) {
     if (!this.enabled || !(dt > 0) || !Number.isFinite(dt)) return;
     dt = Math.min(dt, .05); this._fixedDt = dt;
+    const tuning = this._tuning;
     this._copyState(this.previousState, this.state);
     this.time += dt; this.state.time = this.time;
     this._predictTimer -= dt;
-    if (this._predictTimer <= 0) {this._predict(ball); this._predictTimer = .045;}
+    if (this._predictTimer <= 0) {this._predict(ball); this._predictTimer = tuning.predictionInterval;}
     else this.threat.time = Math.max(0, this.threat.time - dt);
     this._threatAge = this.threat.valid ? this._threatAge + dt : 0;
     const s = this.state;
     if (s.phase === 'ready') {
-      const incoming = this.threat.valid && this._threatAge >= .115;
+      const incoming = this.threat.valid && this._threatAge >= tuning.reaction;
       const target = incoming ? this.threat.x : (ball ? ball.position.x * .13 : 0);
       const targetX = footballClamp(target, -2.68, 2.68);
       const delta = targetX - this.position.x;
-      const maximum = incoming ? 3.9 : 1.65;
+      const maximum = incoming ? tuning.trackingSpeed : tuning.idleSpeed;
       const desired = Math.sign(delta) * Math.min(maximum, Math.sqrt(Math.abs(delta) * 17));
-      this.velocity.x += footballClamp(desired - this.velocity.x, -13 * dt, 13 * dt);
+      this.velocity.x += footballClamp(desired - this.velocity.x, -tuning.acceleration * dt, tuning.acceleration * dt);
       this.position.x += this.velocity.x * dt;
       this.position.z += (this.homeZ - this.position.z) * Math.min(1, dt * 4);
       this.position.y = 0;
@@ -167,29 +197,29 @@ class FootballGoalkeeper {
       // Set first, then push off. A central ball is blocked by the ready body;
       // lateral and low balls prompt the actual sideways save animation.
       const dx = this.threat.x - this.position.x;
-      if (incoming && this.threat.time < .45 && this.threat.time > .055 &&
+      if (incoming && this.threat.time < tuning.diveLead && this.threat.time > .055 &&
           (Math.abs(dx) > .48 || this.threat.y < .55 || this.threat.y > 1.82)) this._beginSave();
     } else {
       this._phaseTime += dt;
       if (s.phase === 'push') {
-        s.phaseProgress = footballClamp(this._phaseTime / .075, 0, 1);
+        s.phaseProgress = footballClamp(this._phaseTime / tuning.pushDuration, 0, 1);
         s.lateralSpeed = 0;
-        if (this._phaseTime >= .075) this._phase('dive');
+        if (this._phaseTime >= tuning.pushDuration) this._phase('dive');
       } else if (s.phase === 'dive') {
-        const p = footballClamp(this._phaseTime / .64, 0, 1);
+        const p = footballClamp(this._phaseTime / tuning.diveDuration, 0, 1);
         s.phaseProgress = p;
         // A fast takeoff followed by drag at landing; no snapping to the ball.
         const travel = 1 - Math.pow(1 - p, 2.5);
         const previousX = this.position.x;
         this.position.lerpVectors(this._diveStart, this._diveEnd, travel);
         s.lateralSpeed = (this.position.x - previousX) / dt;
-        if (this._phaseTime >= .64) {this.position.copy(this._diveEnd); this._phase('land');}
+        if (this._phaseTime >= tuning.diveDuration) {this.position.copy(this._diveEnd); this._phase('land');}
       } else if (s.phase === 'land') {
-        s.phaseProgress = footballClamp(this._phaseTime / .25, 0, 1); s.lateralSpeed = 0;
-        if (this._phaseTime >= .25) this._phase('recover');
+        s.phaseProgress = footballClamp(this._phaseTime / tuning.landDuration, 0, 1); s.lateralSpeed = 0;
+        if (this._phaseTime >= tuning.landDuration) this._phase('recover');
       } else if (s.phase === 'recover') {
-        s.phaseProgress = footballClamp(this._phaseTime / 1.05, 0, 1); s.lateralSpeed = 0;
-        if (this._phaseTime >= 1.05) {this._phase('ready'); this._threatAge = 0;}
+        s.phaseProgress = footballClamp(this._phaseTime / tuning.recoveryDuration, 0, 1); s.lateralSpeed = 0;
+        if (this._phaseTime >= tuning.recoveryDuration) {this._phase('ready'); this._threatAge = 0;}
       }
     }
     this.visual.updatePose(s);

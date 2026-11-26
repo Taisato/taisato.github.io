@@ -8,6 +8,8 @@ import { FootballGoalkeeper } from "./keeper/keeper.js";
 import { FootballControls } from "./player/controls.js";
 import { FootballInterface } from "./ui/menu.js";
 import { FootballCalibrationPanel } from "./ui/calibration.js";
+import { FootballHUD } from "./ui/hud.js";
+import { FootballChallenge } from "./game/challenge.js";
 import { FootballAudio } from "./audio.js";
 
 class FootballApp {
@@ -24,23 +26,34 @@ class FootballApp {
     this.nets=new FootballGoalNets();this.netVisual=new FootballGoalNetVisual(this.field,this.nets);
     this.goalkeeper=new FootballGoalkeeper(this.field,-1);
     this.controls=new FootballControls(this.scene,this.rig,this.camera,this.field);
+    this.mode='freeroam';this.challenge=new FootballChallenge();this.pendingChance=null;
+    this.freeSnapshot={mode:'freeroam',phase:'ready',score:0,lives:3,touches:3,round:0,outcome:null};
+    this.modeInput={ball:this.physics.ball,previous:null,events:this.physics.events,keeper:this.goalkeeper};
+    this.observeChallengeMotion=(previous,current,radius,events)=>this.challenge.observeMotion(previous,current,radius,events);
     this.audio=new FootballAudio();this.interface=new FootballInterface(this.scene,{
-      resume:()=>this.setMenu(false),calibrate:()=>this.beginCalibration(),exit:()=>this.exit()
+      resume:()=>this.setMenu(false),calibrate:()=>this.beginCalibration(),exit:()=>this.exit(),
+      freeroam:()=>this.selectMode('freeroam'),challenge:()=>this.selectMode('challenge'),restart:()=>this.restart()
     });
     this.calibrationPanel=new FootballCalibrationPanel(this.camera);
+    this.hud=new FootballHUD(this.camera);
     this.active=false;this.menu=false;this.pending=false;this.pendingInitialPlacement=false;
     this.session=null;this.reference=null;this.paused=false;this.contextLost=false;this.disposed=false;
     this.lastTime=0;this.accumulator=0;this.calibrationRevision=0;this.calibrationCompletePending=false;
+    this.calibrationFromGameover=false;
     this.pendingStartWhistle=false;
     this.abort=new AbortController();this.spawnPoint=new FT.Vector3();this.origin=new FT.Vector3();
     this.ballBefore=new FT.Vector3();this.ballDraw=new FT.Vector3();this.orientationBefore=new FT.Quaternion();
     this.renderBall={position:this.ballDraw,orientation:new FT.Quaternion(),radius:FB.ballRadius};
     this.ui={launcher:document.querySelector('#launcher'),status:document.querySelector('#status'),enter:document.querySelector('#enter-vr'),
       desktop:document.querySelector('#desktop'),resume:document.querySelector('#resume'),exit:document.querySelector('#exit'),
-      hint:document.querySelector('#desktop-hint')};
+      hint:document.querySelector('#desktop-hint'),restart:document.querySelector('#restart'),
+      modes:document.querySelector('#mode-select'),freeroam:document.querySelector('#mode-freeroam'),challenge:document.querySelector('#mode-challenge'),
+      pauseLabel:document.querySelector('#pause-label'),pauseScore:document.querySelector('#pause-score')};
     const on=(el,event,fn)=>el?.addEventListener(event,fn,{signal:this.abort.signal});
     on(this.ui.enter,'click',()=>this.enterVR());on(this.ui.desktop,'click',()=>this.enterDesktop());
     on(this.ui.resume,'click',()=>this.setMenu(false));on(this.ui.exit,'click',()=>this.exit());
+    on(this.ui.restart,'click',()=>this.restart());
+    on(this.ui.freeroam,'click',()=>this.selectMode('freeroam'));on(this.ui.challenge,'click',()=>this.selectMode('challenge'));
     on(window,'resize',()=>this.resize());
     on(window,'pagehide',event=>{if(!event.persisted)this.dispose();});
     on(document,'visibilitychange',()=>{
@@ -48,7 +61,7 @@ class FootballApp {
     });
     on(this.renderer.domElement,'webglcontextlost',event=>{
       event.preventDefault();this.contextLost=true;this.controls.invalidate();this.audio.pause(true);
-      this.ui.status.textContent='Graphics interrupted. Reload to continue.';this.ui.launcher.hidden=false;
+      this.ui.status.textContent='Graphics interrupted. Reload.';this.ui.launcher.hidden=false;
     });
     on(this.renderer.domElement,'webglcontextrestored',()=>{
       this.contextLost=false;this.lastTime=0;this.accumulator=0;this.physics.clearContacts();this.nets.clearContacts();
@@ -77,19 +90,41 @@ class FootballApp {
     this.resize();this.syncPage();this.detectVR();this.renderer.setAnimationLoop(this.frame);
   }
   resize(){const w=window.innerWidth||1280,h=window.innerHeight||720;this.renderer.setSize(w,h);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();}
+  get snapshot(){return this.mode==='challenge'?this.challenge.snapshot:this.freeSnapshot;}
   syncPage() {
-    this.ui.resume.hidden=!this.active;this.ui.exit.hidden=!this.active;
+    const over=this.mode==='challenge'&&this.challenge.phase==='gameover';
+    this.ui.resume.hidden=!this.active||over;this.ui.exit.hidden=!this.active;
     this.ui.enter.hidden=this.active;this.ui.desktop.hidden=this.active;
+    this.ui.restart.hidden=!this.active||this.mode!=='challenge';
+    this.ui.restart.textContent=over?'Again':'Restart';
+    this.ui.pauseLabel.textContent=over?'RUN OVER':'PAUSED';
+    this.ui.pauseScore.textContent=this.mode==='challenge'?String(this.snapshot.score)+' GOALS':'';
+    this.ui.launcher.dataset.active=String(this.active);this.ui.launcher.dataset.mode=this.mode;
+    this.ui.launcher.dataset.input=this.active&&this.controls.desktop?'desktop':'vr';
+    this.ui.launcher.dataset.phase=this.snapshot.phase;
+    this.ui.freeroam.setAttribute('aria-pressed',String(this.mode==='freeroam'));
+    this.ui.challenge.setAttribute('aria-pressed',String(this.mode==='challenge'));
+    this.interface.setState(this.snapshot);
+  }
+  selectMode(mode) {
+    if(mode!=='freeroam'&&mode!=='challenge'||this.pending)return;
+    if(mode===this.mode){this.syncPage();return;}
+    this.mode=mode;
+    if(this.active)this.start();else this.syncPage();
+  }
+  restart() {
+    if(!this.active||this.pending)return;
+    this.start();
   }
   async detectVR() {
-    if(!window.isSecureContext||!navigator.xr){this.ui.enter.disabled=true;this.ui.status.textContent='VR: open an HTTPS page in your headset browser.';return;}
+    if(!window.isSecureContext||!navigator.xr){this.ui.enter.disabled=true;this.ui.status.textContent=window.isSecureContext?'VR unavailable.':'VR requires HTTPS.';return;}
     this.ui.enter.disabled=true;
     try{const supported=await navigator.xr.isSessionSupported('immersive-vr');
-      if(this.disposed)return;this.ui.enter.disabled=!supported;this.ui.status.textContent=supported?'':'VR headset unavailable. You can play on screen.';
-    }catch{this.ui.status.textContent='VR unavailable. You can play on screen.';}
+      if(this.disposed)return;this.ui.enter.disabled=!supported;this.ui.status.textContent=supported?'':'VR unavailable.';
+    }catch{this.ui.status.textContent='VR unavailable.';}
   }
   async enterVR() {
-    if(this.pending||this.session||!navigator.xr)return;this.pending=true;this.ui.enter.disabled=true;this.ui.status.textContent='Starting VR…';
+    if(this.pending||this.session||!navigator.xr)return;this.pending=true;this.ui.enter.disabled=true;this.ui.desktop.disabled=true;this.ui.status.textContent='Starting VR…';
     try{
       const sessionRequest=navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor']});
       // Both requests occur inside the entry gesture, before either is awaited.
@@ -104,10 +139,10 @@ class FootballApp {
     }catch(error){
       console.warn('VR session could not start',error);
       if(this.session)try{await this.session.end();}catch{this.onSessionEnd();}
-      this.ui.status.textContent='Could not enter VR. Open the page directly in your headset and allow VR.';
-    }finally{this.pending=false;this.ui.enter.disabled=false;}
+      this.ui.status.textContent='Could not start VR.';
+    }finally{this.pending=false;this.ui.enter.disabled=false;this.ui.desktop.disabled=false;}
   }
-  enterDesktop(){if(this.session)return;this.audio.start();this.controls.setDesktop(true);this.active=true;this.paused=false;this.lastTime=0;this.start();}
+  enterDesktop(){if(this.session||this.pending)return;this.audio.start();this.controls.setDesktop(true);this.active=true;this.paused=false;this.lastTime=0;this.start();}
   onXRVisibility=()=>{
     this.paused=this.session?.visibilityState!=='visible';this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();
     this.accumulator=0;this.lastTime=0;this.audio.pause(this.paused||this.menu);
@@ -117,6 +152,8 @@ class FootballApp {
     this.reference?.removeEventListener('reset',this.onReferenceReset);
     this.session?.removeEventListener('end',this.onSessionEnd);this.session?.removeEventListener('visibilitychange',this.onXRVisibility);
     this.session=null;this.reference=null;this.active=false;this.menu=false;this.paused=false;this.pendingInitialPlacement=false;this.pendingStartWhistle=false;
+    this.calibrationFromGameover=false;
+    this.pendingChance=null;this.challenge.stop();this.hud.hide();
     this.interface.show(false,this.controls);this.calibrationPanel.hide();this.controls.setDesktop(true);this.controls.invalidate();
     this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;this.audio.pause(true);
     this.ui.launcher.hidden=false;this.ui.hint.hidden=true;this.ui.status.textContent='';this.syncPage();this.resize();this.lastTime=0;
@@ -125,6 +162,8 @@ class FootballApp {
     this.pendingStartWhistle=false;
     if(this.session){this.session.end().catch(()=>{this.ui.status.textContent='Use the headset menu to leave VR.';});return;}
     document.exitPointerLock?.();this.active=false;this.menu=false;this.pendingInitialPlacement=false;
+    this.calibrationFromGameover=false;
+    this.pendingChance=null;this.challenge.stop();this.hud.hide();
     this.controls.keys.clear();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;
     this.interface.show(false,this.controls);this.calibrationPanel.hide();
     this.ui.launcher.hidden=false;this.ui.hint.hidden=true;this.audio.pause(true);this.syncPage();
@@ -132,14 +171,32 @@ class FootballApp {
   start() {
     // The first tracked pose and calibration must be available before centering a VR player.
     this.pendingInitialPlacement=!this.controls.desktop;this.calibrationCompletePending=false;
+    this.calibrationFromGameover=false;
     this.pendingStartWhistle=true;
+    this.pendingChance=this.mode==='challenge'?this.challenge.start():null;
+    if(this.mode==='freeroam')this.challenge.stop();
+    this.goalkeeper.setDifficulty(this.mode==='challenge'?0:null);
     this.goalkeeper.reset();
     this.nets.reset();
-    if(this.controls.desktop){this.controls.place(this.origin,0);this.spawnBall();}
+    if(this.controls.desktop){
+      if(this.pendingChance)this.placeChance(this.pendingChance);
+      else{this.controls.place(this.origin,0);this.spawnBall();}
+    }
     this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;this.lastTime=0;
     this.syncBallHistory();this.field.updateBall(this.physics.ball);this.setMenu(false);this.audio.pause(false);
   }
   syncBallHistory(){this.ballBefore.copy(this.physics.ball.position);this.orientationBefore.copy(this.physics.ball.orientation);}
+  placeChance(chance) {
+    if(!chance)return;
+    this.spawnPoint.set(chance.player.x,0,chance.player.z);this.controls.place(this.spawnPoint,chance.yaw);
+    this.spawnPoint.set(chance.ball.x,chance.ball.y,chance.ball.z);
+    this.audio.resetBall();this.physics.reset(this.spawnPoint);
+    this.goalkeeper.setDifficulty(chance.difficulty);this.goalkeeper.reset();this.nets.reset();
+    this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts(true);
+    this.pendingChance=null;this.accumulator=0;this.syncBallHistory();this.field.updateBall(this.physics.ball);
+    this.netVisual.render(1);
+    this.syncPage();
+  }
   spawnBall() {
     this.audio.resetBall();
     this.controls.refreshHead();this.spawnPoint.copy(this.controls.headWorld).addScaledVector(this.controls.forward,.72);
@@ -148,6 +205,7 @@ class FootballApp {
     this.physics.reset(this.spawnPoint);this.goalkeeper.clearContacts();this.nets.clearContacts(true);this.controls.invalidate();this.syncBallHistory();
   }
   setMenu(show) {
+    if(!show&&this.mode==='challenge'&&this.challenge.phase==='gameover'&&!this.calibrationFromGameover)show=true;
     this.menu=show;this.controls.keys.clear();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;
     this.interface.show(show&&!this.controls.desktop,this.controls);
     this.ui.launcher.hidden=!(show&&this.controls.desktop);this.ui.hint.hidden=!(this.active&&this.controls.desktop&&!show);
@@ -155,6 +213,7 @@ class FootballApp {
   }
   beginCalibration() {
     if(this.controls.desktop)return;
+    this.calibrationFromGameover=this.mode==='challenge'&&this.challenge.phase==='gameover';
     this.setMenu(false);this.controls.beginCalibration();this.calibrationCompletePending=true;
     this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;this.controls.invalidate();
   }
@@ -187,21 +246,30 @@ class FootballApp {
       const ready=this.controls.isCalibrated&&(this.controls.desktop||!cal.awaitRelease);
       if(tracked&&ready&&!this.menu){
         const needsBall=this.pendingInitialPlacement||this.calibrationCompletePending;
-        if(this.pendingInitialPlacement){this.controls.place(this.origin,0);this.pendingInitialPlacement=false;}
+        if(this.pendingInitialPlacement){
+          if(this.mode==='challenge')this.placeChance(this.pendingChance);
+          else this.controls.place(this.origin,0);
+          this.pendingInitialPlacement=false;
+        }
         if(this.calibrationCompletePending){
           this.calibrationCompletePending=false;this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;
           this.controls.pulse('left',.35);this.controls.pulse('right',.35);
+          if(this.calibrationFromGameover){this.calibrationFromGameover=false;this.setMenu(true);}
         }
-        if(needsBall)this.spawnBall();
+        if(needsBall&&this.mode==='freeroam')this.spawnBall();
       }
       if(this.controls.edges.menu)this.setMenu(!this.menu);
       if(this.controls.edges.calibrate)this.beginCalibration();
-      if(this.controls.edges.ball&&!this.menu&&this.controls.isCalibrated&&(this.controls.desktop||!this.controls.calibration.awaitRelease))this.spawnBall();
+      if(this.controls.edges.ball&&this.controls.isCalibrated&&(this.controls.desktop||!this.controls.calibration.awaitRelease)){
+        if(this.mode==='challenge'&&this.challenge.phase==='gameover')this.restart();
+        else if(this.mode==='freeroam'&&!this.menu)this.spawnBall();
+      }
       this.controls.clearEdges();
       const calibrating=!this.controls.isCalibrated||(!this.controls.desktop&&!!this.controls.calibration.awaitRelease);
       const blocked=this.menu||!tracked||calibrating||this.pendingInitialPlacement;
       audioActive=!blocked;
-      this.controls.move(dt,blocked);this.controls.prepareFeet(dt,blocked);
+      const roundResult=this.mode==='challenge'&&(this.challenge.phase==='result'||this.challenge.phase==='gameover');
+      this.controls.move(dt,blocked||roundResult);this.controls.prepareFeet(dt,blocked);
       if(this.menu)this.interface.point(this.controls);
       if(!blocked){
         const oldAccumulator=this.accumulator;this.accumulator+=dt;
@@ -210,8 +278,15 @@ class FootballApp {
           this.syncBallHistory();
           const sampleAlpha=dt>0?footballClamp(((step+1)*FB.fixedStep-oldAccumulator)/dt,0,1):1;
           this.goalkeeper.update(FB.fixedStep,this.physics.ball);
-          this.physics.step(FB.fixedStep,this.controls.physicsFeet(sampleAlpha),this.goalkeeper,this.nets);
+          this.physics.step(FB.fixedStep,this.controls.physicsFeet(sampleAlpha),this.goalkeeper,this.nets,
+            this.mode==='challenge'&&!roundResult?this.observeChallengeMotion:null);
           for(const event of this.physics.events)this.handleEvent(event);
+          if(this.mode==='challenge'){
+            this.modeInput.previous=this.ballBefore;
+            const result=this.challenge.update(FB.fixedStep,this.modeInput);
+            if(result){this.interface.setState(this.snapshot);this.syncPage();}
+            if(this.challenge.phase==='gameover'){this.setMenu(true);break;}
+          }
           this.accumulator-=FB.fixedStep;
         }
         if(count===8)this.accumulator=Math.min(this.accumulator,FB.fixedStep);
@@ -228,9 +303,14 @@ class FootballApp {
       this.goalkeeper.render(blocked?1:alpha);
       this.netVisual.render(blocked?1:alpha);
       this.calibrationPanel.update(this.controls,!this.menu);
+      if(this.mode==='challenge'&&this.challenge.phase==='result'&&this.challenge.resultAge>=1.6&&!blocked){
+        this.placeChance(this.challenge.next());
+      }
+      this.hud.update(this.snapshot,!blocked&&!this.menu,this.controls.desktop);
     }else{
       for(const hand of this.controls.hands){hand.visual.root.visible=false;hand.ray.visible=false;}
       this.calibrationPanel.hide();
+      this.hud.hide();
     }
     this.audio.update(this.physics.ball,this.controls,audioActive,dt);
     if(audioActive&&this.pendingStartWhistle&&this.audio.whistle())this.pendingStartWhistle=false;
@@ -239,7 +319,7 @@ class FootballApp {
   dispose(){
     if(this.disposed)return;this.disposed=true;this.pendingStartWhistle=false;this.renderer.setAnimationLoop(null);
     this.abort.abort();if(this.session)this.session.end().catch(()=>{});
-    this.controls.dispose();this.interface.dispose();this.calibrationPanel.dispose();this.audio.dispose();this.goalkeeper.dispose();this.netVisual.dispose();this.nets.dispose();this.field.dispose();this.renderer.dispose();
+    this.controls.dispose();this.interface.dispose();this.calibrationPanel.dispose();this.hud.dispose();this.audio.dispose();this.goalkeeper.dispose();this.netVisual.dispose();this.nets.dispose();this.field.dispose();this.renderer.dispose();
   }
 }
 

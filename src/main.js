@@ -17,7 +17,7 @@ async function bootstrap(){
     return footballApp;
   }catch(error){
     console.error('Football initialization failed',error);
-    status.textContent='Could not load the game. Check all game files, then reload.';
+    status.textContent='Could not load. Reload.';
     desktop.disabled=true;enter.disabled=true;
     return null;
   }

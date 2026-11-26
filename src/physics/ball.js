@@ -144,7 +144,7 @@ class FootballPhysics {
     return count;
   }
 
-  step(dt, feet = [], goalkeeper = null, nets = null) {
+  step(dt, feet = [], goalkeeper = null, nets = null, observeMotion = null) {
     this.events.length = 0;
     if (!(dt > 0) || !Number.isFinite(dt)) return;
     dt = Math.min(dt, .05);
@@ -170,6 +170,9 @@ class FootballPhysics {
       if (goalkeeper) goalkeeper.collide(this, alpha, h);
       if (nets) nets.substep(this, alpha, h);
       this.collideGround(h);
+      // Rules observe the resolved path, including crossings within a fixed
+      // step. The optional observer never changes the contact simulation.
+      if(observeMotion)observeMotion(this._previous,b.position,b.radius,this.events);
       b.velocity.clampLength(0, cfg.maxSpeed);
       b.spin.clampLength(0, cfg.maxSpin);
       const spinSpeed = b.spin.length();
