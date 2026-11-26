@@ -11,10 +11,11 @@ class FootballPhysics {
       maxSpeed: 38, maxSpin: 190, maxFootSurfaceSpeed: 44, maxInstepAngularSpeed: 8, restitution: .57, rollingResistance: .38,
       slowRollingResistance: .08,
       controlRollingResistance: .18,
+      puntRollingResistance: .6,
       groundFriction: .53, footRadius: .075, footHalfLength: .095,
       footRestitution: .6, footFriction: .4, contactSkin: .002,
       footSoftImpactSpeed: .25, footFirmImpactSpeed: 4.5,
-      footPowerCompressionSpeed: 24, footReceiveRestitution: .30,
+      footPowerCompressionSpeed: 24, footReceiveRestitution: .45,
       footControlRestitutionScale: .06, footControlFrictionScale: .10,
       footStrikeBlendStart: 4.4, footStrikeBlendEnd: 6.4,
       footLiftRestoration: .35,
@@ -299,6 +300,26 @@ class FootballPhysics {
     return t*t*(3-2*t);
   }
 
+  controlledPunt(f) {
+    const motion=f.foot.locomotionVelocity;
+    if(!motion||!Number.isFinite(motion.x+motion.y+motion.z))return 0;
+    const bodyDrive=this._normal.dot(motion);
+    if(bodyDrive<=.1)return 0;
+    // The collider keeps its true world-space surface velocity. Separate the
+    // controller's effort only when choosing impact compliance: walking into a
+    // short touch must not unlock the material response of a deliberate strike.
+    const localSpeed=Math.hypot(this._surface.x-motion.x,
+      this._surface.y-motion.y,this._surface.z-motion.z);
+    const deliberate=this.smoothContactBlend((localSpeed-this.config.footStrikeBlendStart)/
+      (this.config.footStrikeBlendEnd-this.config.footStrikeBlendStart));
+    const moving=this.smoothContactBlend((bodyDrive-.1)/.9);
+    // Fade through the low toe/shin follow-through, so its second contact does
+    // not suddenly regain firm-shot response. Rising lifts remain unrestricted.
+    const low=1-this.smoothContactBlend((this.ball.position.y-this.ball.radius-.03)/.42);
+    const rising=this.smoothContactBlend((this._surface.y-.15)/.50);
+    return low*moving*(1-deliberate)*(1-rising);
+  }
+
   liftRestoration() {
     // A rising boot under the ball, or a genuinely airborne descending ball,
     // needs some rebound for keep-ups. Sample before penetration correction:
@@ -365,6 +386,7 @@ class FootballPhysics {
     const penetration = radius - distance;
     const liftRestore=this.liftRestoration();
     const grounded=1-this.smoothContactBlend((b.position.y-b.radius-.004)/.03);
+    const controlPunt=this.controlledPunt(f);
     const newTouch=!state.contact&&(approach>.045||(penetration>.008&&f.velocity.lengthSq()>.003));
     if (newTouch) {
       const event = {
@@ -389,7 +411,9 @@ class FootballPhysics {
       const compression=Math.max(0,Math.min(1,(activeSpeed-cfg.footFirmImpactSpeed)/(cfg.footPowerCompressionSpeed-cfg.footFirmImpactSpeed)));
       const receiveBlend=Math.max(0,Math.min(1,(approach-.40)/(cfg.footFirmImpactSpeed-.40)));
       const firmness=this.contactFirmness(approach);
-      const activeCompliance=this.contactCompliance(surfaceSpeed,cfg.footControlRestitutionScale);
+      const activeFull=this.contactCompliance(surfaceSpeed,cfg.footControlRestitutionScale);
+      const activeCompliance=activeFull+(this.contactCompliance(surfaceSpeed,
+        cfg.footControlRestitutionScale,0)-activeFull)*controlPunt;
       const active=(activeCompliance+(1-activeCompliance)*liftRestore)*cfg.footRestitution*Math.min(firmness,this.contactFirmness(activeSpeed))*(1-compression*compression*(3-2*compression));
       // Incoming ball energy cannot unlock active shot power. A passive boot
       // absorbs more of a hard rebound while tiny receiving touches stay soft.
@@ -407,9 +431,12 @@ class FootballPhysics {
     // transfer as much rolling spin into an accidental hop.
     // Scale the single friction impulse; its linear and angular effects remain
     // coupled in surfaceFriction. Ground friction and free rolling are unchanged.
-    if(impulse>0||support>0)this.surfaceFriction(this._normal,this._surface,
-      Math.max(impulse,support)*cfg.footFriction*
-      this.contactCompliance(surfaceSpeed,cfg.footControlFrictionScale));
+    if(impulse>0||support>0){
+      const frictionFull=this.contactCompliance(surfaceSpeed,cfg.footControlFrictionScale);
+      const friction=frictionFull+(this.contactCompliance(surfaceSpeed,
+        cfg.footControlFrictionScale,0)-frictionFull)*controlPunt;
+      this.surfaceFriction(this._normal,this._surface,Math.max(impulse,support)*cfg.footFriction*friction);
+    }
     if(newTouch&&approach>.045&&impulse>0&&instep>0&&grounded>0&&f.contactPart==='boot')
       this.liftInstepLaunch(instep,grounded,approach,surfaceSpeed);
   }
@@ -452,12 +479,15 @@ class FootballPhysics {
       const fall=Math.max(0,Math.min(1,(6-planarSpeed)/2));
       const slowBand=rise*rise*(3-2*rise)*fall*fall*(3-2*fall);
       // Short controlled taps settle sooner, with no threshold at either end.
-      // The same loss acts on translation and rolling spin; airborne flight and
-      // ground speeds at or above 3 m/s retain their established response.
+      // The same loss acts on translation and rolling spin. A wider smooth
+      // band also settles ordinary punts without changing feather touches,
+      // airborne flight or the fast part of a driven ground shot.
       const controlBand=this.smoothContactBlend((planarSpeed-.10)/.40)*
         this.smoothContactBlend((3-planarSpeed)/1.5);
+      const puntBand=this.smoothContactBlend((planarSpeed-1.5)/1.5)*
+        (1-this.smoothContactBlend((planarSpeed-6)/3));
       const resistance=this.config.rollingResistance+this.config.slowRollingResistance*slowBand+
-        this.config.controlRollingResistance*controlBand;
+        this.config.controlRollingResistance*controlBand+this.config.puntRollingResistance*puntBand;
       const factor = Math.max(0, 1 - resistance * dt / planarSpeed);
       b.velocity.x *= factor; b.velocity.z *= factor;
       // Rolling resistance removes both translational and rolling energy.

@@ -47,10 +47,11 @@ class FootballControls {
         frameStartControllerOrientation:new FT.Quaternion(),frameTargetControllerOrientation:new FT.Quaternion(),
         frameStartOrientation:new FT.Quaternion(),frameTargetOrientation:new FT.Quaternion(),
         frameStartShinOrientation:new FT.Quaternion(),frameTargetShinOrientation:new FT.Quaternion(),
-        frameStartDrive:new FT.Vector3(),frameTargetDrive:new FT.Vector3(),
+        frameStartDrive:new FT.Vector3(),frameTargetDrive:new FT.Vector3(),frameLocalDrive:new FT.Vector3(),
+        frameStartLocomotion:new FT.Vector3(),frameTargetLocomotion:new FT.Vector3(),
         frameStart:new FT.Vector3(),frameTarget:new FT.Vector3(),sampleVelocity:new FT.Vector3(),
         foot:{id:name,position:new FT.Vector3(),previous:new FT.Vector3(),velocity:new FT.Vector3(),anklePosition:new FT.Vector3(),previousAnklePosition:new FT.Vector3(),ankleVelocity:new FT.Vector3(),orientation:new FT.Quaternion(),previousOrientation:new FT.Quaternion(),angularVelocity:new FT.Vector3(),contactShape:collider.shape||null,contactOffset:collider.offset,radius:collider.radius,halfLength:collider.halfLength,
-          drivePosition:new FT.Vector3(),previousDrivePosition:new FT.Vector3(),driveVelocity:new FT.Vector3(),controlOrientation:new FT.Quaternion(),previousControlOrientation:new FT.Quaternion(),controlAngularVelocity:new FT.Vector3(),
+          drivePosition:new FT.Vector3(),previousDrivePosition:new FT.Vector3(),driveVelocity:new FT.Vector3(),locomotionPosition:new FT.Vector3(),previousLocomotionPosition:new FT.Vector3(),locomotionVelocity:new FT.Vector3(),controlOrientation:new FT.Quaternion(),previousControlOrientation:new FT.Quaternion(),controlAngularVelocity:new FT.Vector3(),
           shinContactShape:visual.shinContactShape||visual.shin?.geometry?.userData?.footballShin?.contact||null,shinOrientation:new FT.Quaternion(),previousShinOrientation:new FT.Quaternion(),shinAngularVelocity:new FT.Vector3(),instep:false,instepAmount:0,enabled:false}}
     });
     this.feet=this.hands.map(hand=>hand.foot);this.angularDelta=new FT.Quaternion();
@@ -427,6 +428,14 @@ class FootballControls {
       this.temp.copy(profile.offset).applyQuaternion(hand.worldOrientation).add(hand.worldPosition);
       // Impact energy follows the real controller-driven ankle. A clearance
       // adjustment can move the visible pose, but must not invent a foot swing.
+      // Separate the rig's movement from the real calibrated controller swing.
+      // Keep a cumulative displacement so both components use exactly the same
+      // fixed-step interpolation, including frames with no physics step.
+      this.temp2.copy(profile.offset).applyQuaternion(hand.localOrientation).add(hand.localPosition);
+      this.poseVector.subVectors(this.temp2,hand.frameLocalDrive).applyQuaternion(this.rig.quaternion);
+      hand.frameLocalDrive.copy(this.temp2);
+      hand.frameStartLocomotion.copy(hand.frameTargetLocomotion);
+      hand.frameTargetLocomotion.add(this.temp).sub(hand.frameTargetDrive).sub(this.poseVector);
       hand.frameStartDrive.copy(hand.frameTargetDrive);hand.frameTargetDrive.copy(this.temp);
       // In the reference's held-up-foot demonstration, full instep extends the
       // toe along the shin, a quarter turn about the ankle. Follow the analog
@@ -479,6 +488,7 @@ class FootballControls {
     hand.frameStart.copy(hand.frameTarget);hand.sampleVelocity.set(0,0,0);
     hand.frameStartControllerPosition.copy(hand.frameTargetControllerPosition);hand.frameStartControllerOrientation.copy(hand.frameTargetControllerOrientation);
     hand.frameStartDrive.copy(hand.frameTargetDrive);foot.drivePosition.copy(hand.frameTargetDrive);foot.previousDrivePosition.copy(foot.drivePosition);foot.driveVelocity.set(0,0,0);
+    hand.frameStartLocomotion.set(0,0,0);hand.frameTargetLocomotion.set(0,0,0);foot.locomotionPosition.set(0,0,0);foot.previousLocomotionPosition.set(0,0,0);foot.locomotionVelocity.set(0,0,0);
     foot.controlOrientation.copy(hand.frameTargetControllerOrientation);foot.previousControlOrientation.copy(foot.controlOrientation);foot.controlAngularVelocity.set(0,0,0);
     hand.frameStartOrientation.copy(hand.frameTargetOrientation);foot.orientation.copy(hand.frameTargetOrientation);foot.previousOrientation.copy(foot.orientation);
     foot.anklePosition.copy(hand.frameTarget);foot.previousAnklePosition.copy(foot.anklePosition);foot.ankleVelocity.set(0,0,0);
@@ -499,6 +509,9 @@ class FootballControls {
       hand.foot.previousDrivePosition.copy(hand.foot.drivePosition);
       hand.foot.drivePosition.lerpVectors(hand.frameStartDrive,hand.frameTargetDrive,alpha1);
       hand.foot.driveVelocity.subVectors(hand.foot.drivePosition,hand.foot.previousDrivePosition).multiplyScalar(1/FB.fixedStep);
+      hand.foot.previousLocomotionPosition.copy(hand.foot.locomotionPosition);
+      hand.foot.locomotionPosition.lerpVectors(hand.frameStartLocomotion,hand.frameTargetLocomotion,alpha1);
+      hand.foot.locomotionVelocity.subVectors(hand.foot.locomotionPosition,hand.foot.previousLocomotionPosition).multiplyScalar(1/FB.fixedStep);
       hand.foot.previousControlOrientation.copy(hand.foot.controlOrientation);
       hand.foot.controlOrientation.slerpQuaternions(hand.frameStartControllerOrientation,hand.frameTargetControllerOrientation,alpha1);
       this.measureAngularVelocity(hand.foot.previousControlOrientation,hand.foot.controlOrientation,hand.foot.controlAngularVelocity);
