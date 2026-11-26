@@ -6,7 +6,7 @@ class FootballChallenge {
     this.active=false;this.phase='idle';this.score=0;this.lives=3;this.touches=3;
     this.round=0;this.outcome=null;this.resultAge=0;this.chance=null;
     this.time=0;this.lastTouchTime=0;this.settledAge=0;this.saveStoppedAge=0;
-    this.savePending=false;this._contacts=new Map();
+    this.savePending=false;this._lastPhysicalTouchTime=-Infinity;
     this._motion=null;this._motionObserved=false;
     this._snapshot={mode:'challenge',phase:'idle',score:0,lives:3,touches:3,round:0,outcome:null};
   }
@@ -31,7 +31,7 @@ class FootballChallenge {
 
   stop() {
     this.active=false;this.phase='idle';this.outcome=null;this.resultAge=0;
-    this._motion=null;this._motionObserved=false;this._contacts.clear();
+    this._motion=null;this._motionObserved=false;this._lastPhysicalTouchTime=-Infinity;
   }
 
   _random() {
@@ -40,12 +40,12 @@ class FootballChallenge {
 
   _newChance() {
     const progress=1-Math.exp(-Math.max(0,this.score)/6);
-    let depth=11+progress*5+this._random()*(4+progress*6);
+    let depth=11+progress*6+this._random()*(4+progress*6);
     let x=(this._random()*2-1)*(3+progress*10);
-    // Later chances mix longer approaches with genuinely tighter angles. All
-    // balls remain in front of the guarded goal and clear of his starting body.
-    if(progress>.15&&this._random()<progress*.62){
-      depth=8.5+this._random()*8;
+    // Both central and angled chances move back with score. At 15 goals their
+    // combined mean depth is about 20.7 m; the furthest limit approaches 27 m.
+    if(this._random()<progress*.62){
+      depth=11+progress*7+this._random()*(4+progress*2);
       x=(this._random()<.5?-1:1)*(4+progress*6+this._random()*(3+progress*5));
     }
     const z=-FB.halfLength+depth,previous=this.chance?.ball;
@@ -60,7 +60,7 @@ class FootballChallenge {
     };
     this.round++;this.touches=3;this.phase='ready';this.outcome=null;this.resultAge=0;
     this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
-    this._contacts.clear();this._motion=null;this._motionObserved=false;
+    this._lastPhysicalTouchTime=-Infinity;this._motion=null;this._motionObserved=false;
     return this.chance;
   }
 
@@ -90,16 +90,15 @@ class FootballChallenge {
   }
 
   _touch(event) {
-    const id=event.footId??'player',time=Number.isFinite(event.time)?event.time:this.time;
-    const p=event.position,last=this._contacts.get(id);
-    // The physics solver already reports contact edges. This small spatial guard
-    // merges numerical recontacts of one stroke, without swallowing quick
-    // opposite-foot touches or imposing a one-second delay on juggling.
-    if(last&&time>=last.time&&time-last.time<=.10&&p&&last.hasPosition&&
-      Math.hypot(p.x-last.x,p.y-last.y,p.z-last.z)<.22)return false;
-    this._contacts.set(id,{time,hasPosition:!!p,x:p?.x||0,y:p?.y||0,z:p?.z||0});
+    const time=Number.isFinite(event.time)?event.time:this.time;
+    const gap=time-this._lastPhysicalTouchTime;
+    // A fresh half-second gap between physical contacts is required globally,
+    // including opposite feet. Every contact slides the window forward, while
+    // the physical response and a recovery from the keeper remain unaffected.
+    this._lastPhysicalTouchTime=time;
     this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
     this.phase='live';
+    if(gap<.5-1e-9)return false;
     if(this.touches===0)return true;
     this.touches--;
     return false;

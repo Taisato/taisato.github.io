@@ -3,7 +3,6 @@ function shape(c,x,y,w,h,cut=14){c.beginPath();c.moveTo(x+cut,y);c.lineTo(x+w,y)
 function panel(c,w,h){
  c.clearRect(0,0,w,h);shape(c,2,2,w-4,h-4,24);c.fillStyle=UI.ink;c.fill();c.strokeStyle=UI.line;c.lineWidth=2;c.stroke();
  c.save();c.clip();const g=c.createRadialGradient(w*.88,0,0,w*.88,0,w*.8);g.addColorStop(0,'#283052');g.addColorStop(1,UI.ink);c.fillStyle=g;c.fillRect(0,0,w,h);
- c.strokeStyle='#263349';c.lineWidth=1;c.beginPath();c.arc(w*.95,-h*.10,w*.47,.2,2.8);c.stroke();c.beginPath();c.arc(w*.95,-h*.10,w*.51,.2,2.8);c.stroke();
  c.fillStyle='#7489a7';for(const [x,y]of[[.83,.12],[.94,.44],[.71,.08],[.91,.73]])c.fillRect(w*x,h*y,2,2);c.restore();
  c.fillStyle=UI.mint;c.fillRect(32,1,72,4);c.fillStyle=UI.lilac;c.fillRect(108,1,28,4);
 }

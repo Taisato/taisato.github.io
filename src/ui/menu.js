@@ -1,11 +1,12 @@
 import { FT } from "../../vendor/three.js";
 import {UI,panel,label,tracked,brand,heart,touch,pitch,button,shape} from './theme.js';
+import {createOpticalMaterial} from '../render/optics.js';
 class FootballInterface {
  constructor(scene,callbacks){
   this.callbacks=callbacks;this.hover=null;this.visible=false;this.snapshot={mode:'freeroam',phase:'ready',score:0};this.stateKey='';
   this.canvas=document.createElement('canvas');this.canvas.width=960;this.canvas.height=660;this.ctx=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);
   this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;this.width=1.32;this.height=.9075;
-  this.root=new FT.Mesh(new FT.PlaneGeometry(this.width,this.height),new FT.MeshBasicMaterial({map:this.texture,transparent:true,depthTest:false,depthWrite:false}));this.root.visible=false;this.root.frustumCulled=false;this.root.renderOrder=90;scene.add(this.root);
+  this.root=new FT.Mesh(new FT.PlaneGeometry(this.width,this.height),createOpticalMaterial(this.texture,{strength:.5}));this.root.visible=false;this.root.frustumCulled=false;this.root.renderOrder=90;scene.add(this.root);
   this.reticle=new FT.Mesh(new FT.SphereGeometry(.007,10,6),new FT.MeshBasicMaterial({color:UI.mint,depthTest:false,depthWrite:false}));this.reticle.renderOrder=100;this.reticle.visible=false;scene.add(this.reticle);
   this.buttons=[];this.localRay=new FT.Vector3();this.localDirection=new FT.Vector3();this.hitPoint=new FT.Vector3();this.inverseQ=new FT.Quaternion();this.drawMenu();
  }

@@ -1,10 +1,11 @@
 import { FT } from '../../vendor/three.js';
 import { footballClamp } from '../config.js';
 import {UI,panel,label,tracked,shape} from './theme.js';
+import {createOpticalMaterial} from '../render/optics.js';
 class FootballCalibrationPanel {
  constructor(camera){
   this.canvas=document.createElement('canvas');this.canvas.width=900;this.canvas.height=560;this.context=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;
-  this.mesh=new FT.Mesh(new FT.PlaneGeometry(1.12,.697),new FT.MeshBasicMaterial({map:this.texture,transparent:true,depthTest:false,depthWrite:false}));this.mesh.position.set(0,.06,-1.55);this.mesh.renderOrder=180;this.mesh.frustumCulled=false;this.mesh.visible=false;camera.add(this.mesh);this.key='';
+  this.mesh=new FT.Mesh(new FT.PlaneGeometry(1.12,.697),createOpticalMaterial(this.texture,{strength:.5}));this.mesh.position.set(0,.06,-1.55);this.mesh.renderOrder=180;this.mesh.frustumCulled=false;this.mesh.visible=false;camera.add(this.mesh);this.key='';
  }
  update(controls,active){
   const cal=controls.calibration,waiting=!!cal?.awaitRelease;this.mesh.visible=!!(active&&!controls.desktop&&(!controls.isCalibrated||waiting));if(!this.mesh.visible)return;

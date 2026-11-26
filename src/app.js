@@ -4,6 +4,7 @@ import { FootballField } from "./world/field.js";
 import { FootballPhysics } from "./physics/ball.js";
 import { FootballGoalNets } from "./physics/nets.js";
 import { FootballGoalNetVisual } from "./render/net.js";
+import { FootballOptics } from "./render/optics.js";
 import { FootballGoalkeeper } from "./keeper/keeper.js";
 import { FootballControls } from "./player/controls.js";
 import { FootballInterface } from "./ui/menu.js";
@@ -36,6 +37,8 @@ class FootballApp {
     });
     this.calibrationPanel=new FootballCalibrationPanel(this.camera);
     this.hud=new FootballHUD(this.camera);
+    this.optics=new FootballOptics(this.renderer,this.scene,this.camera);
+    this.opticsState={menu:false,active:false};
     this.active=false;this.menu=false;this.pending=false;this.pendingInitialPlacement=false;
     this.session=null;this.reference=null;this.paused=false;this.contextLost=false;this.disposed=false;
     this.lastTime=0;this.accumulator=0;this.calibrationRevision=0;this.calibrationCompletePending=false;
@@ -306,7 +309,8 @@ class FootballApp {
       if(this.mode==='challenge'&&this.challenge.phase==='result'&&this.challenge.resultAge>=1.6&&!blocked){
         this.placeChance(this.challenge.next());
       }
-      this.hud.update(this.snapshot,!blocked&&!this.menu,this.controls.desktop);
+      this.hud.update(this.snapshot,!blocked&&!this.menu,this.controls.desktop,
+        this.renderer.xr.isPresenting?this.renderer.xr.getCamera():this.camera);
     }else{
       for(const hand of this.controls.hands){hand.visual.root.visible=false;hand.ray.visible=false;}
       this.calibrationPanel.hide();
@@ -314,12 +318,13 @@ class FootballApp {
     }
     this.audio.update(this.physics.ball,this.controls,audioActive,dt);
     if(audioActive&&this.pendingStartWhistle&&this.audio.whistle())this.pendingStartWhistle=false;
-    this.renderer.render(this.scene,this.camera);
+    this.opticsState.menu=this.menu;this.opticsState.active=this.active;
+    this.optics.update(dt,this.opticsState);this.optics.render();
   };
   dispose(){
     if(this.disposed)return;this.disposed=true;this.pendingStartWhistle=false;this.renderer.setAnimationLoop(null);
     this.abort.abort();if(this.session)this.session.end().catch(()=>{});
-    this.controls.dispose();this.interface.dispose();this.calibrationPanel.dispose();this.hud.dispose();this.audio.dispose();this.goalkeeper.dispose();this.netVisual.dispose();this.nets.dispose();this.field.dispose();this.renderer.dispose();
+    this.controls.dispose();this.interface.dispose();this.calibrationPanel.dispose();this.hud.dispose();this.audio.dispose();this.goalkeeper.dispose();this.netVisual.dispose();this.nets.dispose();this.field.dispose();this.optics.dispose();this.renderer.dispose();
   }
 }
 
