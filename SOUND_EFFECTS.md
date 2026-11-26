@@ -25,17 +25,18 @@ Every destination below is inside **`assets/audio/`**.
 ## Playback behavior
 
 - Small, medium, strong and hard contacts use different recordings. The two strong-shot clips alternate. Sound selection uses the actual normal contact speed, independently of the ball's physics.
+- Very slow boot contacts fade smoothly toward silence. Contacts at 1.5 m/s and above retain their previous sound levels.
 - Light and hard frame hits use their own recordings. All three net recordings cycle without immediate repetition; touching the net with a boot is quieter.
 - Physical sounds come from their world positions and follow the player's head direction and distance. The starting whistle stays centred and keeps its stereo recording.
 - Leading low-level padding is removed from decoded impact samples, preserving 4 ms before the detected onset. The MP3 files themselves are unchanged.
-- Rolling uses a crossfaded middle section of `roll.mp3`, avoiding its initial thump. One loop follows the ball, with volume and rate adjusted smoothly. Airborne motion, stopping, respawning with B, menus, calibration and interrupted play stop it.
+- Rolling uses a crossfaded middle section of `roll.mp3`, avoiding its initial thump. Its level is now 24.4 dB below the previous mix, making it a faint close-range detail. One loop follows the ball, with volume and rate adjusted smoothly. Airborne motion, stopping, respawning with B, menus, calibration and interrupted play stop it.
 - The whistle plays once per fresh entry into free play. In VR it waits for calibration and trigger release. B, menu resume and manual recalibration do not repeat it.
 - Recordings are fetched once during startup. They are decoded before play when offline audio decoding is available; the compatibility path decodes once when audio is unlocked. No fetch or decoding happens in contact handlers or the frame loop.
 - If an individual impact recording fails to load, a quiet synthesized impact fallback keeps the interaction audible. Missing audio never prevents the football simulation from starting.
 
 ## Where files go
 
-Upload the entire ZIP contents beside `index.html`, preserving folders. The changed code is in `src/audio.js`, `src/app.js` and `src/main.js`; the audio manifest and all 13 MP3s are in `assets/audio/`. Replacing only the audio folder in the older V26 game does not connect the new playback code.
+Upload the entire ZIP contents beside `index.html`, preserving folders. Playback and mixing are in `src/audio.js`; game events and startup connect it through `src/app.js` and `src/main.js`. The audio manifest and all 13 MP3s are in `assets/audio/`. Replace the code and assets together.
 
 Keep the exact installed filenames, including case. To replace a recording, overwrite its MP3 at the same path and reload. The `gain` field in `assets/audio/manifest.json` controls that recording's relative level. To change its filename, update the matching `file` field while retaining its `id`. Loop settings describe the original rolling source; revisit them if you replace the roll recording.
 
