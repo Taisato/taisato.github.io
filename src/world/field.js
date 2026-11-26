@@ -1,6 +1,7 @@
 import { FT } from "../../vendor/three.js";
 import { FB } from "../config.js";
 import { FootballPlayerVisuals } from "../player/visuals.js";
+import { applyPitchPaint, PITCH_PAINT } from "../render/markings.js";
 
 /* Floodlit full-size training pitch, reconstructed from the supplied reference. Units: metres. */
 class FootballField {
@@ -67,11 +68,7 @@ class FootballField {
 
   _makePitch() {
     const grass=this._grassTexture();this.grassTexture=grass;
-    const material=this.material(new FT.MeshBasicMaterial({map:grass,color:0xffffff,vertexColors:true}));
-    // Solid paint keeps distant lines from breaking into translucent dashes.
-    // The renderer's multisample antialiasing resolves the actual geometry edge.
-    const lineMaterial=this.material(new FT.MeshBasicMaterial({color:0xeaefd7,
-      polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2,side:2}));
+    const material=this.material(applyPitchPaint(new FT.MeshBasicMaterial({map:grass,color:0xffffff,vertexColors:true})));
     const positions=[],colours=[],uvs=[];
     const surface=(x,z)=>{
       const outside=Math.max(0,Math.abs(x)-FB.halfWidth,Math.abs(z)-FB.halfLength);
@@ -99,71 +96,9 @@ class FootballField {
     geometry.setAttribute('color',new FT.BufferAttribute(new Float32Array(colours),3));geometry.setAttribute('uv',new FT.BufferAttribute(new Float32Array(uvs),2));
     this.turfMesh=this.addMesh(geometry,material);this.turfMesh.name='Floodlit mown turf';
 
-    // Each path is one joined ribbon. Neighbouring arc segments share exactly
-    // the same radial vertices, and square corners use a proper miter join.
-    // No alpha strip, independent butt caps, or overlapping translucent paint.
-    const vertices=[],indices=[],width=.115,half=width*.5,paintY=.009;
-    const pair=(ax,az,bx,bz)=>{const i=vertices.length/3;vertices.push(ax,paintY,az,bx,paintY,bz);return i;};
-    const join=(a,b)=>indices.push(a,b,b+1,a,b+1,a+1);
-    const path=(points,closed=false)=>{
-      const first=vertices.length/3,count=points.length;
-      for(let i=0;i<count;i++){
-        const p=points[i],previous=points[(i+count-1)%count],next=points[(i+1)%count];
-        let ax=p[0]-previous[0],az=p[1]-previous[1],bx=next[0]-p[0],bz=next[1]-p[1];
-        if(!closed&&i===0){ax=bx;az=bz;}
-        if(!closed&&i===count-1){bx=ax;bz=az;}
-        const al=Math.hypot(ax,az),bl=Math.hypot(bx,bz);ax/=al;az/=al;bx/=bl;bz/=bl;
-        const m=half/(1+ax*bx+az*bz),ox=-(az+bz)*m,oz=(ax+bx)*m;
-        pair(p[0]+ox,p[1]+oz,p[0]-ox,p[1]-oz);
-        if(i)join(first+(i-1)*2,first+i*2);
-      }
-      if(closed)join(first+(count-1)*2,first);
-    };
-    const arc=(x,z,radius,start=0,end=Math.PI*2)=>{
-      // At most 0.1 mm deviation from the true circle, including corner arcs.
-      const segments=Math.ceil((end-start)/(2*Math.acos(1-.0001/(radius+half))));
-      const first=vertices.length/3;
-      for(let i=0;i<=segments;i++){
-        // Reuse the exact angle at the closing seam, not sin(2*pi) rounding.
-        const a=i===segments&&end-start===Math.PI*2?start:start+(end-start)*i/segments;
-        const dx=Math.cos(a),dz=Math.sin(a);
-        pair(x+dx*(radius-half),z+dz*(radius-half),x+dx*(radius+half),z+dz*(radius+half));
-        if(i)join(first+(i-1)*2,first+i*2);
-      }
-    };
-    const spot=(x,z,radius)=>{
-      const first=vertices.length/3;vertices.push(x,paintY,z);
-      for(let i=0;i<64;i++){const a=i*Math.PI/32;vertices.push(x+Math.cos(a)*radius,paintY,z+Math.sin(a)*radius);}
-      for(let i=0;i<64;i++)indices.push(first,first+1+i,first+1+(i+1)%64);
-    };
-
-    path([[-FB.halfWidth,-FB.halfLength],[FB.halfWidth,-FB.halfLength],
-      [FB.halfWidth,FB.halfLength],[-FB.halfWidth,FB.halfLength]],true);
-    path([[-FB.halfWidth,0],[FB.halfWidth,0]]);
-    arc(0,0,9.15);
-    spot(0,0,.12);
-    for(const end of [-1,1]){
-      const goalZ=end*FB.halfLength;
-      for(const [depth,halfWidth]of[[16.5,FB.goalWidth*.5+16.5],[5.5,FB.goalWidth*.5+5.5]]){
-        const edge=goalZ-end*depth;
-        path([[-halfWidth,goalZ],[-halfWidth,edge],[halfWidth,edge],[halfWidth,goalZ]]);
-      }
-      const penaltyZ=goalZ-end*11,angle=Math.asin(5.5/9.15);
-      spot(0,penaltyZ,.105);
-      // Exact line/arc intersections prevent the old sampled-endpoint gaps.
-      arc(0,penaltyZ,9.15,end<0?angle:Math.PI+angle,end<0?Math.PI-angle:Math.PI*2-angle);
-      for(const side of [-1,1]){
-        const a=end<0?(side<0?0:Math.PI*.5):(side<0?Math.PI*1.5:Math.PI);
-        arc(side*FB.halfWidth,goalZ,1,a,a+Math.PI*.5);
-      }
-    }
-    const linesGeometry=this.geometry(new FT.BufferGeometry());
-    linesGeometry.setAttribute('position',new FT.BufferAttribute(new Float32Array(vertices),3));
-    linesGeometry.setIndex(indices);linesGeometry.computeVertexNormals();
-    this.markingsMesh=new FT.Mesh(linesGeometry,lineMaterial);
-    this.markingsMesh.name='Painted pitch markings';
-    this.root.add(this.markingsMesh);
-    this.pitchBounds = {width: FB.width, length: FB.length, lineWidth: width};
+    // The opaque turf shader owns the paint, including filtered distant coverage.
+    // No independent thin triangles or second depth surface can break up a line.
+    this.pitchBounds = {width: FB.width, length: FB.length, lineWidth: PITCH_PAINT.lineWidth};
   }
 
   _makeGoals() {

@@ -31,8 +31,8 @@ class FootballControls {
     this.hands=['left','right'].map((name,index)=>{
       const visual=field.makeFoot(name);scene.add(visual.root);visual.root.visible=false;
       const collider=this.colliderFor(visual);
-      const ray=new FT.Mesh(new FT.CylinderGeometry(.002,.002,1,5),new FT.MeshBasicMaterial({color:0xccf191,depthTest:false}));
-      ray.renderOrder=50;ray.visible=false;scene.add(ray);
+      const ray=new FT.Mesh(new FT.CylinderGeometry(.002,.002,1,5),new FT.MeshBasicMaterial({color:0xccf191,transparent:true,opacity:.9,depthTest:false,depthWrite:false,toneMapped:false}));
+      ray.renderOrder=200;ray.frustumCulled=false;ray.visible=false;scene.add(ray);
       return {name,index,visual,ray,source:null,tracked:false,ready:false,previousTracked:false,
         inputPresent:false,contactTracked:false,rayTracked:false,poseMode:'none',poseAge:Infinity,hasPose:false,hasRayGrip:false,
         lastPosePosition:new FT.Vector3(),lastPoseOrientation:new FT.Quaternion(),

@@ -55,7 +55,7 @@ class FootballGoalkeeper {
     this.difficultyLevel = level == null ? null : Math.max(0, Math.floor(Number.isFinite(level) ? level : 0));
     if (this.difficultyLevel === null) this._tuning = FREEROAM_KEEPER;
     else {
-      const t = 1 - Math.exp(-this.difficultyLevel / 5);
+      const t = 1 - Math.exp(-this.difficultyLevel / 6.5);
       // Only decisions and visible movement improve. Collision geometry and
       // rebound response stay the same; no difficulty level can force a save.
       this._tuning = Object.freeze({
