@@ -14,6 +14,8 @@ class FootballPhysics {
       footRestitution: .6, footFriction: .4, contactSkin: .002,
       footSoftImpactSpeed: .25, footFirmImpactSpeed: 4.5,
       footPowerCompressionSpeed: 24, footReceiveRestitution: .30,
+      footControlRestitutionScale: .06, footControlFrictionScale: .10,
+      footStrikeBlendStart: 4.4, footStrikeBlendEnd: 6.4,
       airSpinDecay: .13, magnus: .0032, sideCurveMultiplier: 1.12, maxCurveAcceleration: 7.5
     }, config);
     const V = FT.Vector3;
@@ -278,6 +280,16 @@ class FootballPhysics {
     return nudge+(firmness-nudge)*controlBlend*controlBlend*(3-2*controlBlend);
   }
 
+  contactCompliance(speed, minimum, strikeSpeed=speed) {
+    // Keep tiny touches unchanged, absorb the excess bounce of a moving
+    // receiving foot, then restore the established deliberate-strike response.
+    // This changes a contact impulse only; a separated ball remains entirely free.
+    const control=Math.max(0,Math.min(1,speed-1));
+    const strike=Math.max(0,Math.min(1,(strikeSpeed-this.config.footStrikeBlendStart)/
+      (this.config.footStrikeBlendEnd-this.config.footStrikeBlendStart)));
+    return 1-(1-minimum)*control*control*(3-2*control)*(1-strike*strike*(3-2*strike));
+  }
+
   collideFoot(f, alpha, dt) {
     const b = this.ball, foot = f.foot, state = f.state, cfg = this.config;
     const instep=Number.isFinite(foot.instepAmount)?Math.max(0,Math.min(1,foot.instepAmount)):Number(!!foot.instep);
@@ -320,6 +332,10 @@ class FootballPhysics {
     // A resting boot may support or trap a ball without repeated bounce impulses.
     if (penetration > 0) b.position.addScaledVector(this._normal, penetration + .0001);
     let impulse=0;
+    // Use the complete physical surface velocity, including the player's
+    // motion once. A fast grazing swing must keep its tangential grip and curve
+    // even when only a small part of that speed points into the ball.
+    const surfaceSpeed=this._surface.length();
     if (approach > 0) {
       // Contact velocity already includes running once. High-energy impacts
       // compress the boot/ball instead of reaching a low artificial speed cap.
@@ -327,10 +343,11 @@ class FootballPhysics {
       const compression=Math.max(0,Math.min(1,(activeSpeed-cfg.footFirmImpactSpeed)/(cfg.footPowerCompressionSpeed-cfg.footFirmImpactSpeed)));
       const receiveBlend=Math.max(0,Math.min(1,(approach-.40)/(cfg.footFirmImpactSpeed-.40)));
       const firmness=this.contactFirmness(approach);
-      const active=cfg.footRestitution*Math.min(firmness,this.contactFirmness(activeSpeed))*(1-compression*compression*(3-2*compression));
+      const active=this.contactCompliance(surfaceSpeed,cfg.footControlRestitutionScale)*cfg.footRestitution*Math.min(firmness,this.contactFirmness(activeSpeed))*(1-compression*compression*(3-2*compression));
       // Incoming ball energy cannot unlock active shot power. A passive boot
       // absorbs more of a hard rebound while tiny receiving touches stay soft.
-      const receiving=(cfg.footRestitution+(cfg.footReceiveRestitution-cfg.footRestitution)*receiveBlend*receiveBlend*(3-2*receiveBlend))*firmness;
+      const incomingSpeed=Math.max(0,approach-activeSpeed);
+      const receiving=this.contactCompliance(incomingSpeed,cfg.footControlRestitutionScale,Math.max(surfaceSpeed,incomingSpeed))*(cfg.footRestitution+(cfg.footReceiveRestitution-cfg.footRestitution)*receiveBlend*receiveBlend*(3-2*receiveBlend))*firmness;
       const restitution=share>=1?active:receiving+(active-receiving)*share;
       impulse = (1 + restitution) * approach;
       b.velocity.addScaledVector(this._normal, impulse);
@@ -338,8 +355,13 @@ class FootballPhysics {
     // Gravity supplies a normal load while a ball is supported on a sole/toe.
     // This permits physical balancing and rolling without snapping to the boot.
     const support=Math.max(0,this._normal.y)*cfg.gravity*dt;
+    // Allow tangential slip on controlled touches so a reversing boot does not
+    // transfer as much rolling spin into an accidental hop.
+    // Scale the single friction impulse; its linear and angular effects remain
+    // coupled in surfaceFriction. Ground friction and free rolling are unchanged.
     if(impulse>0||support>0)this.surfaceFriction(this._normal,this._surface,
-      Math.max(impulse,support)*cfg.footFriction);
+      Math.max(impulse,support)*cfg.footFriction*
+      this.contactCompliance(surfaceSpeed,cfg.footControlFrictionScale));
   }
 
   surfaceFriction(normal, surfaceVelocity, limit) {

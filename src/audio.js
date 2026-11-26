@@ -176,7 +176,9 @@ class FootballAudio {
   kick(value=5,position){
     if(!this.available())return false;const speed=this.speed(value);if(speed<.05)return false;
     const id=speed<1.5?'ball_touch_soft_01':speed<5?'ball_kick_medium_01':speed<14?('ball_kick_strong_0'+(1+(this.strongVariant++%2))):'ball_kick_hard_01';
-    const level=footballClamp(.16+.035*speed,.16,1.1);
+    // Feather contacts rise smoothly from silence; firm strikes keep their level.
+    const soft=footballClamp(speed/1.5,0,1);
+    const level=footballClamp(.16+.035*speed,.16,1.1)*(soft*soft*(3-2*soft));
     return this.play(id,level,position,this.variation())||!!this.voice(this.fallbackKick,level*.7,position);
   }
   frame(value,position){
@@ -216,7 +218,8 @@ class FootballAudio {
     if(!this.rolling)this.rolling=this.voice(entry.buffer,0,ball.position,1,true);
     const voice=this.rolling;if(!voice)return;
     this.position(voice.panner,ball.position);
-    const level=(.025+.155*Math.sqrt(Math.min(speed,12)/12))*footballClamp(entry.definition.gain??1,0,4);
+    // Rolling is close-range texture, approximately 24 dB below the previous mix.
+    const level=(.025+.155*Math.sqrt(Math.min(speed,12)/12))*.06*footballClamp(entry.definition.gain??1,0,4);
     const rate=.8+.35*Math.min(speed/8,1),now=this.context.currentTime;
     voice.gain.gain.setTargetAtTime(level,now,.035);voice.source.playbackRate.setTargetAtTime(rate,now,.06);
   }

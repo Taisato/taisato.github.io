@@ -103,7 +103,6 @@ class FootballGoalNets {
       const depth=p.z*net.sign-FB.halfLength;
       if(net.ballInside===null){net.ballInside=depth>=0&&depth<=FB.goalDepth+net.maxDisplacement&&Math.abs(p.x)<net.half&&p.y<net.top;net.exteriorMask=(depth>FB.goalDepth?1:0)|(p.x<-net.half?2:0)|(p.x>net.half?4:0)|(p.y>net.top?8:0);}
       if(depth<-.18)net.ballInside=false;
-      if(!net.ballInside&&depth>=0&&depth<.35&&Math.abs(p.x)<net.half-b.radius*.35&&p.y<net.top-b.radius*.35)net.ballInside=true;
       if(net.ballInside)net.exteriorMask=0;
       let near=(this._freshContact||b.velocity.lengthSq()>.0064)&&this._nearSurface(net,p.x,p.y,p.z,travel+b.radius);
       for(let f=0;f<footCount&&!near;f++){const foot=footData[f],a=foot.previousAnkle,c=foot.targetAnkle;let known=false;for(const state of net.bootStates)if(state.id===foot.id){known=true;break;}if(this._freshContact||foot.distance>.00005||!known)near=this._nearSurface(net,c.x,c.y,c.z,.42+foot.distance)||this._nearSurface(net,a.x,a.y,a.z,.42);}
@@ -207,6 +206,16 @@ class FootballGoalNets {
     }
     let invMass=0;for(let k=0;k<count;k++){weights[k]/=sum;invMass+=weights[k]*weights[k]*net.inverseMass[ids[k]];}this._patchCount=count;return invMass;
   }
+  _updateMouthSide(net,physics) {
+    // Topological side changes at the open mouth must follow each ball CCD
+    // segment, not wait for the next cloth tick. Otherwise an exterior side
+    // remembered on approach projects a legal entry onto a distant side net.
+    const bp=physics.ball.position,last=physics._previous,from=last.z*net.sign-FB.halfLength,to=bp.z*net.sign-FB.halfLength;
+    if(!net.ballInside&&from<0&&to>=0){
+      const t=-from/(to-from),x=last.x+(bp.x-last.x)*t,y=last.y+(bp.y-last.y)*t;
+      if(Math.abs(x)<net.half&&y>=-physics.ball.radius&&y<net.top){net.ballInside=true;net.exteriorMask=0;}
+    }else if(net.ballInside&&from>=0&&to<0){net.ballInside=false;net.exteriorMask=0;}
+  }
   _ball(net,physics,h) {
     const ball=physics.ball,bp=ball.position,p=net.positions,idx=net.indices,w=net.inverseMass,vel=net.velocity,r=ball.radius+.003,ballW=1/ball.mass;
     if(!this._near(net,bp.x,bp.y,bp.z,r+.15)&&!(net.ballInside&&bp.z*net.sign>=FB.halfLength&&Math.abs(bp.x)<net.half+.35&&bp.y<net.top+.35))return;
@@ -217,11 +226,15 @@ class FootballGoalNets {
         const ia=idx[t],ib=idx[t+1],ic=idx[t+2];
         if(!this._triangleNear(p,ia,ib,ic,bp.x,bp.y,bp.z,r+.04,retainSide?panel.axis:-1))continue;
         if(!this._closestTriangle(bp.x,bp.y,bp.z,p,ia,ib,ic))continue;
+        const nearestDistanceSq=(bp.x-this._closest[0])**2+(bp.y-this._closest[1])**2+(bp.z-this._closest[2])**2;
         const projected=retainSide&&this._projectedTriangle(bp.x,bp.y,bp.z,p,ia,ib,ic,panel.axis);
         const bary=this._bary,q=this._closest,n=this._normal,wa=bary[0],wb=bary[1],wc=bary[2],dx=bp.x-q[0],dy=bp.y-q[1],dz=bp.z-q[2];
         const orientation=(net.ballInside?1:-1)*panel.inward;
         if(n.getComponent(panel.axis)*orientation<0)n.negate();
         const signed=dx*n.x+dy*n.y+dz*n.z,distance=Math.sqrt(dx*dx+dy*dy+dz*dz);
+        // Retention catches crossings, but an approaching sphere must touch
+        // the finite triangle, not only its extended sloping plane.
+        if(projected&&signed>=0&&nearestDistanceSq>=r*r)continue;
         // A diagonal or welded cell edge is still a continuous sheet. Retain
         // its sided contact when a fast sphere crosses the exact shared edge.
         const tangentSq=Math.max(0,distance*distance-signed*signed);
@@ -316,6 +329,8 @@ class FootballGoalNets {
   }
   substep(physics,alpha,h) {
     if(this._disposed)return;
+    // A clear central entry can happen while both cloth meshes are asleep.
+    for(const net of this.goals)this._updateMouthSide(net,physics);
     // Sample the tracked translation and angular sweep at their own rate.
     // A stationary shoe takes one contact pass at 120 Hz even when a distant
     // fast ball requires many CCD substeps.
