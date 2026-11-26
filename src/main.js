@@ -7,10 +7,10 @@ async function bootstrap(){
   desktop.disabled=true;enter.disabled=true;
   status.textContent='Loading…';
   try{
-    const [{FootballApp},{FootballKeeperMeshes}]=await Promise.all([
-      import('./app.js'),import('./keeper/meshes.js')
+    const [{FootballApp},{FootballKeeperMeshes},{FootballAudio}]=await Promise.all([
+      import('./app.js'),import('./keeper/meshes.js'),import('./audio.js')
     ]);
-    await FootballKeeperMeshes.load();
+    await Promise.all([FootballKeeperMeshes.load(),FootballAudio.load()]);
     status.textContent='';
     footballApp=new FootballApp();
     desktop.disabled=false;

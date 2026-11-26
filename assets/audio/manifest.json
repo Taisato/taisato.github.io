@@ -1,0 +1,101 @@
+{
+  "format": "first-touch-audio-v1",
+  "assets": [
+    {
+      "id": "keeper_hit_01",
+      "file": "keeper_hit_01.mp3",
+      "gain": 1.0,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "whistle_start_01",
+      "file": "whistle_start_01.mp3",
+      "gain": 0.7,
+      "channels": "stereo",
+      "trimOnset": true
+    },
+    {
+      "id": "ball_kick_hard_01",
+      "file": "ball_kick_hard_01.mp3",
+      "gain": 1.08,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "ball_touch_soft_01",
+      "file": "ball_touch_soft_01.mp3",
+      "gain": 0.55,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "ball_kick_medium_01",
+      "file": "ball_kick_medium_01.mp3",
+      "gain": 0.8,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "goal_net_02",
+      "file": "goal_net_02.mp3",
+      "gain": 0.8,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "goal_net_03",
+      "file": "goal_net_03.mp3",
+      "gain": 0.85,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "goal_net_01",
+      "file": "goal_net_01.mp3",
+      "gain": 1.5,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "ball_roll_grass_loop",
+      "file": "ball_roll_grass_loop.mp3",
+      "gain": 1.0,
+      "channels": "mono",
+      "loop": {
+        "start": 0.18,
+        "end": 0.69,
+        "crossfade": 0.04,
+        "referenceOnset": 0.056
+      }
+    },
+    {
+      "id": "goal_frame_soft_01",
+      "file": "goal_frame_soft_01.mp3",
+      "gain": 0.9,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "ball_kick_strong_02",
+      "file": "ball_kick_strong_02.mp3",
+      "gain": 1.04,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "ball_kick_strong_01",
+      "file": "ball_kick_strong_01.mp3",
+      "gain": 1.0,
+      "channels": "mono",
+      "trimOnset": true
+    },
+    {
+      "id": "goal_frame_hard_01",
+      "file": "goal_frame_hard_01.mp3",
+      "gain": 1.0,
+      "channels": "mono",
+      "trimOnset": true
+    }
+  ]
+}

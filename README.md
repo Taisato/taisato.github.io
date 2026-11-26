@@ -1,46 +1,48 @@
-# First Touch — pliki gry
+# First Touch — VR football
 
-Plik wejściowy zachowuje nazwę **`index.html`**. Kod, style i model bramkarza znajdują się teraz w osobnych plikach. Projekt działa bez instalowania paczek i bez etapu budowania.
+The entry file is **`index.html`**. JavaScript, styles, keeper geometry and the 13 supplied sound recordings are separate files. No package install or build step is required.
 
-## Uruchomienie
+## Run / upload
 
-Rozpakuj cały ZIP. Prześlij **całą jego zawartość** na hosting, zachowując układ folderów. Otwórz `index.html` przez adres strony. Do gry w goglach użyj hostingu HTTPS.
+1. Extract the entire ZIP.
+2. Upload its contents to your game hosting folder, preserving `src/`, `styles/`, `vendor/` and `assets/` beside `index.html`. Replace the previous game files together.
+3. Open the hosted page. Use HTTPS for the headset version.
+4. Click **Enter VR** or **Play on screen** to unlock sound and begin. In VR, finish calibration before the starting whistle.
 
-Do lokalnego podglądu na komputerze uruchom w rozpakowanym folderze:
+All 13 MP3 files are already included. No additional audio files are required to run this version.
+
+For a local desktop preview, run this command from the extracted folder:
 
 ```sh
 python3 -m http.server 8000
 ```
 
-Następnie otwórz `http://localhost:8000/`. Uruchamiaj grę przez serwer; otwarcie HTML bezpośrednio jako `file://` nie wczyta poprawnie modułów i modelu.
+Open `http://localhost:8000/`. Use a server instead of opening the HTML as a `file://` URL so modules and assets can load.
 
-## Co jest gdzie
+## Layout
 
-| Ścieżka | Zawartość |
+| Path | Contents |
 | --- | --- |
-| `index.html` | Ekran startowy i wejście do gry. |
-| `styles/main.css` | Wygląd interfejsu strony. |
-| `src/main.js` | Wczytanie zasobów i uruchomienie. |
-| `src/app.js` | Główna pętla, sesja VR i obsługa zdarzeń. |
-| `src/config.js` | Wymiary boiska i podstawowe stałe. |
-| `src/player/` | Sterowanie, kalibracja, buty i nogi gracza. |
-| `src/physics/` | Fizyka piłki oraz siatki. |
-| `src/keeper/` | Zachowanie, animacje i wczytywanie modelu bramkarza. |
-| `src/world/` | Boisko, bramki i oświetlenie. |
-| `src/render/` | Rysowanie odkształcanej siatki. |
-| `src/ui/` | Menu VR i panel kalibracji. |
-| `src/audio.js` | Obecne syntezowane efekty dźwiękowe. |
-| `assets/models/keeper/` | Dane modelu bramkarza: dwa pliki binarne i opis JSON. |
-| `assets/audio/` | Miejsce na przyszłe pliki MP3 oraz ich plan. |
-| `vendor/three.js` | Lokalna biblioteka graficzna. |
-| `SOUND_EFFECTS.md` | Lista dźwięków do przygotowania. |
+| `index.html` | Launcher and entry module |
+| `styles/main.css` | Page styling |
+| `src/main.js` | Asset loading and startup |
+| `src/app.js` | Main loop, VR session and event routing |
+| `src/config.js` | Pitch dimensions and constants |
+| `src/player/` | Controls, calibration, boots and player legs |
+| `src/physics/` | Ball and net physics |
+| `src/keeper/` | Keeper behavior, animation and mesh loading |
+| `src/world/` | Pitch, goals and lighting |
+| `src/render/` | Deformed net rendering |
+| `src/ui/` | VR menu and calibration panel |
+| `src/audio.js` | Sample playback, spatial audio and rolling loop |
+| `assets/models/keeper/` | Packed keeper geometry |
+| `assets/audio/` | All MP3 recordings and active `manifest.json` |
+| `vendor/three.js` | Included graphics library |
 
-Biblioteka graficzna i model są dołączone do paczki. Gra nie pobiera ich z CDN. Model wczytuje się przed odblokowaniem przycisków rozpoczęcia gry.
+## Sound files
 
-## MP3
+See **[SOUND_EFFECTS.md](SOUND_EFFECTS.md)** for the original-to-installed filename map, playback behavior and useful next recordings. Exact filenames matter. Audio loads from the local game folder; no CDN is required.
 
-Pełna lista nazw i zastosowań znajduje się w **[SOUND_EFFECTS.md](SOUND_EFFECTS.md)**. Docelowe miejsce na nagrania to `assets/audio/`.
+If sounds are missing after an upload, check that `assets/audio/manifest.json` and every MP3 from the ZIP reached the same hosting directory as the new code. Reload the page after replacing cached files and enter play with a click.
 
-`assets/audio/sound-plan.json` jest specyfikacją do późniejszego podłączenia nagrań. Gra nadal korzysta z obecnych dźwięków syntezowanych i nie próbuje pobierać brakujących MP3. Samo umieszczenie nagrań w folderze nie zmienia jeszcze odtwarzania; integracja nastąpi po dobraniu plików.
-
-Licencja dołączonej biblioteki: [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
+Third-party library license: [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).

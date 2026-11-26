@@ -31,6 +31,7 @@ class FootballApp {
     this.active=false;this.menu=false;this.pending=false;this.pendingInitialPlacement=false;
     this.session=null;this.reference=null;this.paused=false;this.contextLost=false;this.disposed=false;
     this.lastTime=0;this.accumulator=0;this.calibrationRevision=0;this.calibrationCompletePending=false;
+    this.pendingStartWhistle=false;
     this.abort=new AbortController();this.spawnPoint=new FT.Vector3();this.origin=new FT.Vector3();
     this.ballBefore=new FT.Vector3();this.ballDraw=new FT.Vector3();this.orientationBefore=new FT.Quaternion();
     this.renderBall={position:this.ballDraw,orientation:new FT.Quaternion(),radius:FB.ballRadius};
@@ -90,20 +91,23 @@ class FootballApp {
   async enterVR() {
     if(this.pending||this.session||!navigator.xr)return;this.pending=true;this.ui.enter.disabled=true;this.ui.status.textContent='Starting VR…';
     try{
-      const session=await navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor']});
+      const sessionRequest=navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor']});
+      // Both requests occur inside the entry gesture, before either is awaited.
+      this.audio.start();
+      const session=await sessionRequest;
       if(this.disposed){await session.end();return;}
       this.session=session;session.addEventListener('end',this.onSessionEnd);session.addEventListener('visibilitychange',this.onXRVisibility);
       await this.renderer.xr.setSession(session);
       this.reference=this.renderer.xr.getReferenceSpace();this.reference?.addEventListener('reset',this.onReferenceReset);
       this.controls.setDesktop(false);this.active=true;this.paused=false;this.lastTime=0;
-      this.start();this.onXRVisibility();this.audio.start();this.ui.status.textContent='';
+      this.start();this.onXRVisibility();this.ui.status.textContent='';
     }catch(error){
       console.warn('VR session could not start',error);
       if(this.session)try{await this.session.end();}catch{this.onSessionEnd();}
       this.ui.status.textContent='Could not enter VR. Open the page directly in your headset and allow VR.';
     }finally{this.pending=false;this.ui.enter.disabled=false;}
   }
-  enterDesktop(){if(this.session)return;this.controls.setDesktop(true);this.active=true;this.paused=false;this.lastTime=0;this.start();this.audio.start();}
+  enterDesktop(){if(this.session)return;this.audio.start();this.controls.setDesktop(true);this.active=true;this.paused=false;this.lastTime=0;this.start();}
   onXRVisibility=()=>{
     this.paused=this.session?.visibilityState!=='visible';this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();
     this.accumulator=0;this.lastTime=0;this.audio.pause(this.paused||this.menu);
@@ -112,12 +116,13 @@ class FootballApp {
   onSessionEnd=()=>{
     this.reference?.removeEventListener('reset',this.onReferenceReset);
     this.session?.removeEventListener('end',this.onSessionEnd);this.session?.removeEventListener('visibilitychange',this.onXRVisibility);
-    this.session=null;this.reference=null;this.active=false;this.menu=false;this.paused=false;this.pendingInitialPlacement=false;
+    this.session=null;this.reference=null;this.active=false;this.menu=false;this.paused=false;this.pendingInitialPlacement=false;this.pendingStartWhistle=false;
     this.interface.show(false,this.controls);this.calibrationPanel.hide();this.controls.setDesktop(true);this.controls.invalidate();
     this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;this.audio.pause(true);
     this.ui.launcher.hidden=false;this.ui.hint.hidden=true;this.ui.status.textContent='';this.syncPage();this.resize();this.lastTime=0;
   };
   exit(){
+    this.pendingStartWhistle=false;
     if(this.session){this.session.end().catch(()=>{this.ui.status.textContent='Use the headset menu to leave VR.';});return;}
     document.exitPointerLock?.();this.active=false;this.menu=false;this.pendingInitialPlacement=false;
     this.controls.keys.clear();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;
@@ -127,6 +132,7 @@ class FootballApp {
   start() {
     // The first tracked pose and calibration must be available before centering a VR player.
     this.pendingInitialPlacement=!this.controls.desktop;this.calibrationCompletePending=false;
+    this.pendingStartWhistle=true;
     this.goalkeeper.reset();
     this.nets.reset();
     if(this.controls.desktop){this.controls.place(this.origin,0);this.spawnBall();}
@@ -135,6 +141,7 @@ class FootballApp {
   }
   syncBallHistory(){this.ballBefore.copy(this.physics.ball.position);this.orientationBefore.copy(this.physics.ball.orientation);}
   spawnBall() {
+    this.audio.resetBall();
     this.controls.refreshHead();this.spawnPoint.copy(this.controls.headWorld).addScaledVector(this.controls.forward,.72);
     this.spawnPoint.x=footballClamp(this.spawnPoint.x,-FB.halfWidth+.5,FB.halfWidth-.5);
     this.spawnPoint.z=footballClamp(this.spawnPoint.z,-FB.halfLength+.7,FB.halfLength-.7);this.spawnPoint.y=FB.ballRadius+.025;
@@ -152,19 +159,23 @@ class FootballApp {
     this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;this.controls.invalidate();
   }
   handleEvent(event) {
+    const speed=Number.isFinite(event.speed)?Math.max(0,event.speed):null;
+    const position=event.position||this.physics.ball.position;
     if(event.type==='touch'){
-      this.audio.kick(event.speed||this.physics.ball.velocity.length());this.controls.pulse(event.footId,.18+Math.min(.5,(event.speed||0)/24));
-    }else if(event.type==='frame')this.audio.kick(2);
-    else if(event.type==='save')this.audio.kick(Math.min(16,event.speed||4));
+      this.audio.kick(speed??this.physics.ball.velocity.length(),position);this.controls.pulse(event.footId,.18+Math.min(.5,(event.speed||0)/24));
+    }else if(event.type==='frame')this.audio.frame(speed??2,position);
+    else if(event.type==='save')this.audio.save(speed??4,position,event.surface);
     else if(event.type==='net'){
-      this.audio.net(event.speed||1);
+      this.audio.net(speed??1,position,event.footId);
       if(event.footId)this.controls.pulse(event.footId,Math.min(.25,.07+(event.speed||0)*.018));
     }
   }
   frame=(milliseconds,frame)=>{
-    if(this.disposed||this.contextLost)return;
+    if(this.disposed)return;
+    if(this.contextLost){this.audio.update(this.physics.ball,this.controls,false,0);return;}
     const now=milliseconds*.001,rawDt=this.lastTime?now-this.lastTime:0;this.lastTime=now;
     const dt=footballClamp(rawDt,0,.05);
+    let audioActive=false;
     if(rawDt>.1){this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;}
     if(this.active&&!this.paused){
       this.controls.calibrationPaused=this.menu;
@@ -189,6 +200,7 @@ class FootballApp {
       this.controls.clearEdges();
       const calibrating=!this.controls.isCalibrated||(!this.controls.desktop&&!!this.controls.calibration.awaitRelease);
       const blocked=this.menu||!tracked||calibrating||this.pendingInitialPlacement;
+      audioActive=!blocked;
       this.controls.move(dt,blocked);this.controls.prepareFeet(dt,blocked);
       if(this.menu)this.interface.point(this.controls);
       if(!blocked){
@@ -220,10 +232,12 @@ class FootballApp {
       for(const hand of this.controls.hands){hand.visual.root.visible=false;hand.ray.visible=false;}
       this.calibrationPanel.hide();
     }
+    this.audio.update(this.physics.ball,this.controls,audioActive,dt);
+    if(audioActive&&this.pendingStartWhistle&&this.audio.whistle())this.pendingStartWhistle=false;
     this.renderer.render(this.scene,this.camera);
   };
   dispose(){
-    if(this.disposed)return;this.disposed=true;this.renderer.setAnimationLoop(null);
+    if(this.disposed)return;this.disposed=true;this.pendingStartWhistle=false;this.renderer.setAnimationLoop(null);
     this.abort.abort();if(this.session)this.session.end().catch(()=>{});
     this.controls.dispose();this.interface.dispose();this.calibrationPanel.dispose();this.audio.dispose();this.goalkeeper.dispose();this.netVisual.dispose();this.nets.dispose();this.field.dispose();this.renderer.dispose();
   }

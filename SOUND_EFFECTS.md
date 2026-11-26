@@ -1,61 +1,57 @@
-# First Touch — lista dźwięków do przygotowania
+# First Touch — installed audio
 
-W aktualnej grze działają **dwa dźwięki generowane w kodzie**: krótki odgłos uderzenia oraz szelest siatki. Odgłos uderzenia jest wspólny dla kopnięcia, słupka/poprzeczki i interwencji bramkarza. Szelest jest wspólny dla kontaktu siatki z piłką i z butem.
+All 13 supplied recordings are included and connected. The original MP3 bytes are preserved; files were given consistent names. Audio uses `assets/audio/manifest.json`.
 
-Poniżej jest lista nagrań do następnej integracji MP3: **13 podstawowych rodzin dźwięków i 4 opcjonalne**. Na początek wystarczy po jednym pliku z każdej wybranej rodziny. Samo nagranie MP3 może zawierać cały odgłos: atak, główne uderzenie i naturalne wybrzmienie.
+## Installed files
 
-Pliki docelowo trafią do **`assets/audio/`**. Ta lista jest specyfikacją nagrań; bieżąca gra nadal korzysta z syntezy, a odtwarzanie MP3 będzie podłączone po dostarczeniu plików.
+Every destination below is inside **`assets/audio/`**.
 
-## 1. Istniejące zdarzenia — najpierw podmiana obecnych dźwięków
+| Original recording | Installed filename | Plays for |
+| --- | --- | --- |
+| `light punt.mp3` | `ball_touch_soft_01.mp3` | Gentle boot contact and small touches |
+| `medium kick.mp3` | `ball_kick_medium_01.mp3` | Ordinary passes and medium contacts |
+| `solid shot.mp3` | `ball_kick_strong_01.mp3` | Strong kicks, first alternating variant |
+| `solid shot 2.mp3` | `ball_kick_strong_02.mp3` | Strong kicks, second alternating variant |
+| `hard shot.mp3` | `ball_kick_hard_01.mp3` | The strongest contacts and power shots |
+| `slow woodwork.mp3` | `goal_frame_soft_01.mp3` | Light post / crossbar impact |
+| `woodwork.mp3` | `goal_frame_hard_01.mp3` | Strong post / crossbar impact |
+| `net.mp3` | `goal_net_01.mp3` | Net contact, variant 1 |
+| `net 2.mp3` | `goal_net_02.mp3` | Net contact, variant 2 |
+| `net 3.mp3` | `goal_net_03.mp3` | Net contact, variant 3 |
+| `Goalkeeper being hit.mp3` | `keeper_hit_01.mp3` | Goalkeeper contact; currently shared by gloves and body |
+| `roll.mp3` | `ball_roll_grass_loop.mp3` | Continuous rolling while the ball moves on the ground |
+| `Whistle.mp3` | `whistle_start_01.mp3` | Once when a fresh free-play session becomes ready |
 
-Wszystkie poniższe zdarzenia już wywołują dźwięk. Podział kopnięć na trzy nagrania oraz oddzielne brzmienia materiałów są planem podmiany wspólnego syntezatora.
+## Playback behavior
 
-| Nazwa pliku | Co ma być słychać i kiedy | Sugerowana długość | Warianty docelowo |
-|---|---|---:|---:|
-| `ball_touch_soft_01.mp3` | Lekkie, bliskie dotknięcie piłki butem: prowadzenie, przyjęcie, delikatne przesunięcie. Miękki, krótki kontakt. | 0,08–0,25 s | 3 |
-| `ball_kick_medium_01.mp3` | Zwykłe podanie lub średnio mocne kopnięcie. Wyraźny kontakt buta z napompowaną piłką. | 0,12–0,35 s | 3 |
-| `ball_kick_hard_01.mp3` | Mocny strzał: szybki, zdecydowany atak i głębszy odgłos piłki. | 0,15–0,50 s | 3 |
-| `goal_frame_hit_01.mp3` | Piłka uderzająca w metalowy słupek lub poprzeczkę. Krótki rezonans konstrukcji. Jeden zestaw może obsługiwać oba miejsca. | 0,40–1,40 s | 3 |
-| `keeper_glove_save_01.mp3` | Piłka uderzająca w rękawicę bramkarza: tłumiony, ale czytelny plask lateksowej dłoni. | 0,10–0,40 s | 3 |
-| `keeper_body_hit_01.mp3` | Piłka odbita tułowiem, ramieniem lub nogą bramkarza: bardziej głuchy kontakt z ciałem i materiałem stroju. | 0,10–0,35 s | 2 |
-| `goal_net_ball_01.mp3` | Piłka wpadająca w siatkę: uderzenie, naprężenie i krótki szelest luźnych sznurków. | 0,30–1,00 s | 3 |
-| `goal_net_boot_01.mp3` | But poruszający siatkę: szuranie i rozciąganie sznurków, delikatniejsze niż uderzenie piłki. | 0,25–0,90 s | 3 |
+- Small, medium, strong and hard contacts use different recordings. The two strong-shot clips alternate. Sound selection uses the actual normal contact speed, independently of the ball's physics.
+- Light and hard frame hits use their own recordings. All three net recordings cycle without immediate repetition; touching the net with a boot is quieter.
+- Physical sounds come from their world positions and follow the player's head direction and distance. The starting whistle stays centred and keeps its stereo recording.
+- Leading low-level padding is removed from decoded impact samples, preserving 4 ms before the detected onset. The MP3 files themselves are unchanged.
+- Rolling uses a crossfaded middle section of `roll.mp3`, avoiding its initial thump. One loop follows the ball, with volume and rate adjusted smoothly. Airborne motion, stopping, respawning with B, menus, calibration and interrupted play stop it.
+- The whistle plays once per fresh entry into free play. In VR it waits for calibration and trigger release. B, menu resume and manual recalibration do not repeat it.
+- Recordings are fetched once during startup. They are decoded before play when offline audio decoding is available; the compatibility path decodes once when audio is unlocked. No fetch or decoding happens in contact handlers or the frame loop.
+- If an individual impact recording fails to load, a quiet synthesized impact fallback keeps the interaction audible. Missing audio never prevents the football simulation from starting.
 
-Przygotuj **8 plików**, jeśli chcesz zacząć od podmiany tego, co już słychać. Dla każdego dźwięku można później dodać nagrania `_02.mp3` i `_03.mp3`; będą to różne wykonania tego samego zdarzenia.
+## Where files go
 
-## 2. Podstawowe efekty do dodania
+Upload the entire ZIP contents beside `index.html`, preserving folders. The changed code is in `src/audio.js`, `src/app.js` and `src/main.js`; the audio manifest and all 13 MP3s are in `assets/audio/`. Replacing only the audio folder in the older V26 game does not connect the new playback code.
 
-Te efekty nie mają jeszcze własnego wyzwalania audio. Uzupełnią odgłosy ruchu i istniejących interakcji.
+Keep the exact installed filenames, including case. To replace a recording, overwrite its MP3 at the same path and reload. The `gain` field in `assets/audio/manifest.json` controls that recording's relative level. To change its filename, update the matching `file` field while retaining its `id`. Loop settings describe the original rolling source; revisit them if you replace the roll recording.
 
-| Nazwa pliku | Co ma być słychać i kiedy | Sugerowana długość | Warianty docelowo |
-|---|---|---:|---:|
-| `ball_bounce_grass_01.mp3` | Odbicie piłki od murawy. Krótki, bardziej miękki odgłos niż kopnięcie; siła dźwięku zależna od uderzenia o podłoże. | 0,10–0,40 s | 3 |
-| `ball_roll_grass_loop.mp3` | Bardzo ciche, ciągłe toczenie piłki po murawie. Pętla słyszalna głównie z bliska, wygaszana przy zatrzymaniu lub oderwaniu piłki od ziemi. | 2–6 s, pętla | 1 |
-| `boot_step_grass_01.mp3` | Pojedynczy krok korkiem po murawie. Wspólny zestaw dla chodu, biegu i kroków bramkarza; tempo oraz głośność dopasowane do ruchu. | 0,10–0,35 s | 3 |
-| `boot_scuff_grass_01.mp3` | Krótkie szurnięcie butem po murawie przy zatrzymaniu, obrocie na stopie lub zmianie kierunku. | 0,15–0,60 s | 3 |
-| `keeper_land_grass_01.mp3` | Kontakt ciała bramkarza z murawą podczas rzutu: głuchy odgłos lądowania i krótki szelest stroju/trawy. | 0,30–0,90 s | 3 |
+## Useful next recordings
 
-Razem z pierwszą sekcją daje to **13 podstawowych plików** w wersji z jednym nagraniem na rodzinę.
+The current build needs no extra files. These are proposed additions, not files it is currently trying to load.
 
-## 3. Opcjonalne, ciche efekty
+| Suggested filename | Missing detail | Next integration |
+| --- | --- | --- |
+| `keeper_glove_save_01.mp3` | A distinct ball-on-latex glove sound | Separate existing glove saves from body contacts. |
+| `ball_bounce_grass_01.mp3` | Ball bouncing on the pitch | Add a ground-impact audio event. |
+| `boot_step_grass_01.mp3` | Boots stepping on grass | Add movement-driven steps for walking/running and the keeper. |
+| `boot_scuff_grass_01.mp3` | A short boot scrape | Add a scuff trigger for suitable planted-foot movement. |
+| `keeper_land_grass_01.mp3` | Keeper landing after a dive | Add a landing event in the keeper animation. |
+| `ambience_pitch_night_loop.mp3` | Optional quiet outdoor background | Add a low-level ambient loop. |
 
-| Nazwa pliku | Zastosowanie | Sugerowana długość | Warianty |
-|---|---|---:|---:|
-| `calibration_confirm_01.mp3` | Krótkie potwierdzenie prawidłowo przyjętego etapu kalibracji. Ten sam plik może obsługiwać podłogę i pozycję gry. | 0,12–0,35 s | 1 |
-| `ui_click_01.mp3` | Bardzo dyskretne potwierdzenie wybrania przycisku menu. | 0,03–0,12 s | 1 |
-| `ball_spawn_01.mp3` | Krótkie potwierdzenie przywołania nowej piłki pod B. | 0,08–0,25 s | 1 |
-| `ambience_pitch_night_loop.mp3` | Spokojne tło otwartego nocnego boiska: delikatny wiatr i odległy szum otoczenia. | 20–60 s, pętla | 1 |
+Send these when available. Their eventual folder is also `assets/audio/`; adding a new filename by itself will not create a trigger. The new event and manifest mapping need to be connected as part of the next update. A separate gentle net-rubbing recording would also improve boot/net contact, which currently uses the provided net variants at lower volume.
 
-Z opcjami dodatkowymi lista obejmuje **17 rodzin / 17 plików minimum**.
-
-## Jak przygotować nagrania
-
-- **Nazwy:** małe litery, podkreślenia, bez spacji i polskich znaków. Warianty zdarzeń jednorazowych mają końcówki `_01`, `_02`, `_03`. Pętle mają końcówkę `_loop`.
-- **Pojedynczy kontakt na plik.** Początek możliwie blisko właściwego uderzenia, bez długiej ciszy przed nim; zachowaj naturalne wybrzmienie na końcu.
-- **Suche brzmienie:** najlepiej bez dodanego pogłosu, panoramowania, muzyki i szumu pomieszczenia. Pogłos oraz odległość będzie można dopasować w grze.
-- **Dźwięki fizyczne najlepiej mono.** Ułatwi to późniejsze ustawienie ich w miejscu piłki, buta lub rękawicy. Tło otoczenia może być stereo. Dźwięki menu pozostaną blisko słuchacza.
-- **Spójne źródła:** użyj tej samej piłki i podobnej murawy dla pokrewnych efektów. Warianty powinny różnić się wykonaniem, a nie pochodzić z zupełnie innych miejsc.
-- **Pętle:** przygotuj fragment, którego koniec płynnie łączy się z początkiem. Końcowe przycięcie i ewentualne przenikanie granic pętli dopasujemy podczas integracji.
-- **Propozycja eksportu:** MP3 44,1 lub 48 kHz, około 128–192 kb/s dla krótkich efektów. To wygodne ustawienie robocze, a nie sztywny warunek przyjęcia pliku.
-
-Najbardziej przydatna kolejność przygotowania: **trzy siły kontaktu z piłką → słupek, rękawica i siatka → odbicie od ziemi, kroki i lądowanie bramkarza → pozostałe dodatki**. Nie trzeba osobno nagrywać niskiego tonu i szumowej warstwy obecnego syntezatora — pojedyncze dobre nagranie kontaktu zastąpi cały taki dźwięk.
+For repeated effects, optional `_02` / `_03` variants are useful. Prefer one event per file, little leading silence, a natural tail and no added reverb. Mono is suitable for positional effects; ambience may be stereo.

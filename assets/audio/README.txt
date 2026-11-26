@@ -1,7 +1,9 @@
-Folder na przyszłe nagrania MP3.
+All 13 supplied MP3 files are installed here.
 
-Nazwy, zastosowania i sugerowane warianty: ../../SOUND_EFFECTS.md
-Plan do późniejszej integracji: sound-plan.json
+manifest.json is the active recording map. Keep each id stable.
+The file field names its MP3; gain controls relative playback level.
 
-Ten plan nie jest wczytywany przez grę. Brak plików MP3 jest obecnie prawidłowy:
-działają dotychczasowe dźwięki syntezowane w src/audio.js.
+Original filename mapping and future recording requests: ../../SOUND_EFFECTS.md
+
+Upload this folder together with the updated src/audio.js, src/app.js and
+src/main.js, or simply upload the entire game ZIP contents.
