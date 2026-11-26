@@ -30,7 +30,7 @@ class FootballInterface {
     }
     c.textAlign='left';c.textBaseline='alphabetic';c.fillStyle='#aab9ae';c.font='22px sans-serif';
     c.fillText('L Move  /  R Turn  /  Grip Sprint',40,318);
-    c.fillText('Trigger Instep  /  B Ball  /  Y Menu',40,352);
+    c.fillText('Trigger Instep  /  A Ball  /  Y Menu',40,352);
     this.texture.needsUpdate=true;
   }
   show(show,controls) {

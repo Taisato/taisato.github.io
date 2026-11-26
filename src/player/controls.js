@@ -38,7 +38,7 @@ class FootballControls {
         lastPosePosition:new FT.Vector3(),lastPoseOrientation:new FT.Quaternion(),
         rayToGripPosition:new FT.Vector3(),rayToGripOrientation:new FT.Quaternion(),
         length:0,calibrated:false,profile:null,visualProfile:null,colliderOffset:collider.offset,neutralHeight:collider.neutralHeight||.105,instep:false,instepInput:0,instepAmount:0,grip:false,trigger:false,previousTrigger:false,
-        lastB:false,lastX:false,lastMenu:false,select:false,
+        lastA:false,lastX:false,lastMenu:false,select:false,
         localPosition:new FT.Vector3(),localOrientation:new FT.Quaternion(),
         rayLocalPosition:new FT.Vector3(),rayLocalOrientation:new FT.Quaternion(),
         rayPosition:new FT.Vector3(),rayOrientation:new FT.Quaternion(),rayDirection:new FT.Vector3(),
@@ -108,7 +108,7 @@ class FootballControls {
       // A newly attached controller may already be held. Start from its live
       // button state; only a subsequent press is an action edge.
       hand.previousTrigger=this.button(pad,0);
-      hand.lastB=hand.name==='right'&&this.button(pad,5);
+      hand.lastA=hand.name==='right'&&this.button(pad,4);
       hand.lastX=hand.name==='left'&&this.button(pad,4);
       hand.lastMenu=hand.name==='left'&&(this.button(pad,5)||this.button(pad,6));
     }
@@ -117,9 +117,9 @@ class FootballControls {
     if(hand.name==='left'){this.left.x=stick[0];this.left.y=stick[1];}else this.turn=stick[0];
     hand.trigger=this.button(pad,0);hand.instep=hand.trigger;hand.instepInput=this.buttonValue(pad,0);hand.grip=this.button(pad,1);
     hand.select=hand.trigger&&!hand.previousTrigger;hand.previousTrigger=hand.trigger;this.sprint=this.sprint||hand.grip;
-    const b=hand.name==='right'&&this.button(pad,5),x=hand.name==='left'&&this.button(pad,4),menu=hand.name==='left'&&(this.button(pad,5)||this.button(pad,6));
-    if(b&&!hand.lastB)this.edges.ball=true;if(x&&!hand.lastX)this.edges.calibrate=true;if(menu&&!hand.lastMenu)this.edges.menu=true;
-    hand.lastB=b;hand.lastX=x;hand.lastMenu=menu;
+    const a=hand.name==='right'&&this.button(pad,4),x=hand.name==='left'&&this.button(pad,4),menu=hand.name==='left'&&(this.button(pad,5)||this.button(pad,6));
+    if(a&&!hand.lastA)this.edges.ball=true;if(x&&!hand.lastX)this.edges.calibrate=true;if(menu&&!hand.lastMenu)this.edges.menu=true;
+    hand.lastA=a;hand.lastX=x;hand.lastMenu=menu;
   }
   sampleControllerPose(hand,frame,reference,dt) {
     const source=hand.source;let grip=null,ray=null;
@@ -180,7 +180,7 @@ class FootballControls {
     for(const hand of this.hands)if(!hand.inputPresent){
       if(hand.source)this.requireCalibrationRelease();
       hand.source=null;hand.hasPose=false;hand.hasRayGrip=false;hand.poseAge=Infinity;hand.ready=false;
-      hand.trigger=hand.instep=hand.grip=hand.previousTrigger=hand.lastB=hand.lastX=hand.lastMenu=false;hand.instepInput=0;
+      hand.trigger=hand.instep=hand.grip=hand.previousTrigger=hand.lastA=hand.lastX=hand.lastMenu=false;hand.instepInput=0;
     }
     let viewer=null;
     if(frame&&reference)try{viewer=frame.getViewerPose(reference);}catch{}

@@ -29,8 +29,8 @@ Every destination below is inside **`assets/audio/`**.
 - Light and hard frame hits use their own recordings. All three net recordings cycle without immediate repetition; touching the net with a boot is quieter.
 - Physical sounds come from their world positions and follow the player's head direction and distance. The starting whistle stays centred and keeps its stereo recording.
 - Leading low-level padding is removed from decoded impact samples, preserving 4 ms before the detected onset. The MP3 files themselves are unchanged.
-- Rolling uses a crossfaded middle section of `roll.mp3`, avoiding its initial thump. Its level is now 24.4 dB below the previous mix, making it a faint close-range detail. One loop follows the ball, with volume and rate adjusted smoothly. Airborne motion, stopping, respawning with B, menus, calibration and interrupted play stop it.
-- The whistle plays once per fresh entry into free play. In VR it waits for calibration and trigger release. B, menu resume and manual recalibration do not repeat it.
+- Rolling uses a crossfaded middle section of `roll.mp3`, avoiding its initial thump. Its level is 24.4 dB below the original mix, making it a faint close-range detail. One loop follows the ball, with volume and rate adjusted smoothly. Airborne motion, stopping, respawning with A in VR (B on the keyboard), menus, calibration and interrupted play stop it.
+- The whistle plays once per fresh entry into free play. In VR it waits for calibration and trigger release. Ball respawn, menu resume and manual recalibration do not repeat it.
 - Recordings are fetched once during startup. They are decoded before play when offline audio decoding is available; the compatibility path decodes once when audio is unlocked. No fetch or decoding happens in contact handlers or the frame loop.
 - If an individual impact recording fails to load, a quiet synthesized impact fallback keeps the interaction audible. Missing audio never prevents the football simulation from starting.
 
