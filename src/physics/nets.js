@@ -6,7 +6,7 @@ import { FB } from "../config.js";
 class FootballGoalNets {
   constructor() {
     this.goals=[this._makeGoal(-1),this._makeGoal(1)];
-    this.feet=[];this.footCount=0;this.dt=FB.fixedStep;this.time=0;this.tearSpeed=33;
+    this.feet=[];this.footCount=0;this.dt=FB.fixedStep;this.time=0;this.tearSpeed=34.5;
     this._normal=new FT.Vector3();this._surface=new FT.Vector3();this._point=new FT.Vector3();
     this._impulseNormal=new FT.Vector3();
     this._seamNormalA=new FT.Vector3();this._seamNormalB=new FT.Vector3();
@@ -74,7 +74,7 @@ class FootballGoalNets {
       }
     }
     return{sign,end:sign,rest,relaxed,relaxedDisplacement,positions,current:positions,previous,renderPrevious:previous,
-      velocity:new Float32Array(rest.length),start:new Float32Array(rest.length),normals:new Float32Array(rest.length),inverseMass:new Float32Array(pins),
+      velocity:new Float32Array(rest.length),normalPositions:new Float32Array(rest.length),normals:new Float32Array(rest.length),normalsDirty:false,inverseMass:new Float32Array(pins),
       indices:new Uint16Array(triangles),panels,constraints:new Float32Array(constraints),lambda:new Float32Array(constraints.length/4),
       neighbors,neighborLinks,constraintLookup,seamEdges:new Uint16Array(seamEdges),visited:new Uint32Array(pins.length),
       triangleActive:new Uint8Array(triangles.length/3).fill(1),constraintActive:new Uint8Array(constraints.length/4).fill(1),
@@ -88,7 +88,7 @@ class FootballGoalNets {
     this.clearContacts(true);
     for(const net of this.goals){
       if(!repair&&net.tearCount){net.ballInside=null;net.exteriorMask=0;net.revision++;continue;}
-      net.positions.set(net.relaxed);net.previous.set(net.relaxed);net.velocity.fill(0);net.lambda.fill(0);net.normals.fill(0);net.sleeping=true;net.active=false;net.quietTime=0;net.maxDisplacement=net.relaxedDisplacement;net.maxSpeed=0;net.ballInside=null;net.exteriorMask=0;net.ballContact=false;net.footContact=false;net.revision++;
+      net.positions.set(net.relaxed);net.previous.set(net.relaxed);net.velocity.fill(0);net.lambda.fill(0);net.normals.fill(0);net.normalsDirty=false;net.sleeping=true;net.active=false;net.quietTime=0;net.maxDisplacement=net.relaxedDisplacement;net.maxSpeed=0;net.ballInside=null;net.exteriorMask=0;net.ballContact=false;net.footContact=false;net.revision++;
       if(repair){net.triangleActive.fill(1);net.constraintActive.fill(1);net.nodeDamage.fill(0);net.damageRest.set(net.rest);net.nodeSupport.fill(0);net.edgeSupport.fill(0);net.tornCount=0;net.tearCount=0;net.tears.length=0;net.lastTearTime=-10;net.damageRevision++;}
     }
     if(repair)this.time=0;
@@ -110,7 +110,7 @@ class FootballGoalNets {
     this._bootSamples=Math.max(1,Math.min(32,Math.ceil(footTravel/.025)));this._bootIndex=0;
     const b=physics.ball,p=b.position,travel=b.velocity.length()*dt;
     for(const net of this.goals){
-      net.previous.set(net.positions);net.ballContact=false;net.footContact=false;net.energyContact=false;
+      net.ballContact=false;net.footContact=false;net.energyContact=false;
       // Prepared feet are compacted when a controller disappears. Material
       // sides belong to handedness/id, never to its current array index.
       for(const state of net.bootStates){
@@ -133,7 +133,9 @@ class FootballGoalNets {
     this._freshContact=false;
   }
   _advance(net,h) {
-    const p=net.positions,r=net.rest,v=net.velocity,w=net.inverseMass,start=net.start,c=net.constraints;
+    // The solver and visual interpolation both start from these same particles.
+    // A sleeping net already has matching snapshots from reset or its last step.
+    const p=net.positions,r=net.rest,v=net.velocity,w=net.inverseMass,start=net.previous,c=net.constraints;
     start.set(p);const damping=Math.exp(-3.5*h),spring=16*h,sqrt=Math.sqrt;
     for(let i=0;i<w.length;i++){
       const j=i*3;if(!w[i]){p[j]=r[j];p[j+1]=r[j+1];p[j+2]=r[j+2];v[j]=v[j+1]=v[j+2]=0;continue;}
@@ -149,11 +151,12 @@ class FootballGoalNets {
       const k=pass?c.length-4-order:order;
       if(!net.constraintActive[k>>2])continue;
       const a=c[k]|0,b=c[k+1]|0,wa=w[a],wb=w[b];if(wa+wb===0)continue;
-      const ai=a*3,bi=b*3,dx=p[bi]-p[ai],dy=p[bi+1]-p[ai+1],dz=p[bi+2]-p[ai+2],length=sqrt(dx*dx+dy*dy+dz*dz);if(length<1e-7)continue;
+      const ai=a*3,bi=b*3,dx=p[bi]-p[ai],dy=p[bi+1]-p[ai+1],dz=p[bi+2]-p[ai+2],lengthSq=dx*dx+dy*dy+dz*dz,restLength=c[k+2];
       // Cord resists extension; a loose span folds instead of pushing apart
       // like a compressed spring. Soft bending links keep the fold coherent.
-      if(length<=c[k+2])continue;
-      const alpha=c[k+3]*invH2,lambda=net.lambda[k>>2],change=(-(length-c[k+2])-alpha*lambda)/(wa+wb+alpha);net.lambda[k>>2]+=change;
+      if(lengthSq<=restLength*restLength)continue;
+      const length=sqrt(lengthSq);if(length<=restLength||length<1e-7)continue;
+      const alpha=c[k+3]*invH2,lambda=net.lambda[k>>2],change=(-(length-restLength)-alpha*lambda)/(wa+wb+alpha);net.lambda[k>>2]+=change;
       const scale=change/length;p[ai]-=wa*dx*scale;p[ai+1]-=wa*dy*scale;p[ai+2]-=wa*dz*scale;p[bi]+=wb*dx*scale;p[bi+1]+=wb*dy*scale;p[bi+2]+=wb*dz*scale;
     }
     for(let i=0;i<w.length;i++){
@@ -166,10 +169,12 @@ class FootballGoalNets {
       if(speedSq>256){const q=16/sqrt(speedSq);vx*=q;vy*=q;vz*=q;}v[j]=vx;v[j+1]=vy;v[j+2]=vz;
     }
     this.stats.clothSteps++;
-    this._updateNormals(net);
+    // Only a ball contact uses these normals. Snapshot the exact solved shape,
+    // since a boot can move shared particles before that contact in the same tick.
+    net.normalPositions.set(p);net.normalsDirty=true;
   }
-  _updateNormals(net){
-    const p=net.positions,normals=net.normals,idx=net.indices;normals.fill(0);
+  _updateNormals(net,p=net.positions){
+    const normals=net.normals,idx=net.indices;normals.fill(0);net.normalsDirty=false;
     for(let t=0;t<idx.length;t+=3){if(!net.triangleActive[t/3])continue;const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3,ax=p[b]-p[a],ay=p[b+1]-p[a+1],az=p[b+2]-p[a+2],bx=p[c]-p[a],by=p[c+1]-p[a+1],bz=p[c+2]-p[a+2],nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx;
       normals[a]+=nx;normals[a+1]+=ny;normals[a+2]+=nz;normals[b]+=nx;normals[b+1]+=ny;normals[b+2]+=nz;normals[c]+=nx;normals[c+1]+=ny;normals[c+2]+=nz;}
   }
@@ -290,7 +295,8 @@ class FootballGoalNets {
     const point=new FT.Vector3(...this._closest),material=new FT.Vector3(),normal=this._normal.clone();
     if(normal.getComponent(axis)*panel.inward>0)normal.negate();
     for(let k=0;k<3;k++)material.setComponent(k,rest[idx[triangle]*3+k]*bary[0]+rest[idx[triangle+1]*3+k]*bary[1]+rest[idx[triangle+2]*3+k]*bary[2]);
-    const radius=.245+Math.min(.07,Math.max(0,speed-this.tearSpeed)*.007),cu=material.getComponent(u),cv=material.getComponent(v),firstCell=panel.triangleStart+Math.floor((triangle-panel.triangleStart)/6)*6;
+    // Hole size follows the impact speed independently of the tear threshold.
+    const radius=.245+Math.min(.07,Math.max(0,speed-33)*.007),cu=material.getComponent(u),cv=material.getComponent(v),firstCell=panel.triangleStart+Math.floor((triangle-panel.triangleStart)/6)*6;
     let removed=0;const firstTorn=net.tornCount;
     for(let t=panel.triangleStart;t<panel.triangleStart+panel.triangleCount;t+=6){
       const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3,d=idx[t+4]*3;
@@ -395,6 +401,7 @@ class FootballGoalNets {
         if(!net.ballInside&&signed>=-.10)net.exteriorMask|=1<<panelIndex;
         const ca=ia*3,cb=ib*3,cc=ic*3,invCloth=wa*wa*w[ia]+wb*wb*w[ib]+wc*wc*w[ic],total=ballW+invCloth;
         this._surface.set(vel[ca]*wa+vel[cb]*wb+vel[cc]*wc,vel[ca+1]*wa+vel[cb+1]*wb+vel[cc+1]*wc,vel[ca+2]*wa+vel[cb+2]*wb+vel[cc+2]*wc);
+        if(net.normalsDirty)this._updateNormals(net,net.normalPositions);
         const response=this._impulseNormal,normals=net.normals,patchInverse=this._contactPatch(net,ia,ib,ic,wa,wb,wc),patchIds=this._patchIds,patchWeights=this._patchWeights;
         response.set(0,0,0);for(let k=0;k<this._patchCount;k++){const j=patchIds[k]*3,pw=patchWeights[k];response.x+=normals[j]*pw;response.y+=normals[j+1]*pw;response.z+=normals[j+2]*pw;}
         if(response.lengthSq()<1e-12)response.copy(n);else response.normalize();if(response.dot(n)<0)response.negate();response.multiplyScalar(.97).addScaledVector(n,.03).normalize();

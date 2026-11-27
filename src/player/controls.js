@@ -392,14 +392,26 @@ class FootballControls {
     }
     this.headOrientation.setFromAxisAngle(new FT.Vector3(1,0,0),this.desktopPitch);
   }
+  horizontalForward(orientation,target) {
+    target.set(0,0,-1).applyQuaternion(orientation);
+    target.y=0;
+    // Looking down at the ball can take the gaze through vertical. The line
+    // between the ears still describes the player's heading at that angle.
+    const upright=1-2*(orientation.x*orientation.x+orientation.z*orientation.z);
+    if(upright<.30){
+      this.right.set(1,0,0).applyQuaternion(orientation);
+      const weight=.30-upright;
+      target.x+=this.right.z*weight;target.z-=this.right.x*weight;
+    }
+    return target.normalize();
+  }
   refreshHead() {
     this.rig.position.y=-this.floorY;
     this.rig.updateMatrixWorld(true);
     this.headWorld.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
     this.viewOrientation.copy(this.rig.quaternion).multiply(this.headOrientation);
-    this.forward.set(0,0,-1).applyQuaternion(this.viewOrientation);this.forward.y=0;
-    if(this.forward.lengthSq()<.01)this.forward.set(0,0,-1).applyQuaternion(this.rig.quaternion);
-    this.forward.normalize();this.right.crossVectors(this.forward,this.up).normalize();
+    this.horizontalForward(this.viewOrientation,this.forward);
+    this.right.crossVectors(this.forward,this.up).normalize();
     if(this.desktop){this.camera.position.copy(this.headLocal);this.camera.quaternion.copy(this.headOrientation);}
   }
   move(dt,blocked) {
@@ -444,8 +456,8 @@ class FootballControls {
     this.refreshHead();
   }
   place(position,yaw=0) {
-    this.temp.set(0,0,-1).applyQuaternion(this.headOrientation);
-    const localYaw=Math.hypot(this.temp.x,this.temp.z)>.01?Math.atan2(-this.temp.x,-this.temp.z):0;
+    this.horizontalForward(this.headOrientation,this.temp);
+    const localYaw=Math.atan2(-this.temp.x,-this.temp.z);
     this.rig.rotation.set(0,yaw-localYaw,0);this.rig.position.set(0,-this.floorY,0);this.rig.updateMatrixWorld(true);
     this.temp.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
     this.rig.position.set(position.x-this.temp.x,-this.floorY,position.z-this.temp.z);

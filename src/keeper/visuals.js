@@ -16,13 +16,16 @@ class FootballGoalkeeperVisual {
     this.bones=FootballGoalkeeperVisual.boneNames.map((name,i)=>{const b=new FT.Bone();b.name=name;b.position.set(...FootballGoalkeeperVisual.rests[i]);this.root.add(b);return b;});this.bone={};for(let i=0;i<this.bones.length;i++)this.bone[FootballGoalkeeperVisual.boneNames[i]]=this.bones[i];
     const atlas=this.makeAtlas(),map=new FT.CanvasTexture(atlas);map.colorSpace=FT.SRGBColorSpace;map.anisotropy=4;owner.textures.add(map);this.bodyCanvas=atlas;
     this.material=owner.material(new FT.MeshStandardMaterial({map,color:0xffffff,roughness:.93,metalness:0}));
-    this.body=new FT.SkinnedMesh(owner.geometry(FootballKeeperMeshes.create('body')),this.material);this.body.name='Smooth black keeper kit';this.body.frustumCulled=false;this.root.add(this.body);
+    this.body=new FT.SkinnedMesh(owner.geometry(FootballKeeperMeshes.create('body')),this.material);this.body.name='Smooth black keeper kit';this.root.add(this.body);
+    const restBounds=this.body.geometry.boundingSphere;
+    this.body.boundingSphere=restBounds.clone();
+    this.skinReach=restBounds.radius+Math.max(...this.bones.map(b=>b.position.distanceTo(restBounds.center)));
     this.skeleton=new FT.Skeleton(this.bones);this.root.updateMatrixWorld(true);this.body.bind(this.skeleton);
     const bootMap=new FT.CanvasTexture(this.makeBootAtlas());bootMap.colorSpace=FT.SRGBColorSpace;bootMap.anisotropy=4;owner.textures.add(bootMap);this.bootCanvas=bootMap.image;
     this.bootMaterial=owner.material(new FT.MeshStandardMaterial({map:bootMap,color:0xffffff,roughness:.70,metalness:0}));this.hands=[];this.boots=[];
     for(let i=0;i<2;i++){
-      const side=i?'R':'L',hand=i?'right':'left',glove=new FT.Mesh(owner.geometry(FootballKeeperMeshes.create(i?'gloveR':'gloveL')),this.material);glove.name=hand+' padded goalkeeper glove';glove.frustumCulled=false;this.root.add(glove);this.hands.push(glove);
-      const boot=new FT.Mesh(owner.geometry(this.makeKeeperBoot(hand)),this.bootMaterial);boot.name=hand+' 285 mm black goalkeeper boot';boot.frustumCulled=false;boot.scale.setScalar(1/(FootballBoots.authorScale*this.scale));this.root.add(boot);this.boots.push(boot);
+      const side=i?'R':'L',hand=i?'right':'left',glove=new FT.Mesh(owner.geometry(FootballKeeperMeshes.create(i?'gloveR':'gloveL')),this.material);glove.name=hand+' padded goalkeeper glove';this.root.add(glove);this.hands.push(glove);
+      const boot=new FT.Mesh(owner.geometry(this.makeKeeperBoot(hand)),this.bootMaterial);boot.name=hand+' 285 mm black goalkeeper boot';boot.scale.setScalar(1/(FootballBoots.authorScale*this.scale));this.root.add(boot);this.boots.push(boot);
     }
     this.landmarks={};for(const name of ['pelvis','chest','neck','head','handL','handR','wristL','wristR','elbowL','elbowR','shoulderL','shoulderR','hipL','hipR','kneeL','kneeR','ankleL','ankleR','toeL','toeR'])this.landmarks[name]=new FT.Vector3();
     const capsule=(aName,bName,radius,kind)=>({aName,bName,a:this.landmarks[aName],b:this.landmarks[bName],radius,kind});
@@ -192,11 +195,16 @@ class FootballGoalkeeperVisual {
       this.hands[i].position.copy(wrist);this.hands[i].quaternion.copy(this.bone['hand'+s].quaternion);
     }
     // Collision landmarks and actual skin share the very same authored pose.
-    this.root.updateMatrixWorld(true);this.skeleton.update();this.updateLandmarks();
+    // The ground check reads the root transform and local joints. Publish the
+    // child matrices and skin palette once the final height is known.
+    this.root.updateWorldMatrix(false,false);this.updateLandmarks();
     // Conservative support only during dives / recovery, based on the real
     // anatomical contacts. No hand, head or calf is allowed through the pitch.
     let lift=0;for(const c of this.capsules)lift=Math.max(lift,c.radius-Math.min(c.a.y,c.b.y));
-    if(lift>.0001){this.root.position.y+=lift+.001;this.root.updateMatrixWorld(true);this.skeleton.update();this.updateLandmarks();}
+    if(lift>.0001)this.root.position.y+=lift+.001;
+    this.root.updateMatrixWorld(true);this.skeleton.update();
+    if(lift>.0001)this.updateLandmarks();
+    this.updateSkinBounds();
     this.shadow.position.set(state.position.x,.017,state.position.z);this.shadow.rotation.z=0;this.shadow.scale.set(1.05+activeDive*1.9,.72+activeDive*.18,1);this.shadowMaterial.opacity=1-footballClamp((hipY-.85)*.35,0,.45);
   }
   captureRagdollPose(){
@@ -276,7 +284,7 @@ class FootballGoalkeeperVisual {
       this.hands[i].position.copy(hand.position);this.hands[i].quaternion.copy(hand.quaternion);
       this.boots[i].position.copy(foot.position);this.boots[i].quaternion.copy(foot.quaternion);
     }
-    this.root.updateMatrixWorld(true);this.skeleton.update();this.updateLandmarks();
+    this.root.updateMatrixWorld(true);this.skeleton.update();this.updateLandmarks();this.updateSkinBounds();
 
     const torso=this.v.subVectors(pose.neck,pose.pelvis),flat=Math.hypot(torso.x,torso.z)/Math.max(.001,torso.length());
     this.shadow.position.set(pose.pelvis.x+torso.x*.25,.017,pose.pelvis.z+torso.z*.25);
@@ -288,6 +296,16 @@ class FootballGoalkeeperVisual {
     const lm=this.landmarks,b=this.bone,to=(name,p)=>lm[name].copy(p).applyMatrix4(this.root.matrixWorld);
     to('pelvis',b.pelvis.position);to('chest',this.v.set(0,.34,0).applyQuaternion(b.torso.quaternion).add(b.torso.position));to('neck',b.head.position);to('head',this.v.set(0,.18,0).applyQuaternion(b.head.quaternion).add(b.head.position));
     for(let i=0;i<2;i++){const s=i?'R':'L';to('hand'+s,this.v.copy(this.handCentreLocal).applyQuaternion(b['hand'+s].quaternion).add(b['hand'+s].position));to('wrist'+s,b['hand'+s].position);to('elbow'+s,b['forearm'+s].position);to('shoulder'+s,b['upperArm'+s].position);to('hip'+s,b['thigh'+s].position);to('knee'+s,b['shin'+s].position);to('ankle'+s,b['foot'+s].position);to('toe'+s,this.v.set(0,-.035,-.178).applyQuaternion(b['foot'+s].quaternion).add(b['foot'+s].position));}
+  }
+  updateSkinBounds(){
+    // Every weighted vertex lies in the convex hull of its bone-transformed
+    // positions. Enclosing every joint plus its maximum bind-space offset
+    // also encloses a diving or ragdolled keeper without re-skinning vertices.
+    const bounds=this.body.boundingSphere;
+    bounds.center.copy(this.bone.pelvis.position);
+    let furthest=0;
+    for(const b of this.bones)furthest=Math.max(furthest,b.position.distanceToSquared(bounds.center));
+    bounds.radius=Math.sqrt(furthest)+this.skinReach;
   }
   dispose(){this.skeleton.dispose();this.root.removeFromParent();this.shadow.removeFromParent();}
 }

@@ -362,7 +362,8 @@ class FootballOptics {
       const t = Math.max(0, Math.min(1, (speed - .65) / (13 - .65)));
       const response = t * t * (3 - 2 * t);
       const projectedRadius = Math.max(.5, Math.min(rx * viewport.z, ry * viewport.w));
-      const amount = Math.min(OPTICS.motionSplitPixels * pixelScale * response, projectedRadius * .65);
+      // Apply the strength after both limits so small, distant objects get the same reduction.
+      const amount = .75 * Math.min(OPTICS.motionSplitPixels * pixelScale * response, projectedRadius * .65);
       dx = dx / length * amount; dy = dy / length * amount;
       const padX = (Math.abs(dx) + 2 * pixelScale) / viewport.z;
       const padY = (Math.abs(dy) + 2 * pixelScale) / viewport.w;

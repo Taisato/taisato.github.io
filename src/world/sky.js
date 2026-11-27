@@ -197,7 +197,8 @@ class FootballSky {
     // stays entirely inside the 230 m far plane at both ends of the pitch.
     this.geometry = new FT.SphereGeometry(150, 40, 20);
     this.material = new FT.ShaderMaterial({uniforms:this.uniforms, vertexShader:SKY_VERTEX,
-      fragmentShader:SKY_FRAGMENT, side:1, depthWrite:false, toneMapped:false});
+      fragmentShader:SKY_FRAGMENT, side:1, depthWrite:false, toneMapped:false,
+      polygonOffsetFactor:0, polygonOffsetUnits:16777216});
     this.mesh = new FT.Mesh(this.geometry,this.material);
     this.mesh.name = 'Football sky'; this.mesh.renderOrder = -20; this.mesh.frustumCulled = false;
     scene.add(this.mesh);
@@ -208,6 +209,13 @@ class FootballSky {
   get name() {return SKY_OPTIONS[this.currentIndex].name;}
   get lighting() {return SKY_STAGES[SKY_OPTIONS[this.currentIndex].id].lighting;}
   get horizonLight() {return this.uniforms.uHorizon.value;}
+
+  setOcclusion(singleSample) {
+    // Push the dome against the far depth value behind even the distant turf.
+    // Keep the original sample coverage/order at multisampled silhouette edges.
+    this.material.polygonOffset = singleSample;
+    this.mesh.renderOrder = singleSample ? 1 : -20;
+  }
 
   set(index) {
     if (this.currentIndex === index) return;

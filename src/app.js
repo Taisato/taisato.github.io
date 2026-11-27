@@ -41,6 +41,7 @@ class FootballApp {
     this.field=new FootballField(this.scene);this.physics=new FootballPhysics();
     this.field.turfMesh.material.color.set(0xc9dacb);
     this.sky=new FootballSky(this.scene);
+    this.scene.onBeforeRender=(_renderer,_scene,_camera,target)=>this.sky.setOcclusion(target?.samples===0);
     this.shotTrail=new FootballShotTrail(this.scene);
     this.nets=new FootballGoalNets();this.netVisual=new FootballGoalNetVisual(this.field,this.nets);
     this.goalkeeper=new FootballGoalkeeper(this.field,-1);
@@ -86,7 +87,7 @@ class FootballApp {
     this.opticsState={menu:false,active:false};this.timeScale=1;
     this.active=false;this.menu=false;this.pending=false;this.pendingInitialPlacement=false;
     this.session=null;this.reference=null;this.paused=false;this.contextLost=false;this.disposed=false;
-    this.lastTime=0;this.accumulator=0;this.calibrationRevision=0;this.calibrationCompletePending=false;
+    this.lastTime=0;this.accumulator=0;this.inputRemainder=0;this.calibrationRevision=0;this.calibrationCompletePending=false;
     this.calibrationFromGameover=false;
     this.rewardAwaitRelease=false;
     this.pendingStartWhistle=false;
@@ -504,11 +505,15 @@ class FootballApp {
     if(this.contextLost){this.audio.update(this.physics.ball,this.controls,false,0);return;}
     const now=milliseconds*.001,rawDt=this.lastTime?now-this.lastTime:0;this.lastTime=now;
     const dt=footballClamp(rawDt,0,.05);
+    // The world limits catch-up work on a late frame. The tracked player
+    // still travelled for the measured interval. Treat longer gaps as pauses.
+    const inputDt=rawDt<=.125?Math.max(0,rawDt):dt;
     let audioActive=false,timeUpdated=false;
-    if(rawDt>.1){this.rewardPicker.suspend();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;}
+    if(rawDt>.1){this.rewardPicker.suspend();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;}
+    if(rawDt>.125)this.controls.invalidate();
     if(this.active&&!this.paused){
       this.controls.calibrationPaused=this.menu;
-      const tracked=this.controls.sample(frame,this.reference,this.session,dt),cal=this.controls.calibration;
+      const tracked=this.controls.sample(frame,this.reference,this.session,inputDt),cal=this.controls.calibration;
       if(!this.controls.desktop&&cal.revision!==this.calibrationRevision&&this.controls.isCalibrated){
         this.calibrationRevision=cal.revision;this.calibrationCompletePending=true;
         this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;
@@ -538,7 +543,7 @@ class FootballApp {
       // Menu rays follow fresh real-time poses. A selection may resume, restart,
       // exit or recalibrate; resolve it before deciding what can simulate.
       const pointedMenu=this.menu;
-      if(pointedMenu){this.controls.refreshHead();this.controls.prepareFeet(dt,true);this.interface.point(this.controls);}
+      if(pointedMenu){this.controls.refreshHead();this.controls.prepareFeet(inputDt,true);this.interface.point(this.controls);}
       const simulationDt=this.advanceTime(dt);timeUpdated=true;
       const calibrating=!this.controls.isCalibrated||(!this.controls.desktop&&!!this.controls.calibration.awaitRelease);
       const worldBlocked=!this.active||this.paused||!tracked||calibrating||this.pendingInitialPlacement;
@@ -549,15 +554,20 @@ class FootballApp {
       const roundResult=this.mode==='challenge'&&(this.challenge.phase==='result'||this.challenge.phase==='gameover');
       const rules=this.activeRules;
       this.controls.speedMultiplier=rules?.movementSpeedMultiplier??1;
-      this.controls.move(dt,blocked||roundResult);if(!pointedMenu)this.controls.prepareFeet(dt,blocked);
-      this.goalkeeper.preparePlayerContact(this.controls.headWorld,dt,blocked||roundResult||rawDt>.1);
+      this.controls.move(inputDt,blocked||roundResult);if(!pointedMenu)this.controls.prepareFeet(inputDt,blocked);
+      this.goalkeeper.preparePlayerContact(this.controls.headWorld,inputDt,blocked||roundResult||rawDt>.1);
       if(!worldBlocked){
         const oldAccumulator=this.accumulator;this.accumulator+=simulationDt;
         const count=Math.min(8,Math.floor((this.accumulator+1e-9)/FB.fixedStep));
-        const inputRate=dt>0?simulationDt/dt:1;
+        // A fixed step can straddle frames with different time scales. Track
+        // its actual sampled duration so that a hitch cannot power up a kick.
+        let previousSampleTime=oldAccumulator>1e-9?-this.inputRemainder:0;
         for(let step=0;step<count;step++){
           this.syncBallHistory();
           const sampleAlpha=simulationDt>0?footballClamp(((step+1)*FB.fixedStep-oldAccumulator)/simulationDt,0,1):1;
+          const sampleTime=sampleAlpha*inputDt,elapsed=sampleTime-previousSampleTime;
+          const inputRate=elapsed>0&&Math.abs(elapsed-FB.fixedStep)>1e-9?FB.fixedStep/elapsed:1;
+          previousSampleTime=sampleTime;
           this.goalkeeper.update(FB.fixedStep,this.physics.ball,roundResult ? null : this.controls.headWorld);
           const feet=this.simulationFeet(sampleAlpha,inputRate);
           if(!blocked&&!roundResult){
@@ -576,6 +586,7 @@ class FootballApp {
           }
           this.accumulator-=FB.fixedStep;
         }
+        this.inputRemainder=inputDt-previousSampleTime;
         if(count===8)this.accumulator=Math.min(this.accumulator,FB.fixedStep);
       }else this.accumulator=0;
       // Rendering interpolates the fixed-step ball without changing its physical position.

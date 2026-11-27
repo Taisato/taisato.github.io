@@ -106,7 +106,7 @@ With abilities equipped, the HUD shows practice goals, touches and lives for sho
 
 An exceptionally fast ball impact can rupture the back, side or roof of the net. The opening belongs to the existing deformable cloth: torn faces stop colliding, severed links release, and loose cord ends remain attached around the uneven edge. Ordinary catches still use the existing net response.
 
-The impact and swept-crossing paths both require at least **33 m/s** of ball speed and outward impact speed relative to the cloth. The previous low-speed escape fallback has been removed. A lower-speed numerical crossing is contained. Shared material edges between panels are explicitly retained, including the corner where the side and back meet. Existing holes remain open and passable.
+The ball must reach **34.5 m/s** to tear the net, and its speed into the cloth must also reach **34.5 m/s** relative to the moving cords. A glancing shot can stay in the net even when the ball is travelling faster. The same threshold applies to direct impacts and swept crossings on both goals. Shared material edges between panels are explicitly retained, including the corner where the side and back meet. Existing holes remain open and passable.
 
 Damage lasts for the **whole 3 TOUCH run**. Scoring, losing one life and advancing to another chance do not repair the nets. At zero lives, the holes remain visible on the game-over screen. Choosing **Again**, pressing right-controller **A** at game over, or explicitly restarting begins a new run with repaired nets. Launching Freeroam again also repairs them. Free-ball respawns, menus, recalibration and tracking recovery preserve damage. A legal goal still counts when the ball subsequently breaks through the net.
 

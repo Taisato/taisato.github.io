@@ -32,9 +32,32 @@ class FootballBoots {
     return target;
   }
   static groundClearance(orientation,hand='right'){
-    const up=this._up.set(0,1,0).applyQuaternion(this._inverse.copy(orientation).invert()),data=this.supportVertices(hand);
+    const up=this._up.set(0,1,0).applyQuaternion(this._inverse.copy(orientation).invert());
+    const octant=Number(up.x<0)+2*Number(up.y<0)+4*Number(up.z<0);
+    const data=this.source(hand).groundSupport[octant];
     let low=Infinity;for(let i=0;i<data.length;i+=3)low=Math.min(low,data[i]*up.x+data[i+1]*up.y+data[i+2]*up.z);
     return -low+.002;
+  }
+  static makeGroundSupport(points){
+    // For one sign combination a vertex can never be lowest if another
+    // vertex is at least as low on all three axes. Store the exact remaining
+    // vertices, including the studs, for each orientation of the boot.
+    const offsets=Array.from({length:points.length/3},(_,i)=>i*3);
+    return Array.from({length:8},(_,octant)=>{
+      const sx=octant&1?-1:1,sy=octant&2?-1:1,sz=octant&4?-1:1;
+      offsets.sort((a,b)=>sx*(points[a]-points[b])||sy*(points[a+1]-points[b+1])||sz*(points[a+2]-points[b+2]));
+      const kept=[];
+      for(const i of offsets){
+        const y=points[i+1],z=points[i+2];
+        if(kept.some(j=>sy*(points[j+1]-y)<=0&&sz*(points[j+2]-z)<=0))continue;
+        kept.push(i);
+      }
+      const support=new Float32Array(kept.length*3);
+      for(let n=0;n<kept.length;n++){
+        const i=kept[n];support[n*3]=points[i];support[n*3+1]=points[i+1];support[n*3+2]=points[i+2];
+      }
+      return support;
+    });
   }
   static describe(hand='right'){return this.source(hand).description;}
   static build(hand){
@@ -210,7 +233,7 @@ class FootballBoots {
     const collider=Object.freeze({radius,halfLength,offset:Object.freeze([(b.max.x+b.min.x)*.5,b.min.y+radius,(b.max.z+b.min.z)*.5])});
     const supportArray=new Float32Array(support),contact=hand==='left'?this.makeStrikingBody(last,bounds,scale,new Float32Array(lastSupport)):this.mirrorContact(this.source('left').description.contact,bounds);
     const description=Object.freeze({hand,spec:this.spec,bounds,collider,contact,support:supportArray,toeLocal:Object.freeze([mirror*.012*scale,-.046*scale,-.224*scale]),heelLocal:Object.freeze([0,-.027*scale,.061*scale]),triangles:I.length/3});
-    return{geometry,description};
+    return{geometry,description,groundSupport:this.makeGroundSupport(supportArray)};
   }
   static makeStrikingBody(last,bounds,scale,lastSupport){
     // A tapered, bevelled boot body. Its broad side faces transfer an inside-foot
