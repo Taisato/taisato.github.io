@@ -100,7 +100,7 @@
     {
       "id": "wind_normal",
       "file": "wind_normal.mp3",
-      "gain": 0.112,
+      "gain": 0.0448,
       "channels": "stereo",
       "loop": {
         "start": 1.8,

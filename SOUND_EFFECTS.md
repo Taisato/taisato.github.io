@@ -18,7 +18,7 @@ Every destination below is inside **`assets/audio/`**.
 | `net.mp3` | `goal_net_01.mp3` | Net contact, variant 1 |
 | `net 2.mp3` | `goal_net_02.mp3` | Net contact, variant 2 |
 | `net 3.mp3` | `goal_net_03.mp3` | Net contact, variant 3 |
-| `Goalkeeper being hit.mp3` | `keeper_hit_01.mp3` | Goalkeeper contact; currently shared by gloves and body |
+| `Goalkeeper being hit.mp3` | `keeper_hit_01.mp3` | Ball saves and direct player impacts on the keeper |
 | `roll.mp3` | `ball_roll_grass_loop.mp3` | Continuous rolling while the ball moves on the ground |
 | `Whistle.mp3` | `whistle_start_01.mp3` | Once when a fresh mode entry or new run becomes ready |
 | `normal wind.mp3` | `wind_normal.mp3` | Default continuous wind ambience |
@@ -30,7 +30,7 @@ Every destination below is inside **`assets/audio/`**.
 - Very slow boot contacts fade smoothly toward silence. Contacts at 1.5 m/s and above retain their previous sound levels.
 - Light and hard frame hits use their own recordings. All three net recordings cycle without immediate repetition; touching the net with a boot is quieter.
 - Physical sounds come from their world positions and follow the player's head direction and distance. The starting whistle stays centred and keeps its stereo recording.
-- Wind keeps the supplied stereo image and surrounds the scene without following the ball. Normal is the default; Settings → Wind selects Heavy and saves the choice. Loop seams are crossfaded, and switching ambience blends the recordings. Both ambiences play at 40% of their V38 level (2.5× quieter), with their relative balance preserved. Normal uses gain 0.112; Heavy uses 0.048. Ball resets and new chances do not restart the wind; true suspension or leaving the game stops it.
+- Wind keeps the supplied stereo image and surrounds the scene without following the ball. Normal is the default and Settings → Wind selects Heavy and saves the choice. Loop seams are crossfaded, and switching ambience blends the recordings. Normal uses gain 0.0448, 40% of its previous gain. Heavy uses 0.048. Ball resets and new chances do not restart the wind. True suspension or leaving the game stops it.
 - Leading low-level padding is removed from decoded impact samples, preserving 4 ms before the detected onset. The MP3 files themselves are unchanged.
 - Rolling uses a crossfaded middle section of `roll.mp3`, avoiding its initial thump. Its level is 24.4 dB below the original mix, making it a faint close-range detail. One loop follows the ball, with volume and rate adjusted smoothly. Airborne motion, stopping, respawning with A in VR (B on the keyboard), calibration and interrupted play stop it.
 - Opening the menu gradually slows ongoing and newly triggered game sounds with the world to 0.25× speed over 0.6 seconds. Existing sources, including the rolling loop, keep their playback position. Recordings last four times as long at quarter speed, with lower pitch. Closing the menu gradually restores the normal rate. Original sound variation and the quiet rolling mix are retained.

@@ -294,6 +294,10 @@ class FootballApp {
       this.audio.kick(speed??this.physics.ball.velocity.length(),position);this.controls.pulse(event.footId,.18+Math.min(.5,(event.speed||0)/24));
     }else if(event.type==='frame')this.audio.frame(speed??2,position);
     else if(event.type==='save')this.audio.save(speed??4,position,event.surface);
+    else if(event.type==='keeper-contact'){
+      this.audio.save(speed??4,position,event.surface);
+      if(event.footId)this.controls.pulse(event.footId,Math.min(.65,.16+(speed??0)*.035));
+    }
     else if(event.type==='net'){
       this.audio.net(speed??1,position,event.footId);
       if(event.footId)this.controls.pulse(event.footId,Math.min(.25,.07+(event.speed||0)*.018));
@@ -373,14 +377,21 @@ class FootballApp {
       if(this.audio.paused===audioActive)this.audio.pause(!audioActive);
       const roundResult=this.mode==='challenge'&&(this.challenge.phase==='result'||this.challenge.phase==='gameover');
       this.controls.move(dt,blocked||roundResult);if(!pointedMenu)this.controls.prepareFeet(dt,blocked);
+      this.goalkeeper.preparePlayerContact(this.controls.headWorld,dt,blocked||roundResult||rawDt>.1);
       if(!worldBlocked){
         const oldAccumulator=this.accumulator;this.accumulator+=simulationDt;
         const count=Math.min(8,Math.floor((this.accumulator+1e-9)/FB.fixedStep));
+        const inputRate=dt>0?simulationDt/dt:1;
         for(let step=0;step<count;step++){
           this.syncBallHistory();
           const sampleAlpha=simulationDt>0?footballClamp(((step+1)*FB.fixedStep-oldAccumulator)/simulationDt,0,1):1;
           this.goalkeeper.update(FB.fixedStep,this.physics.ball);
-          this.physics.step(FB.fixedStep,this.simulationFeet(sampleAlpha,dt>0?simulationDt/dt:1),this.goalkeeper,this.nets,
+          const feet=this.simulationFeet(sampleAlpha,inputRate);
+          if(!blocked&&!roundResult){
+            const impact=this.goalkeeper.collidePlayer(feet,sampleAlpha,inputRate);
+            if(impact)this.handleEvent(impact);
+          }
+          this.physics.step(FB.fixedStep,feet,this.goalkeeper,this.nets,
             this.mode==='challenge'&&!roundResult?this.observeChallengeMotion:null);
           for(const event of this.physics.events)this.handleEvent(event);
           if(this.mode==='challenge'){

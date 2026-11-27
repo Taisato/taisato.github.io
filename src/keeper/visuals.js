@@ -9,7 +9,7 @@ class FootballGoalkeeperVisual {
   static rests=[[0,.95,0],[0,.94,0],[0,1.506,0],[-.207,1.435,0],[-.207,1.154,0],[-.207,.895,0],[.207,1.435,0],[.207,1.154,0],[.207,.895,0],[-.095,.95,0],[-.095,.52,0],[-.095,.08,0],[.095,.95,0],[.095,.52,0],[.095,.08,0],[-.207,1.154,0],[.207,1.154,0],[-.095,.52,0],[.095,.52,0]];
   constructor(owner){
     this.owner=owner;this.scale=1.04;this.root=new FT.Group();this.group=this.root;this.root.name='Goalkeeper';owner.root.add(this.root);this.root.scale.setScalar(this.scale);
-    this.up=new FT.Vector3(0,1,0);this.down=new FT.Vector3(0,-1,0);this.forward=new FT.Vector3(0,0,-1);this.xAxis=new FT.Vector3(1,0,0);this.zAxis=new FT.Vector3(0,0,1);
+    this.up=new FT.Vector3(0,1,0);this.down=new FT.Vector3(0,-1,0);this.forward=new FT.Vector3(0,0,-1);this.xAxis=new FT.Vector3(1,0,0);this.zAxis=new FT.Vector3(0,0,1);this.walkDirection=new FT.Vector3();
     this.v=new FT.Vector3();this.v2=new FT.Vector3();this.v3=new FT.Vector3();this.v4=new FT.Vector3();this.q=new FT.Quaternion();this.q2=new FT.Quaternion();this.bodyQ=new FT.Quaternion();this.yawQ=new FT.Quaternion();this.inverseYaw=new FT.Quaternion();this.hip=new FT.Vector3();this.target=new FT.Vector3();this.leadTarget=new FT.Vector3();this.handCentreLocal=new FT.Vector3(0,-.094,-.009);this.handDirection=new FT.Vector3();this.handPalm=new FT.Vector3();this.handRestPalm=new FT.Vector3();this.handSide=new FT.Vector3();this.handBasis=new FT.Matrix4();
     this.bones=FootballGoalkeeperVisual.boneNames.map((name,i)=>{const b=new FT.Bone();b.name=name;b.position.set(...FootballGoalkeeperVisual.rests[i]);this.root.add(b);return b;});this.bone={};for(let i=0;i<this.bones.length;i++)this.bone[FootballGoalkeeperVisual.boneNames[i]]=this.bones[i];
     const atlas=this.makeAtlas(),map=new FT.CanvasTexture(atlas);map.colorSpace=FT.SRGBColorSpace;map.anisotropy=4;owner.textures.add(map);this.bodyCanvas=atlas;
@@ -22,11 +22,34 @@ class FootballGoalkeeperVisual {
       const side=i?'R':'L',hand=i?'right':'left',glove=new FT.Mesh(owner.geometry(FootballKeeperMeshes.create(i?'gloveR':'gloveL')),this.material);glove.name=hand+' padded goalkeeper glove';glove.frustumCulled=false;this.root.add(glove);this.hands.push(glove);
       const boot=new FT.Mesh(owner.geometry(this.makeKeeperBoot(hand)),this.bootMaterial);boot.name=hand+' 285 mm black goalkeeper boot';boot.frustumCulled=false;boot.scale.setScalar(1/(FootballBoots.authorScale*this.scale));this.root.add(boot);this.boots.push(boot);
     }
-    this.landmarks={};for(const name of ['pelvis','chest','head','handL','handR','wristL','wristR','elbowL','elbowR','shoulderL','shoulderR','hipL','hipR','kneeL','kneeR','ankleL','ankleR','toeL','toeR'])this.landmarks[name]=new FT.Vector3();
-    const capsule=(a,b,radius,kind)=>({a:this.landmarks[a],b:this.landmarks[b],radius,kind});
+    this.landmarks={};for(const name of ['pelvis','chest','neck','head','handL','handR','wristL','wristR','elbowL','elbowR','shoulderL','shoulderR','hipL','hipR','kneeL','kneeR','ankleL','ankleR','toeL','toeR'])this.landmarks[name]=new FT.Vector3();
+    const capsule=(aName,bName,radius,kind)=>({aName,bName,a:this.landmarks[aName],b:this.landmarks[bName],radius,kind});
     this.capsules=[capsule('handL','handL',.103,'glove'),capsule('handR','handR',.103,'glove'),capsule('pelvis','chest',.173,'body'),capsule('head','head',.098,'body')];
     for(const s of ['L','R'])this.capsules.push(capsule('shoulder'+s,'elbow'+s,.064,'body'),capsule('elbow'+s,'wrist'+s,.053,'body'),capsule('hip'+s,'knee'+s,.077,'leg'),capsule('knee'+s,'ankle'+s,.055,'leg'),capsule('ankle'+s,'toe'+s,.043,'leg'));
     const canvas=document.createElement('canvas');canvas.width=canvas.height=64;const c=canvas.getContext('2d'),gradient=c.createRadialGradient(32,32,1,32,32,31);gradient.addColorStop(0,'rgba(0,0,0,.50)');gradient.addColorStop(.5,'rgba(0,0,0,.22)');gradient.addColorStop(1,'rgba(0,0,0,0)');c.fillStyle=gradient;c.fillRect(0,0,64,64);const shadowMap=new FT.CanvasTexture(canvas);owner.textures.add(shadowMap);this.shadowMaterial=owner.material(new FT.MeshBasicMaterial({map:shadowMap,transparent:true,depthWrite:false,side:2,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));this.shadow=new FT.Mesh(owner.geometry(new FT.PlaneGeometry(1,1)),this.shadowMaterial);this.shadow.name='Goalkeeper contact shadow';this.shadow.rotation.x=-Math.PI/2;this.shadow.frustumCulled=false;owner.root.add(this.shadow);
+    this.ragdollPoints=Object.fromEntries(Object.keys(this.landmarks).map(name=>[name,new FT.Vector3()]));
+    this.ragdollSegments=[];this.ragdollJoints=[];
+    const footAxis=new FT.Vector3(0,-.035,-.178).normalize(),handAxis=this.handCentreLocal.clone().normalize();
+    const addSegment=(bone,from,to,axis,parent)=>this.ragdollSegments.push({
+      bone:this.bone[bone],from:this.ragdollPoints[from],to:this.ragdollPoints[to],axis,parent:this.bone[parent],palm:axis===handAxis,
+      startDirection:new FT.Vector3(),startRotation:new FT.Quaternion(),readyRotation:new FT.Quaternion()
+    });
+    addSegment('head','neck','head',this.up,'torso');
+    for(const side of ['L','R']){
+      for(const [name,from,to,axis,parent] of [
+        ['thigh','hip','knee',this.down],['shin','knee','ankle',this.down,'thigh'],['foot','ankle','toe',footAxis,'shin'],
+        ['upperArm','shoulder','elbow',this.down],['forearm','elbow','wrist',this.down,'upperArm'],['hand','wrist','hand',handAxis,'forearm']
+      ]){
+        addSegment(name+side,from+side,to+side,axis,parent?parent+side:'torso');
+      }
+      for(const [name,upper,lower] of [['elbow','upperArm','forearm'],['knee','thigh','shin']]){
+        this.ragdollJoints.push({bone:this.bone[name+side],point:this.ragdollPoints[name+side],
+          upper:this.bone[upper+side].quaternion,lower:this.bone[lower+side].quaternion,sign:1,readyRotation:new FT.Quaternion()});
+      }
+    }
+    this.ragdollYaw=new FT.Quaternion();this.ragdollInverseParent=new FT.Quaternion();this.ragdollDelta=new FT.Quaternion();
+    this.ragdollNeutral=new FT.Quaternion();this.ragdollDirection=new FT.Vector3();this.ragdollRelative=new FT.Vector3();
+    this.ragdollBasis=new FT.Matrix4();this.ragdollRight=new FT.Vector3();this.ragdollUp=new FT.Vector3();this.ragdollBack=new FT.Vector3();
     this._state={position:new FT.Vector3(0,0,-51.9),yaw:Math.PI,phase:'ready',phaseProgress:0,side:1,targetHeight:1,time:0,lateralSpeed:0};this.updatePose(this._state);
   }
   smooth(a,b,x){const t=footballClamp((x-a)/(b-a),0,1);return t*t*(3-2*t);}
@@ -100,8 +123,12 @@ class FootballGoalkeeperVisual {
     else if(phase==='recover'){
       reach=1;settle=1;recover=this.smooth(0,1,t);roll=1.48*(1-this.smooth(0,.65,t));hipY=this.mix(.238,.50,this.smooth(0,.50,t));hipY=this.mix(hipY,.884,this.smooth(.45,1,t));
     }
-    const activeDive=reach*(1-recover),lie=settle*(1-recover),gait=(phase==='ready'?speed:phase==='push'?footballClamp(Math.abs(state.takeoffSpeed||0)/3,0,1)*(1-push):0),stride=state.position.x*8,sway=Math.sin(stride)*.012*gait;
-    this.hip.set(sway,hipY,0);this.rotate(this.bodyQ,-.09*(1-activeDive),0,-dir*roll);
+    const activeDive=reach*(1-recover),gait=(phase==='ready'?speed:phase==='push'?footballClamp(Math.abs(state.takeoffSpeed||0)/3,0,1)*(1-push):0),stride=state.position.x*8,sway=Math.sin(stride)*.012*gait;
+    const longitudinal=phase==='ready'?(state.longitudinalSpeed||0):0,walk=footballClamp(Math.abs(longitudinal)/1.55,0,1);
+    const cycle=.92, stance=.56, travel=state.position.z*Math.sign(longitudinal)/cycle;
+    this.walkDirection.set(0,0,Math.sign(longitudinal)).applyQuaternion(this.inverseYaw);
+    hipY-=walk*(.014+.007*Math.cos(travel*Math.PI*4));
+    this.hip.set(sway,hipY,0);this.rotate(this.bodyQ,-.09*(1-activeDive)+this.walkDirection.z*.08*walk,0,-dir*roll);
     this.bone.pelvis.position.copy(this.hip);this.bone.pelvis.quaternion.copy(this.bodyQ);
     this.bone.torso.position.set(0,-.01,0).applyQuaternion(this.bodyQ).add(this.hip);this.bone.torso.quaternion.copy(this.bodyQ);
     this.bone.head.position.set(0,.556,0).applyQuaternion(this.bodyQ).add(this.hip);this.bone.head.quaternion.copy(this.bodyQ).multiply(this.q.setFromAxisAngle(this.xAxis,.045));
@@ -109,6 +136,10 @@ class FootballGoalkeeperVisual {
       const s=i?'R':'L',sg=i?1:-1,hand=i?'right':'left',hip=this.bone['thigh'+s].position,ankle=this.bone['foot'+s].position,knee=this.bone['shin'+s].position;
       hip.set(sg*.095,0,0).applyQuaternion(this.bodyQ).add(this.hip);
       ankle.set(sg*.231-Math.cos(stride+i*Math.PI)*.055*gait,.080+Math.max(0,Math.sin(stride+i*Math.PI))*.045*gait,-.018+Math.sin(stride+i*Math.PI)*.03*gait);
+      const footPhase=travel+i*.5-Math.floor(travel+i*.5),swing=footballClamp((footPhase-stance)/(1-stance),0,1);
+      const strideOffset=cycle*stance*walk*(footPhase<stance?.5-footPhase/stance:this.smooth(0,1,swing)-.5);
+      ankle.addScaledVector(this.walkDirection,strideOffset);
+      ankle.y+=Math.sin(swing*Math.PI)*.094*walk;
       if(activeDive>0){
         this.v3.set(sg*.15,-.76+(sg===dir?.18:0),sg===dir?-.06:.13).applyQuaternion(this.bodyQ).add(this.hip);this.v3.y+=.18*reach;
         // Side landing: one leg folded slightly above the supporting calf.
@@ -129,6 +160,7 @@ class FootballGoalkeeperVisual {
       const shoulder=this.bone['upperArm'+s].position,wrist=this.bone['hand'+s].position,elbow=this.bone['forearm'+s].position;
       shoulder.set(sg*.207,.485,0).applyQuaternion(this.bodyQ).add(this.hip);
       wrist.set(sg*(.32-.035*push),hipY+.13-.025*push,-.34+.035*push);
+      wrist.addScaledVector(this.walkDirection,-strideOffset*.44);
       if(activeDive>0){
         // Work from the frozen predicted ball point, but solve a fixed-length
         // arm: unreachable shots remain genuinely unreachable.
@@ -151,11 +183,96 @@ class FootballGoalkeeperVisual {
     // anatomical contacts. No hand, head or calf is allowed through the pitch.
     let lift=0;for(const c of this.capsules)lift=Math.max(lift,c.radius-Math.min(c.a.y,c.b.y));
     if(lift>.0001){this.root.position.y+=lift+.001;this.root.updateMatrixWorld(true);this.skeleton.update();this.updateLandmarks();}
-    this.shadow.position.set(state.position.x,.017,state.position.z);this.shadow.scale.set(1.05+activeDive*1.9,.72+activeDive*.18,1);this.shadowMaterial.opacity=1-footballClamp((hipY-.85)*.35,0,.45);
+    this.shadow.position.set(state.position.x,.017,state.position.z);this.shadow.rotation.z=0;this.shadow.scale.set(1.05+activeDive*1.9,.72+activeDive*.18,1);this.shadowMaterial.opacity=1-footballClamp((hipY-.85)*.35,0,.45);
+  }
+  captureRagdollPose(){
+    // Retain each segment's twist relative to its parent when the motors release.
+    // Endpoint constraints can then swing the limbs without rolling the skin at impact.
+    this.ragdollYaw.copy(this.root.quaternion);
+    for(const segment of this.ragdollSegments){
+      segment.startRotation.copy(segment.parent.quaternion).invert().multiply(segment.bone.quaternion);
+      segment.startDirection.copy(segment.axis).applyQuaternion(segment.startRotation);
+    }
+    for(const joint of this.ragdollJoints)joint.sign=joint.upper.dot(joint.lower)<0?-1:1;
+    return this.landmarks;
+  }
+  captureRagdollRecoveryPose(){
+    // The keeper may rise facing a different direction. Cache the ready
+    // rotations in the same local frame as the interpolated ragdoll.
+    this.ragdollDelta.copy(this.ragdollYaw).invert().multiply(this.root.quaternion);
+    for(const segment of this.ragdollSegments){
+      segment.readyRotation.copy(this.ragdollDelta).multiply(segment.bone.quaternion);
+    }
+    for(const joint of this.ragdollJoints)joint.readyRotation.copy(this.ragdollDelta).multiply(joint.bone.quaternion);
+    return this.landmarks;
+  }
+  ragdollFrame(out,rightReference,upReference){
+    this.ragdollUp.copy(upReference).normalize();
+    this.ragdollBack.crossVectors(rightReference,this.ragdollUp).normalize();
+    this.ragdollRight.crossVectors(this.ragdollUp,this.ragdollBack);
+    return out.setFromRotationMatrix(this.ragdollBasis.makeBasis(this.ragdollRight,this.ragdollUp,this.ragdollBack));
+  }
+  updateRagdollPose(pose){
+    const p=this.ragdollPoints,b=this.bone;
+    this.root.position.set(pose.pelvis.x,0,pose.pelvis.z);
+    this.root.quaternion.copy(this.ragdollYaw);
+    this.inverseYaw.copy(this.ragdollYaw).invert();
+    for(const name in p)p[name].copy(pose[name]).sub(this.root.position).applyQuaternion(this.inverseYaw).multiplyScalar(1/this.scale);
+
+    this.v3.subVectors(p.shoulderR,p.shoulderL);
+    this.ragdollFrame(this.bodyQ,this.v3,this.v4.subVectors(p.neck,p.pelvis));
+    b.pelvis.position.copy(p.pelvis);b.pelvis.quaternion.copy(this.bodyQ);
+    b.torso.position.copy(p.chest).addScaledVector(this.ragdollUp,-.34);b.torso.quaternion.copy(this.bodyQ);
+    const readyWeight=pose.readyWeight||0;
+    for(const segment of this.ragdollSegments){
+      const {bone,from,to,axis,parent,palm,startDirection,startRotation,readyRotation}=segment;
+      bone.position.copy(from);
+      this.ragdollDirection.subVectors(to,from).normalize();
+      this.ragdollInverseParent.copy(parent.quaternion).invert();
+      this.ragdollRelative.copy(this.ragdollDirection).applyQuaternion(this.ragdollInverseParent);
+      this.ragdollDelta.setFromUnitVectors(startDirection,this.ragdollRelative);
+      bone.quaternion.copy(parent.quaternion).multiply(this.ragdollDelta).multiply(startRotation);
+      const support=palm?1-this.smooth(.070,.098,to.y*this.scale):0;
+      if(support>0){
+        // Roll onto the palm while the wrist and fingers keep their solved positions.
+        this.v.copy(this.down).addScaledVector(this.ragdollDirection,this.ragdollDirection.y);
+        const amount=support*this.smooth(.25,.78,this.v.length());
+        this.v.normalize();
+        this.v2.copy(this.forward).applyQuaternion(bone.quaternion);
+        this.v2.addScaledVector(this.ragdollDirection,-this.v2.dot(this.ragdollDirection)).normalize();
+        const roll=this.v3.crossVectors(this.v2,this.v).dot(this.ragdollDirection)*amount;
+        bone.quaternion.premultiply(this.ragdollDelta.setFromAxisAngle(this.ragdollDirection,roll));
+      }
+      if(readyWeight>0){
+        this.ragdollRelative.copy(axis).applyQuaternion(readyRotation);
+        this.ragdollNeutral.copy(readyRotation).premultiply(this.ragdollDelta.setFromUnitVectors(this.ragdollRelative,this.ragdollDirection));
+        bone.quaternion.slerp(this.ragdollNeutral,readyWeight);
+      }
+    }
+    for(const {bone,point,upper,lower,sign,readyRotation} of this.ragdollJoints){
+      bone.position.copy(point);
+      // Keep the midpoint on its original quaternion branch through deep bends.
+      // Picking the shortest arc each frame can flip the skin by 180 degrees.
+      const weight=sign*this.smooth(-.96,-.66,sign*upper.dot(lower));
+      bone.quaternion.set(upper.x+lower.x*weight,upper.y+lower.y*weight,upper.z+lower.z*weight,upper.w+lower.w*weight).normalize();
+      bone.quaternion.slerp(readyRotation,readyWeight);
+    }
+    for(let i=0;i<2;i++){
+      const side=i?'R':'L',hand=b['hand'+side],foot=b['foot'+side];
+      this.hands[i].position.copy(hand.position);this.hands[i].quaternion.copy(hand.quaternion);
+      this.boots[i].position.copy(foot.position);this.boots[i].quaternion.copy(foot.quaternion);
+    }
+    this.root.updateMatrixWorld(true);this.skeleton.update();this.updateLandmarks();
+
+    const torso=this.v.subVectors(pose.neck,pose.pelvis),flat=Math.hypot(torso.x,torso.z)/Math.max(.001,torso.length());
+    this.shadow.position.set(pose.pelvis.x+torso.x*.25,.017,pose.pelvis.z+torso.z*.25);
+    this.shadow.rotation.z=.5*Math.atan2(-2*torso.x*torso.z,torso.x*torso.x-torso.z*torso.z)*this.smooth(.10,.42,flat);
+    this.shadow.scale.set(1.05+flat*1.14,.72+flat*.16,1);
+    this.shadowMaterial.opacity=1-footballClamp((pose.pelvis.y-.85)*.35,0,.45);
   }
   updateLandmarks(){
     const lm=this.landmarks,b=this.bone,to=(name,p)=>lm[name].copy(p).applyMatrix4(this.root.matrixWorld);
-    to('pelvis',b.pelvis.position);to('chest',this.v.set(0,.34,0).applyQuaternion(b.torso.quaternion).add(b.torso.position));to('head',this.v.set(0,.18,0).applyQuaternion(b.head.quaternion).add(b.head.position));
+    to('pelvis',b.pelvis.position);to('chest',this.v.set(0,.34,0).applyQuaternion(b.torso.quaternion).add(b.torso.position));to('neck',b.head.position);to('head',this.v.set(0,.18,0).applyQuaternion(b.head.quaternion).add(b.head.position));
     for(let i=0;i<2;i++){const s=i?'R':'L';to('hand'+s,this.v.copy(this.handCentreLocal).applyQuaternion(b['hand'+s].quaternion).add(b['hand'+s].position));to('wrist'+s,b['hand'+s].position);to('elbow'+s,b['forearm'+s].position);to('shoulder'+s,b['upperArm'+s].position);to('hip'+s,b['thigh'+s].position);to('knee'+s,b['shin'+s].position);to('ankle'+s,b['foot'+s].position);to('toe'+s,this.v.set(0,-.035,-.178).applyQuaternion(b['foot'+s].quaternion).add(b['foot'+s].position));}
   }
   dispose(){this.skeleton.dispose();this.root.removeFromParent();this.shadow.removeFromParent();}

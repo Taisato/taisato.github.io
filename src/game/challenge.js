@@ -140,7 +140,7 @@ class FootballChallenge {
     if(Math.abs(p.x)>FB.halfWidth+r||Math.abs(p.z)>FB.halfLength+r)return this._resolve('out');
     if(this.phase==='ready')return null;
     const speed=Math.hypot(v.x,v.y,v.z),grounded=p.y<=r+.045;
-    const nearKeeper=keeper?.enabled!==false&&keeper?.position&&
+    const nearKeeper=keeper?.enabled!==false&&!keeper?.ragdoll?.active&&keeper?.position&&
       Math.hypot(p.x-keeper.position.x,p.z-keeper.position.z)<1.35&&p.y<2.2;
     // A parry is live. Only a ball that genuinely settles at the keeper for a
     // sustained interval counts as secured; a player's recovery clears this.

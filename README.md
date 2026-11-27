@@ -39,11 +39,13 @@ The two effects are independent. Disabling aberration removes world colour separ
 
 Normal wind plays as a continuous stereo background during gameplay. Select **Wind → Heavy** for the second recording. Switching blends between the ambiences smoothly, and the choice is remembered with the other settings. Older saved settings automatically use Normal without resetting any existing preferences.
 
-The wind follows menu slow motion along with the other sounds. Ball respawns and new chances do not restart it. Leaving the game or a true suspension stops the ambience. Both wind tracks now play at 40% of their previous level. The wind setting changes sound only.
+The wind follows menu slow motion along with the other sounds. Ball respawns and new chances do not restart it. Leaving the game or a true suspension stops the ambience. Normal wind plays at 40% of its previous level. The wind setting changes sound only.
 
 ## Modes
 
 **Freeroam** uses the full-size pitch, current ball physics and goalkeeper. Right-controller **A** spawns a new ball; keyboard **B** does the same.
+
+A direct kick, a fast body collision or a hard shot to the torso or head can knock the keeper down. The fall follows the direction and point of contact. The keeper gets back to his feet and repositions for the next play.
 
 **3 TOUCH** starts each chance with a stationary ball and the player facing the guarded goal. You have three touches and three lives. Opening chances are central, 11–15 metres from the goal line. Scoring gradually introduces longer approaches, tighter angles and a more capable keeper. At 15 goals, starts average about 20.7 metres from the goal line, roughly 4.2 metres outside the penalty area. Starting depth remains bounded at 27 metres.
 

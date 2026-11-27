@@ -2,6 +2,10 @@ import { FT } from "../../vendor/three.js";
 import { FB, footballClamp } from "../config.js";
 import { FootballPhysics } from "../physics/ball.js";
 import { FootballGoalkeeperVisual } from "./visuals.js";
+import { FootballKeeperRagdoll } from "./ragdoll.js";
+import { FootballKeeperPlayerContact } from "./player-contact.js";
+
+const BALL_IMPACT = {strength: .40};
 
 const FREEROAM_KEEPER = Object.freeze({
   reaction: .115, predictionInterval: .045,
@@ -18,18 +22,23 @@ class FootballGoalkeeper {
     this.field = field;
     this.goalEnd = goalEnd < 0 ? -1 : 1;
     this.homeZ = this.goalEnd * (FB.halfLength - .88);
+    this.homeYaw = this.goalEnd < 0 ? Math.PI : 0;
     this.enabled = true;
     this.time = 0;
     this.position = new V(0, 0, this.homeZ);
     this.velocity = new V();
     this.visual = new FootballGoalkeeperVisual(field);
+    this.ragdoll = new FootballKeeperRagdoll(this.goalEnd);
+    this.playerContact = new FootballKeeperPlayerContact();
     this.state = {
-      position: this.position, yaw: this.goalEnd < 0 ? Math.PI : 0,
+      position: this.position, yaw: this.homeYaw,
       phase: 'ready', phaseProgress: 0, side: 1, targetHeight: 1,
-      lateralSpeed: 0, takeoffSpeed: 0, time: 0, reachTarget: new V(0, 1, this.homeZ - this.goalEnd * .36)
+      lateralSpeed: 0, longitudinalSpeed: 0, takeoffSpeed: 0, time: 0,
+      reachTarget: new V(0, 1, this.homeZ - this.goalEnd * .36)
     };
     this.previousState = this._newState();
     this.renderState = this._newState();
+    this.getupState = this._newState();
     this._phaseTime = 0;
     this._predictTimer = 0;
     this._threatAge = 0;
@@ -45,6 +54,7 @@ class FootballGoalkeeper {
     this._a = new V(); this._b = new V(); this._axis = new V();
     this._point = new V(); this._normal = new V(); this._surface = new V();
     this._velocityA = new V(); this._velocityB = new V(); this._relative = new V();
+    this._impactPoint = new V(); this._impactVelocity = new V();
     this._predictPrevious = new V();
     this._fixedDt = FB.fixedStep;
     this.setDifficulty(null);
@@ -74,7 +84,7 @@ class FootballGoalkeeper {
 
   _newState() {
     return {position: new FT.Vector3(), yaw: 0, phase: 'ready', phaseProgress: 0,
-      side: 1, targetHeight: 1, lateralSpeed: 0, takeoffSpeed: 0, time: 0, reachTarget: new FT.Vector3()};
+      side: 1, targetHeight: 1, lateralSpeed: 0, longitudinalSpeed: 0, takeoffSpeed: 0, time: 0, reachTarget: new FT.Vector3()};
   }
 
   _copyState(target, source) {
@@ -82,24 +92,28 @@ class FootballGoalkeeper {
     target.yaw = source.yaw; target.phase = source.phase; target.phaseProgress = source.phaseProgress;
     target.side = source.side; target.targetHeight = source.targetHeight;
     target.lateralSpeed = source.lateralSpeed; target.takeoffSpeed = source.takeoffSpeed; target.time = source.time;
+    target.longitudinalSpeed = source.longitudinalSpeed;
   }
 
   reset() {
+    this.ragdoll.reset(); this._ragdollHandoff = false; this._lastRagdollImpact = -Infinity;
     this.position.set(0, 0, this.homeZ); this.velocity.set(0, 0, 0);
     this.state.phase = 'ready'; this.state.phaseProgress = 0;
-    this.state.side = 1; this.state.targetHeight = 1; this.state.lateralSpeed = 0; this.state.takeoffSpeed = 0;
-    this.state.yaw = this.goalEnd < 0 ? Math.PI : 0;
+    this.state.side = 1; this.state.targetHeight = 1; this.state.lateralSpeed = this.state.longitudinalSpeed = this.state.takeoffSpeed = 0;
+    this.state.yaw = this.homeYaw;
     this.state.reachTarget.set(0, 1, this.homeZ - this.goalEnd * .36);
     this.time = 0; this.state.time = 0; this._phaseTime = 0;
     this.saves = 0; this.dives = 0; this.clearContacts();
     this._copyState(this.previousState, this.state);
     this._copyState(this.renderState, this.state);
     this.visual.updatePose(this.state);
+    this.ragdoll.sampleAnimated(this.visual.landmarks, 0);
     this._capture(true);
     this.maxTravel = 0;
   }
 
   clearContacts() {
+    this.playerContact.reset();
     this._lastImpact = -10;
     this._threatAge = 0; this._predictTimer = 0;
     this.threat.valid = false; this.threat.time = 9;
@@ -113,7 +127,7 @@ class FootballGoalkeeper {
       let capsule = this.colliders[i];
       if (!capsule) {
         capsule = {a: new FT.Vector3(), b: new FT.Vector3(), previousA: new FT.Vector3(),
-          previousB: new FT.Vector3(), radius: source.radius, kind: source.kind};
+          previousB: new FT.Vector3(), aName: source.aName, bName: source.bName, radius: source.radius, kind: source.kind};
         this.colliders[i] = capsule; initial = true;
       }
       capsule.previousA.copy(capsule.a); capsule.previousB.copy(capsule.b);
@@ -166,7 +180,54 @@ class FootballGoalkeeper {
     this._diveEnd.copy(this.position);
     this._diveEnd.x = footballClamp(this.position.x + s.side * lateral, -3.28, 3.28);
     this._diveEnd.z -= this.goalEnd * .12;
-    this.velocity.set(0, 0, 0); this._phase('push'); this.dives++;
+    this.velocity.set(0, 0, 0); s.longitudinalSpeed = 0; this._phase('push'); this.dives++;
+  }
+
+  preparePlayerContact(head, dt, blocked) {
+    this.playerContact.prepareBody(head, dt, blocked || !this.enabled);
+  }
+
+  collidePlayer(feet, alpha, rate) {
+    return this.enabled ? this.playerContact.step(this, feet, alpha, rate) : null;
+  }
+
+  receiveImpact(velocity, point, capsule, options) {
+    if (!this.enabled || this.time - this._lastRagdollImpact < .07) return false;
+    if (!this.ragdoll.hit(this.visual.landmarks, velocity, point, capsule, this._fixedDt, options)) return false;
+    this.visual.captureRagdollPose();
+    this._ragdollHandoff = false;
+    this._lastRagdollImpact = this.time;
+    this.velocity.set(0, 0, 0); this.state.lateralSpeed = this.state.longitudinalSpeed = this.state.takeoffSpeed = 0;
+    this._phase('ragdoll');
+    this._threatAge = 0; this._predictTimer = 0;
+    this.threat.valid = false; this.threat.time = 9;
+    return true;
+  }
+
+  _updateRagdoll(dt) {
+    const ragdoll = this.ragdoll, s = this.state;
+    let readyLandmarks;
+    if (ragdoll.needsReadyPose(dt)) {
+      const ready = this.getupState;
+      this._copyState(ready, s);
+      ready.position.copy(ragdoll.recoveryPosition); ready.yaw = ragdoll.recoveryYaw;
+      ready.phase = 'ready'; ready.phaseProgress = 0; ready.targetHeight = .92;
+      ready.reachTarget.set(ready.position.x, ready.targetHeight, ready.position.z - this.goalEnd * .36);
+      this.visual.updatePose(ready);
+      this.visual.captureRagdollRecoveryPose();
+      readyLandmarks = this.visual.landmarks;
+    }
+    if (ragdoll.step(dt, readyLandmarks)) {
+      this._copyState(s, this.getupState);
+      this._ragdollHandoff = true;
+      this.ragdoll.sampleAnimated(readyLandmarks, 0);
+    } else {
+      const pose = ragdoll.sample(1);
+      this.position.set(pose.pelvis.x, 0, pose.pelvis.z);
+      s.phase = ragdoll.phase === 'getup' ? 'getup' : 'ragdoll';
+      this.visual.updateRagdollPose(pose);
+    }
+    this._capture();
   }
 
   update(dt, ball) {
@@ -175,12 +236,16 @@ class FootballGoalkeeper {
     const tuning = this._tuning;
     this._copyState(this.previousState, this.state);
     this.time += dt; this.state.time = this.time;
+    this._ragdollHandoff = false;
+    if (this.ragdoll.active) {this._updateRagdoll(dt); return;}
     this._predictTimer -= dt;
     if (this._predictTimer <= 0) {this._predict(ball); this._predictTimer = tuning.predictionInterval;}
     else this.threat.time = Math.max(0, this.threat.time - dt);
     this._threatAge = this.threat.valid ? this._threatAge + dt : 0;
     const s = this.state;
     if (s.phase === 'ready') {
+      const yawDelta = Math.atan2(Math.sin(this.homeYaw - s.yaw), Math.cos(this.homeYaw - s.yaw));
+      s.yaw += Math.abs(yawDelta) < .001 ? yawDelta : yawDelta * (1 - Math.exp(-7 * dt));
       const incoming = this.threat.valid && this._threatAge >= tuning.reaction;
       const target = incoming ? this.threat.x : (ball ? ball.position.x * .13 : 0);
       const targetX = footballClamp(target, -2.68, 2.68);
@@ -189,15 +254,21 @@ class FootballGoalkeeper {
       const desired = Math.sign(delta) * Math.min(maximum, Math.sqrt(Math.abs(delta) * 17));
       this.velocity.x += footballClamp(desired - this.velocity.x, -tuning.acceleration * dt, tuning.acceleration * dt);
       this.position.x += this.velocity.x * dt;
-      this.position.z += (this.homeZ - this.position.z) * Math.min(1, dt * 4);
+      const depth = this.homeZ - this.position.z;
+      const depthSpeed = Math.sign(depth) * Math.min(1.85, Math.sqrt(Math.abs(depth) * 11));
+      this.velocity.z += footballClamp(depthSpeed - this.velocity.z, -6.5 * dt, 6.5 * dt);
+      const depthStep = this.velocity.z * dt;
+      if (Math.abs(depthStep) < Math.abs(depth)) this.position.z += depthStep;
+      else {this.position.z = this.homeZ; this.velocity.z = 0;}
       this.position.y = 0;
       s.lateralSpeed = this.velocity.x;
+      s.longitudinalSpeed = this.velocity.z;
       s.targetHeight += ((incoming ? footballClamp(this.threat.y, .18, 2.55) : .92) - s.targetHeight) * Math.min(1, dt * 10);
       s.reachTarget.set(this.position.x, s.targetHeight, this.homeZ - this.goalEnd * .36);
       // Set first, then push off. A central ball is blocked by the ready body;
       // lateral and low balls prompt the actual sideways save animation.
       const dx = this.threat.x - this.position.x;
-      if (incoming && this.threat.time < tuning.diveLead && this.threat.time > .055 &&
+      if (incoming && Math.abs(yawDelta) < .34 && this.threat.time < tuning.diveLead && this.threat.time > .055 &&
           (Math.abs(dx) > .48 || this.threat.y < .55 || this.threat.y > 1.82)) this._beginSave();
     } else {
       this._phaseTime += dt;
@@ -223,16 +294,24 @@ class FootballGoalkeeper {
       }
     }
     this.visual.updatePose(s);
+    this.ragdoll.sampleAnimated(this.visual.landmarks, dt);
     this._capture();
   }
 
   render(alpha) {
     if (!this.enabled) return;
     const s = this.renderState, a = this.previousState, b = this.state;
-    alpha = footballClamp(alpha, 0, 1); this._copyState(s, b);
+    alpha = footballClamp(alpha, 0, 1);
+    if (this.ragdoll.active || this._ragdollHandoff) {
+      this.visual.updateRagdollPose(this.ragdoll.sample(alpha));
+      return;
+    }
+    this._copyState(s, b);
     s.position.lerpVectors(a.position, b.position, alpha);
+    s.yaw = a.yaw + (b.yaw - a.yaw) * alpha;
     s.time = a.time + (b.time - a.time) * alpha;
     s.lateralSpeed = a.lateralSpeed + (b.lateralSpeed - a.lateralSpeed) * alpha;
+    s.longitudinalSpeed = a.longitudinalSpeed + (b.longitudinalSpeed - a.longitudinalSpeed) * alpha;
     s.targetHeight = a.targetHeight + (b.targetHeight - a.targetHeight) * alpha;
     s.reachTarget.lerpVectors(a.reachTarget, b.reachTarget, alpha);
     if (a.phase === b.phase) s.phaseProgress = a.phaseProgress + (b.phaseProgress - a.phaseProgress) * alpha;
@@ -271,6 +350,12 @@ class FootballGoalkeeper {
       ball.position.addScaledVector(this._normal, sum - distance + .00015);
       const incoming = -this._relative.copy(ball.velocity).sub(this._surface).dot(this._normal);
       if (incoming <= 0) continue;
+      const centerHit = capsule.aName === 'pelvis' || capsule.aName === 'head';
+      if ((this.ragdoll.active && incoming > 5.5) || (!this.ragdoll.active && centerHit && incoming > 24)) {
+        this._impactPoint.copy(this._point).addScaledVector(this._normal, capsule.radius);
+        this._impactVelocity.copy(this._normal).multiplyScalar(-Math.min(incoming, 18));
+        this.receiveImpact(this._impactVelocity, this._impactPoint, capsule, BALL_IMPACT);
+      }
       const restitution = capsule.kind === 'glove' ? .23 : capsule.kind === 'leg' ? .40 : .32;
       ball.velocity.addScaledVector(this._normal, incoming * (1 + restitution));
       physics.surfaceFriction(this._normal, this._surface, incoming * .28);
