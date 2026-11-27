@@ -1,5 +1,6 @@
 import { FT } from '../vendor/three.js';
 import { footballClamp } from './config.js';
+import { loadAsset } from './assets.js';
 
 const WIND_TYPES=['normal','heavy'];
 
@@ -12,8 +13,7 @@ class FootballAudio {
     if(this.loading)return this.loading;
     this.loading=(async()=>{
       try{
-        const url=new URL('../assets/audio/manifest.json',import.meta.url);
-        const response=await fetch(url);
+        const response=await loadAsset('assets/audio/manifest.json');
         if(!response.ok)throw new Error('Audio manifest: HTTP '+response.status);
         const manifest=await response.json();
         if(manifest.format!=='first-touch-audio-v1'||!Array.isArray(manifest.assets))throw new Error('Invalid audio manifest');
@@ -23,7 +23,7 @@ class FootballAudio {
         await Promise.all(manifest.assets.map(async definition=>{
           try{
             if(typeof definition.id!=='string'||typeof definition.file!=='string')throw new Error('Invalid audio entry');
-            const asset=await fetch(new URL(definition.file,url));
+            const asset=await loadAsset('assets/audio/'+definition.file);
             if(!asset.ok)throw new Error('HTTP '+asset.status);
             const encoded=await asset.arrayBuffer();
             const entry={definition,buffer:null,encoded};

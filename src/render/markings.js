@@ -11,6 +11,9 @@ const PITCH_PAINT = Object.freeze({lineWidth:.115, minimumPixels:.45, centreRadi
 const PITCH_PAINT_FRAGMENT = `
 varying vec2 vPitchPoint;
 uniform vec3 uPitchPaint;
+uniform vec3 uPitchFlood;
+uniform vec3 uPitchAmbient;
+uniform vec3 uPitchHorizon;
 uniform vec2 uPitchExtent;
 uniform float uPitchGoalHalf;
 const float pitchHalfWidth = .0575;
@@ -91,19 +94,40 @@ float pitchPaintCoverage(vec2 point) {
 
 function applyPitchPaint(material) {
   const paint={value:new FT.Color(0xeaefd7)};
+  const flood={value:new FT.Color(0xffffff)};
+  const ambient={value:new FT.Color(0x000000)};
+  const horizon={value:new FT.Color(0x000000)};
   const extent={value:new FT.Vector2(FB.halfWidth, FB.halfLength)};
   const goalHalf={value:FB.goalWidth*.5};
   material.onBeforeCompile=shader=>{
     shader.uniforms.uPitchPaint=paint;
+    shader.uniforms.uPitchFlood=flood;
+    shader.uniforms.uPitchAmbient=ambient;
+    shader.uniforms.uPitchHorizon=horizon;
     shader.uniforms.uPitchExtent=extent;
     shader.uniforms.uPitchGoalHalf=goalHalf;
     shader.vertexShader='varying vec2 vPitchPoint;\n'+shader.vertexShader.replace(
       '#include <begin_vertex>', '#include <begin_vertex>\nvPitchPoint = position.xz;');
-    shader.fragmentShader=PITCH_PAINT_FRAGMENT+shader.fragmentShader.replace(
-      '#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, uPitchPaint, pitchPaintCoverage(vPitchPoint));');
+    shader.fragmentShader=PITCH_PAINT_FRAGMENT+shader.fragmentShader.replace('#include <color_fragment>', `
+      #include <color_fragment>
+      #if defined(USE_COLOR) || defined(USE_COLOR_ALPHA)
+        float bakedLight = max(.004, vColor.r);
+      #else
+        float bakedLight = 1.0;
+      #endif
+      vec2 runoff = abs(vPitchPoint) - uPitchExtent;
+      float distanceOutside = max(runoff.x, runoff.y);
+      float skyLight = (1.0 - smoothstep(.04, .86, bakedLight)) * (1.0 - smoothstep(26.0, 82.0, distanceOutside));
+      vec3 grass = diffuseColor.rgb / bakedLight;
+      vec3 reflection = mix(grass, vec3(dot(grass, vec3(.2126, .7152, .0722))), .78);
+      vec3 litGrass = diffuseColor.rgb * uPitchFlood + reflection * uPitchAmbient * skyLight;
+      litGrass = mix(litGrass, uPitchHorizon, smoothstep(18.0, 62.0, distanceOutside));
+      diffuseColor.rgb = mix(litGrass, uPitchPaint * uPitchFlood, pitchPaintCoverage(vPitchPoint));
+    `);
   };
-  material.customProgramCacheKey=()=> 'football-pitch-paint-v34';
+  material.customProgramCacheKey=()=> 'football-pitch-paint-lighting';
   material.userData.pitchPaint=PITCH_PAINT;
+  material.userData.pitchLighting={flood,ambient,horizon};
   return material;
 }
 

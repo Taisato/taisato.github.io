@@ -1,11 +1,22 @@
-// Assets finish loading before play and Settings become available.
+import { FootballMenuPages } from './ui/menu-pages.js';
+
 export let footballApp=null;
+const pages=new FootballMenuPages(page=>{
+  if(footballApp)footballApp.setMenuPage(page);
+  else pages.setPage(page);
+});
+window.addEventListener('keydown',event=>{
+  if(footballApp||event.code!=='Escape'||pages.page==='main')return;
+  pages.setPage(pages.page==='credits'?'settings':'main');
+  event.preventDefault();
+});
+
+// Play waits for the assets, while launcher navigation is ready immediately.
 async function bootstrap(){
   const status=document.querySelector('#status');
   const desktop=document.querySelector('#desktop');
   const enter=document.querySelector('#enter-vr');
-  const settings=document.querySelector('#settings');
-  desktop.disabled=true;enter.disabled=true;settings.disabled=true;
+  desktop.disabled=true;enter.disabled=true;
   status.textContent='Loading…';
   try{
     const [{FootballApp},{FootballKeeperMeshes},{FootballAudio}]=await Promise.all([
@@ -13,13 +24,13 @@ async function bootstrap(){
     ]);
     await Promise.all([FootballKeeperMeshes.load(),FootballAudio.load()]);
     status.textContent='';
-    footballApp=new FootballApp();
-    desktop.disabled=false;settings.disabled=false;
+    footballApp=new FootballApp(pages);
+    desktop.disabled=false;
     return footballApp;
   }catch(error){
     console.error('Football initialization failed',error);
     status.textContent='Could not load. Reload.';
-    desktop.disabled=true;enter.disabled=true;settings.disabled=true;
+    desktop.disabled=true;enter.disabled=true;
     return null;
   }
 }

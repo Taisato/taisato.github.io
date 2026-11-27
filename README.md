@@ -1,14 +1,12 @@
 # First Touch — VR football
 
-**Build V43:** Filled, smoothly rounded joints where the crossbar meets each post on both goals.
-
 ## Play
 
-Extract and upload the **entire ZIP**, keeping `src/`, `styles/`, `vendor/` and `assets/` beside **`index.html`**. No install or build step is required. Use HTTPS for VR. All 15 MP3 recordings are included.
+For GitHub Pages, extract the ZIP directly into the repository's existing publishing folder. Overwrite the matching files. Keep **`index.html`**, **`src/`**, **`styles/`**, **`vendor/`** and **`assets/`** together at that level. Open the published HTTPS URL to play, including on a headset.
 
 Choose **Freeroam** or **3 TOUCH**, then **Enter VR** or **Play on screen**. VR uses the existing floor/playing-position calibration. Controls are available in the collapsed help section.
 
-For a local desktop preview, run `python3 -m http.server 8000` from the extracted folder and open `http://localhost:8000/`. Use a server so modules and assets can load.
+For a local desktop preview, run `python3 -m http.server 8000` in the extracted folder and open `http://localhost:8000/`.
 
 ## Menu and slow motion
 
@@ -30,13 +28,15 @@ Choose **Settings** in the launcher or in-game menu. In VR, point and press the 
 | Chromatic aberration | On / Off | On |
 | Noise | On / Off | On |
 | Wind | Normal / Heavy | Normal |
-| Stadium (Freeroam) | Quiet Orbit / Solar Edge / Violet Hour | Quiet Orbit |
+| Stadium (Freeroam) | Black / Blue / Amber / Violet | Black |
 
 Changes apply immediately and are remembered in this browser when local storage is available. **1× turn speed** is the original turning speed. The setting affects the right stick, desktop turn keys and horizontal mouse movement; walking speed and vertical mouse sensitivity stay the same.
 
 The two effects are independent. Disabling aberration removes world colour separation, motion-based separation, and the fringe on the HUD, menus and calibration panels. Disabling noise removes animated grain, including behind the menu. Re-enabling either restores its original strength. Menu slow motion works with either effect disabled.
 
 **Back** returns to the main menu while the world remains in slow motion. Desktop **Esc** does the same from Settings. **Resume** returns to play. Preferences survive restarting a run or changing modes.
+
+Open **Settings → Credits** to see the game and sound attribution and special thanks.
 
 Normal wind plays as a continuous stereo background during gameplay. Select **Wind → Heavy** for the second recording. Switching blends between the ambiences smoothly, and the choice is remembered with the other settings. Older saved settings automatically use Normal without resetting any existing preferences.
 
@@ -64,9 +64,9 @@ Use the menu to switch modes, restart or recalibrate. Recalibration preserves th
 
 ### Abilities
 
-At every ten goals, the world slows to quarter speed and three reels cycle through the eligible ability pool. Each reel stops on a different random ability. To choose one in VR, aim at its box and hold the trigger until the box fills. On desktop, hold the box or its number key (**1**, **2** or **3**). Your choice takes effect on the next chance. Repeatable abilities stack within the run and reset when you start a new one. Last Chance can be picked once per run.
+When your score reaches or passes each ten-goal milestone, the world slows to quarter speed and three reels cycle through the eligible ability pool. Each reel stops on a different random ability. To choose one in VR, aim at its box and hold the trigger until the box fills. On desktop, hold the box or its number key (**1**, **2** or **3**). Your choice takes effect on the next chance. Repeatable abilities stack within the run and reset when you start a new one. Double From Distance and Last Chance can each be picked once per run.
 
-Confirming the ability brings in the next sky. A run starts under Quiet Orbit, then changes to Solar Edge after the first choice and Violet Hour after the second before cycling back. The same open pitch and low sideline stand serve all three skies.
+Confirming the ability brings in the next sky. A run starts under Black, then cycles through Blue, Amber and Violet before returning to Black. Each coloured sky casts a soft tint on the pitch and equipment. Look around to find its planet.
 
 | Ability | Effect per pick |
 | --- | --- |
@@ -80,7 +80,7 @@ Confirming the ability brings in the next sky. A run starts under Quiet Orbit, t
 | Touch Window | Adds 0.5 seconds to the gap needed to count a new touch. |
 | Shot Trace | Shows the flight path behind your shot. Each pick adds 2.5 seconds of visibility. |
 | Woodwork Credit | Your first post or crossbar hit each chance refunds one used touch per pick. |
-| Soft Landing | The ball sheds more horizontal speed on its first bounce after your kick. |
+| Double From Distance | A goal from outside the penalty area counts as two. |
 | First-Time Finish | Scoring with one counted touch restores an extra life per pick, up to your life limit. |
 | Last Chance | One failed chance on your final life gives you a retry with the same starting positions. |
 | Grass Cutter | Firm, low shots lose less speed as they roll on the turf. |

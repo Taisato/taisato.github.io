@@ -511,7 +511,7 @@ class FootballPhysics {
     let event;
     if (newTouch) {
       this._launchedFoot = null;
-      b.shotSurface.touch(b);
+      b.shotSurface.redirect();
       event = {
         type: 'touch', footId: f.id, time: this.time, speed: Math.max(0, approach),
         instep: instep>.5, instepAmount: instep, surface: f.contactPart, position: b.position.clone()
@@ -641,7 +641,6 @@ class FootballPhysics {
     }
     this._normal.set(0, 1, 0); this._surface.set(0, 0, 0);
     this.surfaceFriction(this._normal, this._surface, this.config.groundFriction * normalImpulse);
-    b.shotSurface.land(b,incoming);
     if (b.velocity.y > .15) return;
     const planarSpeed = Math.hypot(b.velocity.x, b.velocity.z);
     if (planarSpeed > 0) {

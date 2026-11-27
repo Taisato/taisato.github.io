@@ -9,7 +9,7 @@ const THREE_TOUCH_ABILITIES = Object.freeze([
   ['touch-window', 'Touch Window', 'Add 0.5 s to the gap needed to count a new touch.', 'touchCooldown', .5],
   ['shot-trace', 'Shot Trace', 'Trace your shot. Add 2.5 s of visibility.', 'shotPathSeconds', 2.5],
   ['woodwork-credit', 'Woodwork Credit', 'First post or bar hit each chance refunds a touch.', 'woodworkCredit', 1],
-  ['soft-landing', 'Soft Landing', 'The first turf bounce takes extra pace off the ball.', 'softLanding', 1],
+  ['double-from-distance', 'Double From Distance', 'A goal from outside the penalty area counts as two.', 'doubleFromDistance', 1],
   ['first-time-finish', 'First-Time Finish', 'A first-touch goal restores one extra life.', 'firstTimeFinish', 1],
   ['last-chance', 'Last Chance', 'One retry from the same spot on your last life.', 'lastChance', 1],
   ['grass-cutter', 'Grass Cutter', 'Firm ground shots hold their speed longer.', 'grassCutter', 1],
@@ -19,7 +19,7 @@ const THREE_TOUCH_ABILITIES = Object.freeze([
 const THREE_TOUCH_BASE_EFFECTS = Object.freeze({
   shotStrength: 1, curve: 1, airShotStrength: 1, playerSpeed: 1, shotPathSeconds: 0,
   maxLives: 3, maxTouches: 3, keeperLevelOffset: 0, touchCooldown: .5,
-  woodworkCredit: 0, softLanding: 0, firstTimeFinish: 0, lastChance: 0, grassCutter: 0, longRangeBonus: 0
+  woodworkCredit: 0, doubleFromDistance: 0, firstTimeFinish: 0, lastChance: 0, grassCutter: 0, longRangeBonus: 0
 });
 
 export { THREE_TOUCH_ABILITIES, THREE_TOUCH_BASE_EFFECTS };

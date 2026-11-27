@@ -26,6 +26,10 @@ class FootballGoalNetVisual {
     for(const net of nets.goals)this.goals.push(this._build(net));
     this.render(1);
   }
+  setSkyLighting(tint) {
+    this.material.color.set(0xe8ece0).multiply(tint);
+    this.frayMaterial.color.copy(this.material.color);
+  }
   _build(net){
     const particles=[],uv=[],indices=[];
     for(const panel of net.panels){

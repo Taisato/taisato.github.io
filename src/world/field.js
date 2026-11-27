@@ -39,11 +39,22 @@ class FootballField {
   _makeLighting() {
     // The reference has an almost black sky but a brightly floodlit playing surface.
     // A baked grass light field avoids ten expensive shadowed spot lights in VR.
-    const sky = new FT.HemisphereLight(0xf3f6e8, 0x2d421d, 1.38);
-    this.root.add(sky);
-    for(const [x,z,intensity,colour] of [[-42,-28,.9,0xf4f6ff],[42,28,.65,0xfff9df]]){
-      const light=new FT.DirectionalLight(colour,intensity);light.position.set(x,22,z);this.root.add(light);
-    }
+    this.skyLight = new FT.HemisphereLight(0xf3f6e8, 0x2d421d, 1.38);
+    this.keyLight = new FT.DirectionalLight(0xf4f6ff, .9);
+    this.fillLight = new FT.DirectionalLight(0xfff9df, .65);
+    this.keyLight.position.set(-42,22,-28);
+    this.fillLight.position.set(42,22,28);
+    this.root.add(this.skyLight,this.keyLight,this.fillLight);
+  }
+
+  setSkyLighting(lighting,horizon) {
+    this.skyLight.color.set(lighting.sky);
+    this.skyLight.groundColor.set(lighting.ground);
+    this.keyLight.color.set(lighting.key);
+    this.fillLight.color.set(lighting.fill);
+    this.pitchLighting.flood.value.set(lighting.pitch);
+    this.pitchLighting.ambient.value.set(lighting.runoff).multiplyScalar(.28);
+    this.pitchLighting.horizon.value.copy(horizon);
   }
 
   _grassTexture() {
@@ -69,6 +80,7 @@ class FootballField {
   _makePitch() {
     const grass=this._grassTexture();this.grassTexture=grass;
     const material=this.material(applyPitchPaint(new FT.MeshBasicMaterial({map:grass,color:0xffffff,vertexColors:true})));
+    this.pitchLighting=material.userData.pitchLighting;
     const positions=[],colours=[],uvs=[];
     const surface=(x,z)=>{
       const outside=Math.max(0,Math.abs(x)-FB.halfWidth,Math.abs(z)-FB.halfLength);

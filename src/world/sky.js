@@ -34,8 +34,8 @@ float stars(vec2 sky, vec2 density, float threshold) {
 }
 
 float ringLine(float radius, float center, float width) {
-  float edge = min(.026, fwidth(radius) * 1.35);
-  return 1.0 - smoothstep(width, width + edge, abs(radius - center));
+  float edge = clamp(fwidth(radius) * .75, .006, .19);
+  return (1.0 - smoothstep(width, width + edge, abs(radius - center))) * min(1.0, .025 / edge);
 }
 
 void main() {
@@ -43,23 +43,22 @@ void main() {
   float altitude = max(0.0, ray.y);
   float horizon = exp(-altitude * 5.5);
   vec3 color = mix(uZenith, uHorizon, horizon);
-  color += uAccent * .015 * exp(-36.0 * abs(ray.y - .009));
 
   vec2 celestial = vec2(atan(ray.x, -ray.z) / 6.283185 + .5, asin(clamp(ray.y, -1.0, 1.0)) / 3.141593 + .5);
   float specks = stars(celestial, vec2(660.0, 294.0), .916);
   float beacons = stars(celestial + vec2(.034, .012), vec2(290.0, 135.0), .96);
   float darkness = smoothstep(0.015, .31, altitude) * .72 + .24;
-  color += (vec3(.45,.60,.84) * specks * .23 + vec3(.74,.82,.98) * beacons * .54) * darkness;
+  color += (vec3(.45,.60,.84) * specks * .085 + vec3(.74,.82,.98) * beacons * .24) * darkness;
 
-  if (dot(ray, uPlanet) > .87) {
+  if (dot(ray, uPlanet) > .98) {
     vec2 local = vec2(dot(ray, uRight), dot(ray, uUp)) / uRadius;
     float radius = length(local);
     float toDisk = abs(radius - 1.0);
-    float aa = clamp(fwidth(radius), .002, .033);
+    float aa = clamp(fwidth(radius) * .68, .002, .32);
     float disc = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, radius);
     vec3 normal = vec3(local, sqrt(max(0.0, 1.0 - radius * radius)));
     float sunlight = dot(normal, uSunlight);
-    float limb = (1.0 - smoothstep(.006, .006 + aa * 1.4, toDisk));
+    float limb = (1.0 - smoothstep(.006, .006 + aa * 1.4, toDisk)) * min(1.0, .07 / aa);
     float rimBrightness = max(0.0, dot(vec3(normalize(local + .00001), .10), uSunlight));
     float ring = 0.0;
     bool orbit = uKind < .5;
@@ -67,7 +66,7 @@ void main() {
       vec2 tilted = vec2(.954 * local.x - .30 * local.y, .30 * local.x + .954 * local.y);
       float ellipse = length(vec2(tilted.x, tilted.y / .38));
       float dust = smoothstep(1.31, 1.43, ellipse) * (1.0 - smoothstep(1.73, 1.88, ellipse));
-      ring = .085 * dust + .22 * ringLine(ellipse, 1.46, .009) + .14 * ringLine(ellipse, 1.70, .013);
+      ring = .048 * dust + .17 * ringLine(ellipse, 1.46, .009) + .10 * ringLine(ellipse, 1.70, .013);
       if (tilted.y > 0.0) color = mix(color, uAccent, ring);
       else ring *= 1.14;
       float latitude = normal.y + normal.x * .20;
@@ -79,7 +78,7 @@ void main() {
       if (tilted.y <= 0.0) color = mix(color, uAccent, ring);
     } else if (uKind < 1.5) {
       float edgeLight = smoothstep(-.98, .72, dot(normalize(local + .00001), vec2(-.52,.86)));
-      color += uAccent * exp(-toDisk * 19.0) * (.028 + .16 * edgeLight);
+      color += uAccent * exp(-toDisk * 15.0) * (.021 + .13 * edgeLight);
       color = mix(color, uPlanetShadow + uPlanetLight * .012 * normal.z, disc);
       color += uAccent * limb * (.15 + .86 * edgeLight);
     } else {
@@ -96,13 +95,31 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+// The planets keep fixed bearings across runs. All sit away from the goal axis.
+function skyDirection(bearing, elevation) {
+  const yaw = bearing * Math.PI / 180, pitch = elevation * Math.PI / 180;
+  return [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+}
+
 const SKY_STAGES = {
-  'quiet-orbit': {zenith:'#060c1c', horizon:'#132a41', shadow:'#0a1324', light:'#699eb4', accent:'#9de3fa',
-    planet:[.275,.235,-.93], radius:.111, sunlight:[-.82,.44,.27], stars:3.6},
-  'solar-edge': {zenith:'#110b1c', horizon:'#34202d', shadow:'#100b1b', light:'#e78852', accent:'#ffd098',
-    planet:[-.145,.218,-.96], radius:.126, sunlight:[-.52,.86,.18], stars:8.2},
-  'violet-hour': {zenith:'#0c0a24', horizon:'#262044', shadow:'#130e2a', light:'#b7a2eb', accent:'#cdbcff',
-    planet:[.34,.290,-.90], radius:.139, sunlight:[-.88,.34,-.33], stars:14.1}
+  black: {
+    lighting:{sky:'#f3f6e8', ground:'#2d421d', key:'#f4f6ff', fill:'#fff9df', pitch:'#ffffff', runoff:'#000000'}
+  },
+  'quiet-orbit': {
+    zenith:'#03060b', horizon:'#0a131e', shadow:'#080d16', light:'#537b96', accent:'#7aa5c1',
+    planet:skyDirection(-62,25), radius:.014, sunlight:[-.82,.44,.27], kind:0, stars:3.6,
+    lighting:{sky:'#d2e9fa', ground:'#223944', key:'#edf5ff', fill:'#e5edf9', pitch:'#e5f1ff', runoff:'#567dc0'}
+  },
+  'solar-edge': {
+    zenith:'#080605', horizon:'#1c130e', shadow:'#110b08', light:'#966447', accent:'#c89066',
+    planet:skyDirection(108,19), radius:.0125, sunlight:[-.52,.86,.18], kind:1, stars:8.2,
+    lighting:{sky:'#f9e6d2', ground:'#463020', key:'#fff1de', fill:'#fff2db', pitch:'#fff3e4', runoff:'#a87246'}
+  },
+  'violet-hour': {
+    zenith:'#06050c', horizon:'#151021', shadow:'#0c0a15', light:'#7a6b9b', accent:'#a698c6',
+    planet:skyDirection(40,56), radius:.016, sunlight:[-.88,.34,-.33], kind:2, stars:14.1,
+    lighting:{sky:'#e9defa', ground:'#3b2c50', key:'#f3eaff', fill:'#f3ecfc', pitch:'#f4eaff', runoff:'#8768b3'}
+  }
 };
 
 class FootballSky {
@@ -126,22 +143,24 @@ class FootballSky {
   }
 
   get name() {return SKY_OPTIONS[this.currentIndex].name;}
-  get accent() {return SKY_STAGES[SKY_OPTIONS[this.currentIndex].id].accent;}
+  get lighting() {return SKY_STAGES[SKY_OPTIONS[this.currentIndex].id].lighting;}
+  get horizonLight() {return this.uniforms.uHorizon.value;}
 
   set(index) {
     if (this.currentIndex === index) return;
     const stage = SKY_STAGES[SKY_OPTIONS[index].id], u = this.uniforms;
-    u.uZenith.value.set(stage.zenith); u.uHorizon.value.set(stage.horizon);
+    this.currentIndex = index;
+    this.mesh.visible = Boolean(stage.planet);
+    u.uHorizon.value.set(stage.horizon??0x000000);
+    if (!this.mesh.visible) return;
+    u.uZenith.value.set(stage.zenith);
     u.uPlanetShadow.value.set(stage.shadow); u.uPlanetLight.value.set(stage.light); u.uAccent.value.set(stage.accent);
     const planet = u.uPlanet.value.set(...stage.planet).normalize();
     const right = u.uRight.value.set(-planet.z,0,planet.x).normalize();
     u.uUp.value.crossVectors(right,planet).normalize();
     u.uSunlight.value.set(...stage.sunlight).normalize();
-    u.uRadius.value = stage.radius; u.uKind.value = index; u.uStarSeed.value = stage.stars;
-    this.currentIndex = index;
+    u.uRadius.value = stage.radius; u.uKind.value = stage.kind; u.uStarSeed.value = stage.stars;
   }
-
-  advance() {this.set((this.currentIndex + 1) % SKY_OPTIONS.length);}
 
   dispose() {
     this.mesh.removeFromParent(); this.geometry.dispose(); this.material.dispose();

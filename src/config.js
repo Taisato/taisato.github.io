@@ -9,9 +9,10 @@ const FB = Object.freeze({
 const footballClamp = (value,min,max)=>Math.max(min,Math.min(max,value));
 
 const SKY_OPTIONS = Object.freeze([
-  Object.freeze({id:'quiet-orbit',name:'Quiet Orbit'}),
-  Object.freeze({id:'solar-edge',name:'Solar Edge'}),
-  Object.freeze({id:'violet-hour',name:'Violet Hour'})
+  Object.freeze({id:'black',name:'Black'}),
+  Object.freeze({id:'quiet-orbit',name:'Blue'}),
+  Object.freeze({id:'solar-edge',name:'Amber'}),
+  Object.freeze({id:'violet-hour',name:'Violet'})
 ]);
 
 export { FB, footballClamp, SKY_OPTIONS };

@@ -27,6 +27,20 @@ class FootballControls {
     this.poseInverse=new FT.Quaternion();this.poseVector=new FT.Vector3();
     this.trackingHoldSeconds=.12;
     this.keys=new Set();this.kickAge=10;
+    this._xrMenuSession=null;this._xrMenuSelections=new Map();
+    this._onXRMenuSelectStart=({inputSource:source})=>{
+      if(!this.calibrationPaused||source?.hand||source?.targetRayMode!=='tracked-pointer')return;
+      const hand=this.hands.find(item=>item.name===source.handedness);
+      const previous=this._xrMenuSelections.get(source);
+      if(hand&&previous?.ended!==false){
+        const alreadySampled=hand.source===source&&hand.trigger&&!previous?.ended;
+        this._xrMenuSelections.set(source,{pending:!alreadySampled,ended:false});
+      }
+    };
+    this._onXRMenuSelectEnd=({inputSource:source})=>{
+      const selection=this._xrMenuSelections.get(source);
+      if(selection)selection.ended=true;
+    };
     this.edges={ball:false,menu:false,calibrate:false};this.left={x:0,y:0};this.turn=0;this.turnSpeedMultiplier=1;this.speedMultiplier=1;this.sprint=false;
     this.hands=['left','right'].map((name,index)=>{
       const visual=field.makeFoot(name);scene.add(visual.root);visual.root.visible=false;
@@ -87,6 +101,7 @@ class FootballControls {
   }
   setDesktop(enabled) {
     this.desktop=enabled;this.poseValid=false;this.keys.clear();this.velocity.set(0,0,0);this.invalidate();
+    if(enabled)this._setXRMenuSession(null);
     this.rig.position.y=-this.floorY;this.resetCalibrationWindow();
     if(enabled){this.headLocal.set(0,1.7,0);this.headOrientation.setFromAxisAngle(new FT.Vector3(1,0,0),this.desktopPitch);}
   }
@@ -102,6 +117,14 @@ class FootballControls {
   validPose(pose) {
     const p=pose?.transform?.position,q=pose?.transform?.orientation;
     return !!(p&&q&&Number.isFinite(p.x+p.y+p.z+q.x+q.y+q.z+q.w)&&Math.hypot(q.x,q.y,q.z,q.w)>.5);
+  }
+  _setXRMenuSession(session) {
+    if(this._xrMenuSession===session)return;
+    this._xrMenuSession?.removeEventListener?.('selectstart',this._onXRMenuSelectStart);
+    this._xrMenuSession?.removeEventListener?.('selectend',this._onXRMenuSelectEnd);
+    this._xrMenuSelections.clear();this._xrMenuSession=session;
+    session?.addEventListener?.('selectstart',this._onXRMenuSelectStart);
+    session?.addEventListener?.('selectend',this._onXRMenuSelectEnd);
   }
   readControllerInput(hand,source) {
     const pad=source.gamepad,connected=hand.source!==source;
@@ -172,15 +195,24 @@ class FootballControls {
     this.left.x=0;this.left.y=0;this.turn=0;this.sprint=false;
     for(const hand of this.hands){hand.previousTracked=hand.tracked;hand.tracked=false;hand.contactTracked=false;hand.rayTracked=false;hand.inputPresent=false;hand.poseMode='none';hand.select=false;}
     if(this.desktop){this.sampleDesktop(dt);return true;}
+    this._setXRMenuSession(session??null);
+    if(!this.calibrationPaused)this._xrMenuSelections.clear();
     // WebXR gamepad state is independent of whether getPose can locate a hand
     // (or the viewer) this frame. Always read it, including release transitions.
     for(const source of session?.inputSources||[]){
       const hand=this.hands.find(h=>h.name===source.handedness);
       if(!hand||source.hand||source.targetRayMode!=='tracked-pointer'||source.gamepad?.connected===false)continue;
       this.readControllerInput(hand,source);
+      const selection=this._xrMenuSelections.get(source);
+      if(selection){
+        // A browser may report primary input between frames or before its polled
+        // Gamepad edge. Each native press owns one menu selection until release.
+        hand.select=selection.pending;selection.pending=false;
+        if(selection.ended)this._xrMenuSelections.delete(source);
+      }
     }
     for(const hand of this.hands)if(!hand.inputPresent){
-      if(hand.source)this.requireCalibrationRelease();
+      if(hand.source){this.requireCalibrationRelease();this._xrMenuSelections.delete(hand.source);}
       hand.source=null;hand.hasPose=false;hand.hasRayGrip=false;hand.poseAge=Infinity;hand.ready=false;
       hand.trigger=hand.instep=hand.grip=hand.previousTrigger=hand.lastA=hand.lastX=hand.lastMenu=false;hand.instepInput=0;
     }
@@ -541,9 +573,9 @@ class FootballControls {
     const actuator=this.hands.find(hand=>hand.name===footId)?.source?.gamepad?.hapticActuators?.[0];
     if(actuator?.pulse)try{const p=actuator.pulse(footballClamp(strength,0,1),35);p?.catch?.(()=>{});}catch{}
   }
-  invalidate(){this.requireCalibrationRelease();for(const hand of this.hands){this.resetFootHistory(hand);hand.ready=false;hand.foot.enabled=false;hand.poseAge=this.trackingHoldSeconds;}this.velocity.set(0,0,0);}
+  invalidate(){this.requireCalibrationRelease();this._xrMenuSelections.clear();for(const hand of this.hands){this.resetFootHistory(hand);hand.ready=false;hand.foot.enabled=false;hand.poseAge=this.trackingHoldSeconds;}this.velocity.set(0,0,0);}
   clearEdges(){this.edges.ball=false;this.edges.menu=false;this.edges.calibrate=false;}
-  dispose(){this.abort.abort();for(const hand of this.hands){hand.ray.geometry.dispose();hand.ray.material.dispose();hand.ray.removeFromParent();hand.visual.root.removeFromParent();}}
+  dispose(){this.abort.abort();this._setXRMenuSession(null);for(const hand of this.hands){hand.ray.geometry.dispose();hand.ray.material.dispose();hand.ray.removeFromParent();hand.visual.root.removeFromParent();}}
 }
 
 export { FootballControls };
