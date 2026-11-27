@@ -4,7 +4,7 @@ const SETTINGS_KEY='first-touch.settings.v1';
 const DEFAULT_SETTINGS=Object.freeze({turnSpeed:1,vrResolution:1,chromatic:true,noise:true,shotTrace:false,wind:'normal',stadium:SKY_OPTIONS[0].id});
 const TURN_SPEED=Object.freeze({min:.25,max:4,step:.25});
 const VR_RESOLUTION_OPTIONS=Object.freeze([
- {scale:1,label:'100% (Native)'},{scale:.85,label:'85%'},{scale:.7,label:'70%'},{scale:.5,label:'50%'}
+ {scale:1,label:'100% (Full)'},{scale:.85,label:'85%'},{scale:.7,label:'70%'},{scale:.5,label:'50%'}
 ].map(Object.freeze));
 
 function normalizeSettings(value){

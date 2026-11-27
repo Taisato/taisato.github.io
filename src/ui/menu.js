@@ -4,11 +4,19 @@ import {DEFAULT_SETTINGS,VR_RESOLUTION_OPTIONS} from '../settings.js';
 import {UI,panel,label,tracked,brand,heart,touch,pitch,button,shape} from './theme.js';
 import {createOpticalMaterial} from '../render/optics.js';
 import {drawAbilitySwitcher,VR_PAGES} from './ability-switcher.js';
+
+function eyeDimensions(width,height,rightWidth,rightHeight){
+ const left=width+' × '+height;
+ if(!(rightWidth>0&&rightHeight>0))return left;
+ if(width===rightWidth&&height===rightHeight)return left+' per eye';
+ return 'L '+left+'   R '+rightWidth+' × '+rightHeight;
+}
+
 class FootballInterface {
  constructor(scene,callbacks,credits={attribution:[],thanksTitle:'',thanks:[]}){
   this.callbacks=callbacks;this.credits=credits;this.hover=null;this.visible=false;this.snapshot={mode:'freeroam',phase:'ready',score:0};this.stateKey='';
   this.page='main';this.category='graphics';this.settings=DEFAULT_SETTINGS;this.settingsKey='';
-  this.renderSize={width:0,height:0,rightWidth:0,rightHeight:0};this.renderSizeLabel='';
+  this.renderSize={};this.renderSizeLabel='';this.outputSizeLabel='';
   this.abilityLevels={};this.abilityPage=0;
   this.canvas=document.createElement('canvas');this.canvas.width=960;this.canvas.height=660;this.ctx=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);
   this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;this.width=1.32;this.height=.9075;
@@ -30,16 +38,19 @@ class FootballInterface {
   const key=[next.turnSpeed,next.vrResolution,next.chromatic,next.noise,next.shotTrace,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
   if(this.visible&&this.page==='settings')this.drawMenu();
  }
- setRenderSize(width,height,rightWidth=width,rightHeight=height){
+ setRenderSize(width,height,rightWidth=width,rightHeight=height,leftViewport,rightViewport){
+  const outW=leftViewport?.z??width,outH=leftViewport?.w??height;
+  const outRW=rightViewport?.z??rightWidth,outRH=rightViewport?.w??rightHeight;
   const size=this.renderSize;
-  if(size.width===width&&size.height===height&&size.rightWidth===rightWidth&&size.rightHeight===rightHeight)return;
-  this.renderSize={width,height,rightWidth,rightHeight};
-  this.renderSizeLabel='';
+  if(size.width===width&&size.height===height&&size.rightWidth===rightWidth&&size.rightHeight===rightHeight&&
+     size.outW===outW&&size.outH===outH&&size.outRW===outRW&&size.outRH===outRH)return;
+  this.renderSize={width,height,rightWidth,rightHeight,outW,outH,outRW,outRH};
+  this.renderSizeLabel='';this.outputSizeLabel='';
   if(width>0&&height>0){
-   const left=width+' × '+height;
-   if(!(rightWidth>0&&rightHeight>0))this.renderSizeLabel='Rendering '+left;
-   else if(width===rightWidth&&height===rightHeight)this.renderSizeLabel='Rendering '+left+' per eye';
-   else this.renderSizeLabel='L '+left+'   R '+rightWidth+' × '+rightHeight;
+   const scene=eyeDimensions(width,height,rightWidth,rightHeight);
+   this.renderSizeLabel=scene.startsWith('L ')?scene:'Rendering '+scene;
+   if(width!==outW||height!==outH||rightWidth!==outRW||rightHeight!==outRH)
+    this.outputSizeLabel='XR output '+eyeDimensions(outW,outH,outRW,outRH);
   }
   if(this.visible&&this.page==='settings'&&this.category==='graphics')this.drawMenu();
  }
@@ -60,7 +71,8 @@ class FootballInterface {
   if(this.category==='graphics'){
    const quality=VR_RESOLUTION_OPTIONS.findIndex(option=>option.scale===s.vrResolution);
    label(c,'VR resolution',48,219,28);
-   label(c,this.renderSizeLabel||'Applies immediately in VR.',48,251,21,UI.muted);
+   label(c,this.renderSizeLabel||'Applies immediately in VR.',48,248,21,UI.muted);
+   if(this.outputSizeLabel)label(c,this.outputSizeLabel,48,272,19,UI.muted);
    label(c,VR_RESOLUTION_OPTIONS[quality].label,691,231,25,UI.mint,'center',750);
    label(c,'Chromatic aberration',48,313,28);label(c,'Noise',48,388,28);
    this.buttons.push(

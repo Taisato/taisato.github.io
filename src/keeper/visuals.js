@@ -2,6 +2,7 @@ import { FT } from "../../vendor/three.js";
 import { footballClamp } from "../config.js";
 import { FootballBoots } from "../player/boots.js";
 import { FootballKeeperMeshes } from "./meshes.js";
+import { KeeperFootwork } from "./footwork.js";
 
 /* One smooth goalkeeper: pre-baked geometry, fixed-length limbs and shared visual/contact poses. */
 class FootballGoalkeeperVisual {
@@ -9,7 +10,8 @@ class FootballGoalkeeperVisual {
   static rests=[[0,.95,0],[0,.94,0],[0,1.506,0],[-.207,1.435,0],[-.207,1.154,0],[-.207,.895,0],[.207,1.435,0],[.207,1.154,0],[.207,.895,0],[-.095,.95,0],[-.095,.52,0],[-.095,.08,0],[.095,.95,0],[.095,.52,0],[.095,.08,0],[-.207,1.154,0],[.207,1.154,0],[-.095,.52,0],[.095,.52,0]];
   constructor(owner){
     this.owner=owner;this.scale=1.04;this.root=new FT.Group();this.group=this.root;this.root.name='Goalkeeper';owner.root.add(this.root);this.root.scale.setScalar(this.scale);
-    this.up=new FT.Vector3(0,1,0);this.down=new FT.Vector3(0,-1,0);this.forward=new FT.Vector3(0,0,-1);this.xAxis=new FT.Vector3(1,0,0);this.zAxis=new FT.Vector3(0,0,1);this.walkDirection=new FT.Vector3();
+    this.up=new FT.Vector3(0,1,0);this.down=new FT.Vector3(0,-1,0);this.forward=new FT.Vector3(0,0,-1);this.xAxis=new FT.Vector3(1,0,0);this.zAxis=new FT.Vector3(0,0,1);
+    this.footwork=new KeeperFootwork(this.scale);this.ankleTargets=[new FT.Vector3(),new FT.Vector3()];this.upperQ=new FT.Quaternion();
     this.v=new FT.Vector3();this.v2=new FT.Vector3();this.v3=new FT.Vector3();this.v4=new FT.Vector3();this.q=new FT.Quaternion();this.q2=new FT.Quaternion();this.bodyQ=new FT.Quaternion();this.yawQ=new FT.Quaternion();this.inverseYaw=new FT.Quaternion();this.hip=new FT.Vector3();this.target=new FT.Vector3();this.leadTarget=new FT.Vector3();this.handCentreLocal=new FT.Vector3(0,-.094,-.009);this.handDirection=new FT.Vector3();this.handPalm=new FT.Vector3();this.handRestPalm=new FT.Vector3();this.handSide=new FT.Vector3();this.handBasis=new FT.Matrix4();
     this.bones=FootballGoalkeeperVisual.boneNames.map((name,i)=>{const b=new FT.Bone();b.name=name;b.position.set(...FootballGoalkeeperVisual.rests[i]);this.root.add(b);return b;});this.bone={};for(let i=0;i<this.bones.length;i++)this.bone[FootballGoalkeeperVisual.boneNames[i]]=this.bones[i];
     const atlas=this.makeAtlas(),map=new FT.CanvasTexture(atlas);map.colorSpace=FT.SRGBColorSpace;map.anisotropy=4;owner.textures.add(map);this.bodyCanvas=atlas;
@@ -50,7 +52,7 @@ class FootballGoalkeeperVisual {
     this.ragdollYaw=new FT.Quaternion();this.ragdollInverseParent=new FT.Quaternion();this.ragdollDelta=new FT.Quaternion();
     this.ragdollNeutral=new FT.Quaternion();this.ragdollDirection=new FT.Vector3();this.ragdollRelative=new FT.Vector3();
     this.ragdollBasis=new FT.Matrix4();this.ragdollRight=new FT.Vector3();this.ragdollUp=new FT.Vector3();this.ragdollBack=new FT.Vector3();
-    this._state={position:new FT.Vector3(0,0,-51.9),yaw:Math.PI,phase:'ready',phaseProgress:0,side:1,targetHeight:1,time:0,lateralSpeed:0};this.updatePose(this._state);
+    this._state={position:new FT.Vector3(0,0,-51.9),yaw:Math.PI,phase:'ready',phaseProgress:0,side:1,targetHeight:1,time:0,lateralSpeed:0};this.footwork.reset(this._state);this.updatePose(this._state);
   }
   smooth(a,b,x){const t=footballClamp((x-a)/(b-a),0,1);return t*t*(3-2*t);}
   mix(a,b,t){return a+(b-a)*t;}
@@ -110,8 +112,8 @@ class FootballGoalkeeperVisual {
     this.v.copy(this.handDirection).negate();this.v2.copy(this.handPalm).negate();
     this.handBasis.makeBasis(this.handSide,this.v,this.v2);return out.setFromRotationMatrix(this.handBasis);
   }
-  updatePose(state){
-    const t=footballClamp(state.phaseProgress||0,0,1),phase=state.phase||'ready',yaw=state.yaw??Math.PI,time=state.time||0,side=state.side>=0?1:-1,dir=side*(Math.cos(yaw)>=0?1:-1),speed=footballClamp(Math.abs(state.lateralSpeed||0)/3,0,1);
+  updatePose(state,alpha=1){
+    const t=footballClamp(state.phaseProgress||0,0,1),phase=state.phase||'ready',yaw=state.yaw??Math.PI,time=state.time||0,side=state.side>=0?1:-1,dir=side*(Math.cos(yaw)>=0?1:-1);
     this.root.position.copy(state.position);this.yawQ.setFromAxisAngle(this.up,yaw);this.root.quaternion.copy(this.yawQ);this.inverseYaw.copy(this.yawQ).invert();
     const height=footballClamp((state.targetHeight||1)/this.scale,.13,2.65),rollTarget=this.mix(1.47,.55,this.smooth(.25,2.65,height));
     let roll=0,hipY=.884+Math.sin(time*2.3)*.004,reach=0,settle=0,recover=0,push=0;
@@ -123,23 +125,35 @@ class FootballGoalkeeperVisual {
     else if(phase==='recover'){
       reach=1;settle=1;recover=this.smooth(0,1,t);roll=1.48*(1-this.smooth(0,.65,t));hipY=this.mix(.238,.50,this.smooth(0,.50,t));hipY=this.mix(hipY,.884,this.smooth(.45,1,t));
     }
-    const activeDive=reach*(1-recover),gait=(phase==='ready'?speed:phase==='push'?footballClamp(Math.abs(state.takeoffSpeed||0)/3,0,1)*(1-push):0),stride=state.position.x*8,sway=Math.sin(stride)*.012*gait;
-    const longitudinal=phase==='ready'?(state.longitudinalSpeed||0):0,walk=footballClamp(Math.abs(longitudinal)/1.55,0,1);
-    const cycle=.92, stance=.56, travel=state.position.z*Math.sign(longitudinal)/cycle;
-    this.walkDirection.set(0,0,Math.sign(longitudinal)).applyQuaternion(this.inverseYaw);
-    hipY-=walk*(.014+.007*Math.cos(travel*Math.PI*4));
-    this.hip.set(sway,hipY,0);this.rotate(this.bodyQ,-.09*(1-activeDive)+this.walkDirection.z*.08*walk,0,-dir*roll);
+    const activeDive=reach*(1-recover),fw=this.footwork;
+    const feetWeight=alpha===null?0:phase==='ready'?1:phase==='push'?1-push:0;
+    if(alpha===null)alpha=1; // The ragdoll stands into a stationary ready pose.
+    const effort=this.mix(fw.previousEffort,fw.effort,alpha)*feetWeight;
+    const weight=this.mix(fw.previousWeight,fw.weight,alpha)*feetWeight;
+    const sway=weight*(.009+.019*effort);
+    hipY-=effort*.038;hipY+=effort*Math.abs(weight)*.012;
+    for(let i=0;i<2;i++){
+      const f=fw.feet[i],a=this.ankleTargets[i];
+      a.set(f.side*.231,.080,-.018+f.side*.018);
+      if(feetWeight>0){
+        this.v3.lerpVectors(f.previous,f.at,alpha).sub(state.position).applyQuaternion(this.inverseYaw).multiplyScalar(1/this.scale);
+        this.v3.y+=.080;a.lerp(this.v3,feetWeight);
+        // When one leg trails a wide shuffle the hips sink, keeping the
+        // planted sole on the grass and leaving a bend in the supporting knee.
+        hipY=Math.min(hipY,a.y+Math.sqrt(Math.max(.18,.857**2-(a.x-sway-f.side*.095)**2-a.z**2)));
+      }
+    }
+    const legLead=this.ankleTargets[1].z-this.ankleTargets[0].z;
+    const twist=footballClamp(legLead*.17,-.09,.09)*feetWeight;
+    this.hip.set(sway,hipY,0);this.rotate(this.bodyQ,-.09*(1-activeDive)-effort*.045,twist,-dir*roll-weight*.021);
+    this.upperQ.copy(this.bodyQ).multiply(this.q.setFromAxisAngle(this.up,-1.7*twist));
     this.bone.pelvis.position.copy(this.hip);this.bone.pelvis.quaternion.copy(this.bodyQ);
-    this.bone.torso.position.set(0,-.01,0).applyQuaternion(this.bodyQ).add(this.hip);this.bone.torso.quaternion.copy(this.bodyQ);
-    this.bone.head.position.set(0,.556,0).applyQuaternion(this.bodyQ).add(this.hip);this.bone.head.quaternion.copy(this.bodyQ).multiply(this.q.setFromAxisAngle(this.xAxis,.045));
+    this.bone.torso.position.set(0,-.01,0).applyQuaternion(this.bodyQ).add(this.hip);this.bone.torso.quaternion.copy(this.upperQ);
+    this.bone.head.position.set(0,.556,0).applyQuaternion(this.upperQ).add(this.hip);this.bone.head.quaternion.copy(this.upperQ).multiply(this.q.setFromAxisAngle(this.xAxis,.045+effort*.035));
     for(let i=0;i<2;i++){
       const s=i?'R':'L',sg=i?1:-1,hand=i?'right':'left',hip=this.bone['thigh'+s].position,ankle=this.bone['foot'+s].position,knee=this.bone['shin'+s].position;
       hip.set(sg*.095,0,0).applyQuaternion(this.bodyQ).add(this.hip);
-      ankle.set(sg*.231-Math.cos(stride+i*Math.PI)*.055*gait,.080+Math.max(0,Math.sin(stride+i*Math.PI))*.045*gait,-.018+Math.sin(stride+i*Math.PI)*.03*gait);
-      const footPhase=travel+i*.5-Math.floor(travel+i*.5),swing=footballClamp((footPhase-stance)/(1-stance),0,1);
-      const strideOffset=cycle*stance*walk*(footPhase<stance?.5-footPhase/stance:this.smooth(0,1,swing)-.5);
-      ankle.addScaledVector(this.walkDirection,strideOffset);
-      ankle.y+=Math.sin(swing*Math.PI)*.094*walk;
+      ankle.copy(this.ankleTargets[i]);
       if(activeDive>0){
         this.v3.set(sg*.15,-.76+(sg===dir?.18:0),sg===dir?-.06:.13).applyQuaternion(this.bodyQ).add(this.hip);this.v3.y+=.18*reach;
         // Side landing: one leg folded slightly above the supporting calf.
@@ -148,19 +162,19 @@ class FootballGoalkeeperVisual {
       if(phase==='recover'){
         const kneel=this.smooth(0,.42,t)*(1-this.smooth(.55,1,t));this.v3.set(sg*.18,.080,sg===dir?-.27:.27);ankle.lerp(this.v3,kneel);ankle.lerp(this.v4.set(sg*.231,.080,-.018),this.smooth(.52,1,t));
       }
-      this.v3.set(0,.04,-1).applyQuaternion(this.bodyQ);this.solveJoint(hip,ankle,.43,.44,this.v3,knee);
-      this.aimBone('thigh'+s,hip,knee);this.aimBone('shin'+s,knee,ankle);
-      const footQ=this.bone['foot'+s].quaternion;this.rotate(footQ,-.04,sg*.08,0);if(activeDive>0)footQ.slerp(this.q.copy(this.bodyQ).multiply(this.q2.setFromAxisAngle(this.xAxis,sg===dir?-.27:.24)),activeDive);
+      const f=fw.feet[i],bootYaw=f.previousYaw+Math.atan2(Math.sin(f.yaw-f.previousYaw),Math.cos(f.yaw-f.previousYaw))*alpha-yaw;
+      const footQ=this.bone['foot'+s].quaternion;this.rotate(footQ,-.04+feetWeight*this.mix(f.previousPitch,f.pitch,alpha),sg*.08+feetWeight*Math.atan2(Math.sin(bootYaw),Math.cos(bootYaw)),0);if(activeDive>0)footQ.slerp(this.q.copy(this.bodyQ).multiply(this.q2.setFromAxisAngle(this.xAxis,sg===dir?-.27:.24)),activeDive);
       const clearance=FootballBoots.groundClearance(footQ,hand)/(FootballBoots.authorScale*this.scale);ankle.y=Math.max(ankle.y,clearance);
       // Clamp after sole support correction; this keeps the ankle continuous
       // with the shin rather than floating a separately rendered boot.
-      this.solveJoint(hip,ankle,.43,.44,this.v3,knee);this.aimBone('thigh'+s,hip,knee);this.aimBone('shin'+s,knee,ankle);
+      this.v3.set(0,.04,-1).applyQuaternion(this.bodyQ);this.solveJoint(hip,ankle,.43,.44,this.v3,knee);this.aimBone('thigh'+s,hip,knee);this.aimBone('shin'+s,knee,ankle);
       this.bone['knee'+s].position.copy(knee);this.bone['knee'+s].quaternion.copy(this.bone['thigh'+s].quaternion).slerp(this.bone['shin'+s].quaternion,.5);
       this.boots[i].position.copy(ankle);this.boots[i].quaternion.copy(footQ);
       const shoulder=this.bone['upperArm'+s].position,wrist=this.bone['hand'+s].position,elbow=this.bone['forearm'+s].position;
-      shoulder.set(sg*.207,.485,0).applyQuaternion(this.bodyQ).add(this.hip);
+      shoulder.set(sg*.207,.485,0).applyQuaternion(this.upperQ).add(this.hip);
       wrist.set(sg*(.32-.035*push),hipY+.13-.025*push,-.34+.035*push);
-      wrist.addScaledVector(this.walkDirection,-strideOffset*.44);
+      wrist.z-=sg*footballClamp(legLead*.19,-.088,.088)*feetWeight;
+      wrist.x+=weight*.014;wrist.y+=effort*.030+sg*weight*.015;
       if(activeDive>0){
         // Work from the frozen predicted ball point, but solve a fixed-length
         // arm: unreachable shots remain genuinely unreachable.

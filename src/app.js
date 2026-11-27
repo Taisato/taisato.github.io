@@ -8,7 +8,7 @@ import { FootballGoalNetVisual } from "./render/net.js";
 import { FootballOptics, setOpticalEffects, OPTICS } from "./render/optics.js";
 import { FootballMotionSources } from "./render/motion.js";
 import { FootballShotTrail } from "./render/shot-trail.js";
-import { nativeXRScale } from "./render/xr-resolution.js";
+import { xrRenderPlan } from "./render/xr-resolution.js";
 import { FootballGoalkeeper } from "./keeper/keeper.js";
 import { FootballControls } from "./player/controls.js";
 import { FootballInterface } from "./ui/menu.js";
@@ -32,7 +32,8 @@ class FootballApp {
     this.settings=readSettings();this.menuPages=menuPages;
     this.scene=new FT.Scene();this.camera=new FT.PerspectiveCamera(90,1,.035,230);this.rig=new FT.Group();
     this.rig.add(this.camera);this.scene.add(this.rig);
-    this.renderer=new FT.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+    // The scene target owns MSAA. The XR output only receives a full-screen triangle.
+    this.renderer=new FT.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
     this.renderer.outputColorSpace=FT.SRGBColorSpace;this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.4));
     this.renderer.xr.enabled=true;this.renderer.xr.setReferenceSpaceType('local-floor');
     if(this.renderer.xr.setFoveation)this.renderer.xr.setFoveation(0);
@@ -276,17 +277,28 @@ class FootballApp {
   async enterVR() {
     if(this.pending||this.session||!navigator.xr)return;this.pending=true;this.ui.enter.disabled=true;this.ui.desktop.disabled=true;this.ui.settings.disabled=true;this.ui.status.textContent='Starting VR…';
     try{
-      const sessionRequest=navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor']});
+      const sessionRequest=navigator.xr.requestSession('immersive-vr',{requiredFeatures:['local-floor'],optionalFeatures:['layers']});
       // Both requests occur inside the entry gesture, before either is awaited.
       this.audio.start();
       const session=await sessionRequest;
       if(this.disposed){await session.end();return;}
       this.session=session;session.addEventListener('end',this.onSessionEnd);session.addEventListener('visibilitychange',this.onXRVisibility);
-      const nativeScale=await nativeXRScale(session,this.renderer.getContext());
+      const plan=await xrRenderPlan(session,this.renderer.getContext());
       if(this.disposed||this.session!==session)return;
-      // XR fixes the output size at entry. Optics scales the game scene live inside it.
-      this.renderer.xr.setFramebufferScaleFactor(nativeScale);
-      await this.renderer.xr.setSession(session);
+      this.optics.xrEyeFloor=plan.eyeFloor;
+      const xr=this.renderer.xr;
+      let scale=plan.scale;
+      for(;;){
+        xr.setFramebufferScaleFactor(scale);
+        try { await xr.setSession(session);break; }
+        catch(error){
+          const allocationFailure=error.name==='OperationError'||error.name==='NotSupportedError'||error.name==='RangeError';
+          if(!allocationFailure||scale<=1||xr.getBaseLayer()||this.disposed||this.session!==session)throw error;
+          // Some runtimes reject an oversized layer. Descend by tenths so the
+          // compositor can keep as much resolution as its allocator accepts.
+          scale=Math.max(1,Math.min(1.5,(Math.ceil(scale*10)-1)/10));
+        }
+      }
       if(this.disposed||this.session!==session)return;
       this.reference=this.renderer.xr.getReferenceSpace();this.reference?.addEventListener('reset',this.onReferenceReset);
       this.controls.setDesktop(false);this.active=true;this.paused=false;this.lastTime=0;
@@ -306,6 +318,7 @@ class FootballApp {
   };
   onReferenceReset=()=>{this.rewardPicker.suspend();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.motion.reset();this.accumulator=0;this.lastTime=0;};
   onSessionEnd=()=>{
+    this.optics.xrEyeFloor=null;
     this.reference?.removeEventListener('reset',this.onReferenceReset);
     this.session?.removeEventListener('end',this.onSessionEnd);this.session?.removeEventListener('visibilitychange',this.onXRVisibility);
     this.session=null;this.reference=null;this.active=false;this.menu=false;this.paused=false;this.pendingInitialPlacement=false;this.pendingStartWhistle=false;
@@ -441,6 +454,7 @@ class FootballApp {
     const speed=Number.isFinite(event.speed)?Math.max(0,event.speed):null;
     const position=event.position||this.physics.ball.position;
     if(event.type==='touch'){
+      if(event.shot)this.goalkeeper.noticeStrike(position);
       this.audio.kick(speed??this.physics.ball.velocity.length(),position);this.controls.pulse(event.footId,.18+Math.min(.5,(event.speed||0)/24));
       if(this.settings.shotTrace&&event.shot&&
         (this.mode==='freeroam'||this.challenge.phase==='ready'||this.challenge.phase==='live')){
@@ -544,7 +558,7 @@ class FootballApp {
         for(let step=0;step<count;step++){
           this.syncBallHistory();
           const sampleAlpha=simulationDt>0?footballClamp(((step+1)*FB.fixedStep-oldAccumulator)/simulationDt,0,1):1;
-          this.goalkeeper.update(FB.fixedStep,this.physics.ball);
+          this.goalkeeper.update(FB.fixedStep,this.physics.ball,roundResult ? null : this.controls.headWorld);
           const feet=this.simulationFeet(sampleAlpha,inputRate);
           if(!blocked&&!roundResult){
             const impact=this.goalkeeper.collidePlayer(feet,sampleAlpha,inputRate);
@@ -603,7 +617,8 @@ class FootballApp {
     this.optics.render();
     if(this.renderer.xr.isPresenting&&this.menu&&this.menuPages.page==='settings'&&this.menuPages.category==='graphics'){
       const {eyeSize,rightEyeSize}=this.optics;
-      this.interface.setRenderSize(eyeSize.x,eyeSize.y,rightEyeSize.x,rightEyeSize.y);
+      const eyes=this.renderer.xr.getCamera().cameras;
+      this.interface.setRenderSize(eyeSize.x,eyeSize.y,rightEyeSize.x,rightEyeSize.y,eyes[0]?.viewport,eyes[1]?.viewport);
     }
   };
   dispose(){

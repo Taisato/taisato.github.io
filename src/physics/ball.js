@@ -4,6 +4,7 @@ import { FootballShotSurface, outsidePenaltyArea } from './shot-surface.js';
 
 const SHOT_FOLLOW_THROUGH_SECONDS = .22;
 const MAX_CURL_PACE_BONUS = .08;
+const MAX_HIGH_SHOT_PACE_BONUS = .12;
 const MAX_RUNUP_PACE_BONUS = .10;
 
 function shotStrengthScale(strength, speed, impulse, drive, approach) {
@@ -288,7 +289,13 @@ class FootballPhysics {
       // Wait for the boot to leave: it must produce the original launch angle,
       // sidespin and follow-through before we shorten the shot's travel time.
       const bend = this.smoothContactBlend((Math.abs(b.spin.y) - 4) / 17);
-      b.curvePace = 1 + MAX_CURL_PACE_BONUS * bend;
+      // A strike aimed high gets there sooner along the same arc. Estimate
+      // its height from the released ball, after lift and contact have settled.
+      const rise = Math.max(0, b.velocity.y);
+      const apex = b.position.y + rise * rise / (2 * Math.max(.001, this.config.gravity));
+      const height = this.smoothContactBlend((apex - .9) / 1.2);
+      const drive = this.smoothContactBlend((Math.hypot(b.velocity.x, b.velocity.z) - 3) / 4);
+      b.curvePace = (1 + MAX_CURL_PACE_BONUS * bend) * (1 + MAX_HIGH_SHOT_PACE_BONUS * height * drive);
       b.velocity.multiplyScalar(b.curvePace);
       b.spin.multiplyScalar(b.curvePace);
       this._curlBoot = null;

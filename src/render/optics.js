@@ -225,6 +225,10 @@ class FootballOptics {
     this.target = null;
     this.targetSize = new FT.Vector2();
     this.vrResolution = 1;
+    this.xrEyeFloor = null;
+    const gl = renderer.getContext?.();
+    this.maxAtlasSize = Math.min(renderer.capabilities?.maxTextureSize || Infinity,
+      gl?.getParameter?.(gl.MAX_RENDERBUFFER_SIZE) || Infinity);
     this.sceneViewports = new WeakMap();
     this.outputViewports = [];
     this.eyeSize = new FT.Vector2();
@@ -390,14 +394,30 @@ class FootballOptics {
     this.material.uniformsNeedUpdate = true;
   }
 
-  _size(destination, scale = 1) {
+  _size(destination, eyes) {
     if(destination) this.targetSize.set(destination.width, destination.height);
     else this.renderer.getDrawingBufferSize(this.targetSize);
-    const w = Math.max(1, Math.round(this.targetSize.x * scale));
-    const h = Math.max(1, Math.round(this.targetSize.y * scale));
+    let fullScale = 1;
+    if(this.xrEyeFloor && eyes?.length){
+      // Some compositors accept the request but return their smaller default.
+      // Render the full eye target, then resolve it to that real output.
+      for(let i=0;i<Math.min(2,eyes.length);i++){
+        const v=eyes[i].viewport;
+        if(v.z>0&&v.w>0)fullScale=Math.max(fullScale,this.xrEyeFloor.width/v.z,this.xrEyeFloor.height/v.w);
+      }
+    }
+    fullScale=Math.min(fullScale,this.maxAtlasSize/Math.max(this.targetSize.x,this.targetSize.y));
+    const scale=fullScale*(eyes?.length?this.vrResolution:1);
+    let w = Math.max(1, Math.round(this.targetSize.x * scale));
+    let h = Math.max(1, Math.round(this.targetSize.y * scale));
+    if(fullScale>1 && eyes?.length===2){
+      const a=eyes[0].viewport,b=eyes[1].viewport;
+      if(a.z===b.z && 2*a.z===this.targetSize.x)w=2*Math.round(a.z*scale);
+      if(a.w===b.w && 2*a.w===this.targetSize.y)h=2*Math.round(a.w*scale);
+    }
     const copyDepth = !!(destination?.isXRRenderTarget && destination.resolveDepthBuffer);
-    // Base MSAA on the output, so lowering scene quality never increases samples.
-    const samples = this.targetSize.x * this.targetSize.y <= 7000000 ? Math.min(2, this.renderer.capabilities?.maxSamples || 0) : 0;
+    // Keep the high-resolution atlas single-sampled, including on a clamped XR layer.
+    const samples = this.targetSize.x * this.targetSize.y * fullScale * fullScale <= 7000000 ? Math.min(2, this.renderer.capabilities?.maxSamples || 0) : 0;
     if(!this.target) {
       const extensions = this.renderer.extensions;
       const halfFloat = !!(extensions?.has?.('EXT_color_buffer_float') || extensions?.has?.('EXT_color_buffer_half_float'));
@@ -464,7 +484,7 @@ class FootballOptics {
     try {
       const eyes = destination?.isXRRenderTarget ?
         (renderer.xr.isPresenting ? renderer.xr.getCamera() : camera).cameras : null;
-      this._size(destination, eyes?.length ? this.vrResolution : 1);
+      this._size(destination, eyes);
       renderer.setRenderTarget(this.target);
       renderer.autoClear = true;
       this._renderScene(scene, camera, eyes);

@@ -25,14 +25,14 @@ Choose **Settings** in the launcher or in-game menu. Settings opens on **Graphic
 | Setting | Options | Default |
 | --- | --- | --- |
 | Turn speed | 0.25×–4×, in 0.25× steps | 1× |
-| VR resolution | 100% (Native), 85%, 70%, 50% | 100% (Native) |
+| VR resolution | 100% (Full), 85%, 70%, 50% | 100% (Full) |
 | Chromatic aberration | On / Off | On |
 | Noise | On / Off | On |
 | Shot Trace | On / Off | Off |
 | Wind | Normal / Heavy | Normal |
 | Stadium (Freeroam) | Blue, Amber, Violet, Jade, Crimson, Turquoise, Gold, Indigo, Rose, Lime | Blue |
 
-**Graphics → VR resolution** applies immediately, including during a run. The in-headset Graphics tab shows the dimensions the game renders for each eye. At 100%, the scene uses the full eye viewport the headset browser grants for native rendering. At 70%, the scene uses 70% of that width and height, roughly half the pixels, before the game scales it for headset output. If the browser does not report its native scale, its recommended eye size sets the baseline. The browser saves your preferences when local storage is available.
+**Graphics → VR resolution** applies immediately, including during a run. On Quest 3, Full requests an eye buffer large enough to cover the panel in both dimensions while preserving the browser’s eye aspect ratio. A 1680 × 1760 recommendation gives a target of approximately 2108 × 2208 per eye. A larger native size reported by the browser takes priority. If the browser limits its output, the game renders at the higher scene resolution and scales it to the granted buffer. Graphics shows the measured scene dimensions and adds an **XR output** line when those sizes differ. At 70%, the scene uses 70% of the full width and height. The browser saves your preferences when local storage is available.
 
 **Gameplay → Turn speed** affects the right stick, desktop turn keys and horizontal mouse movement. The default is **1×**. Shot Trace is also under Gameplay.
 
@@ -54,7 +54,7 @@ Turn on **Shot Trace** to see the path the ball takes after each strike for up t
 
 **Freeroam** uses the full-size pitch, current ball physics and goalkeeper. Right-controller **A** spawns a new ball; keyboard **B** does the same.
 
-A direct kick, a fast body collision or a hard shot to the torso or head can knock the keeper down. The fall follows the direction and point of contact. The keeper gets back to his feet and repositions for the next play.
+When you bring the ball close under control, the keeper steps out inside the six-yard box to narrow the angle. He sets himself for the shot and retreats as you move away. A direct kick, a fast body collision or a hard shot to the torso or head can knock him down. The fall follows the direction and point of contact. The keeper gets back to his feet and repositions for the next play.
 
 **3 TOUCH** starts each chance with a stationary ball and the player facing the guarded goal. You have three touches and three lives. Opening chances are central, 11–15 metres from the goal line. Scoring gradually introduces longer approaches, tighter angles and a more capable keeper. At 15 goals, starts average about 20.7 metres from the goal line, roughly 4.2 metres outside the penalty area. Starting depth remains bounded at 27 metres.
 
@@ -114,7 +114,7 @@ Damage lasts for the **whole 3 TOUCH run**. Scoring, losing one life and advanci
 
 The base ball speed ceiling is 38 m/s. Firm drives shed excess upward speed progressively at launch and keep their horizontal pace and spin. Low lifts use the usual contact response. Rising swings and airborne contacts allow extra height.
 
-After a curved strike leaves the boot, its sidespin determines a pace increase of up to 8%. The ball covers the same arc sooner, including the bend and bounce of low shots.
+After a strike leaves the boot, sidespin can increase its flight pace by up to 8%. Firm shots headed high gain up to another 12% pace as their projected peak rises. This shortens travel time while preserving the flight path.
 
 The follow-through correction addresses repeated contact after a firm strike. A tracked boot can outrun the ball at its speed ceiling, or accelerate and turn upward while the ball is still below that ceiling. These continuing overlaps can redirect an already-launched shot. The contact episode now releases that shot along its established direction rather than treating every overlap as another powered kick. The release also handles position separation, so correcting velocity alone cannot leave an upward position jump.
 

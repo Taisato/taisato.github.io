@@ -1,4 +1,4 @@
-import { FB, footballClamp } from '../config.js';
+import { FB, footballClamp, KEEPER_PEAK_LEVEL } from '../config.js';
 import { outsidePenaltyArea } from '../physics/shot-surface.js';
 import { THREE_TOUCH_BASE_EFFECTS, addAbilityEffects, buildAbilityEffects, normalizeAbilityLevels } from './abilities.js';
 import { abilityReelPool, draftAbilityChoices, emptyAbilitySlots } from './ability-draft.js';
@@ -31,6 +31,9 @@ class FootballChallenge {
   get rewardPool() {return abilityReelPool(this.rewardSlots);}
   get movementSpeedMultiplier() {
     return this.effects.playerSpeed+(this.time<this._recoveryUntil?this.effects.recoverySpeedBonus:0);
+  }
+  get keeperDifficulty() {
+    return Math.max(0,Math.min(this.score,KEEPER_PEAK_LEVEL)-this.effects.keeperLevelOffset);
   }
 
   get snapshot() {
@@ -115,7 +118,7 @@ class FootballChallenge {
   }
 
   _newPracticeChance() {
-    this.chance={difficulty:Math.max(0,this.score-this.effects.keeperLevelOffset)};
+    this.chance={difficulty:this.keeperDifficulty};
     this._prepareChance();
     return this.chance;
   }
@@ -138,7 +141,7 @@ class FootballChallenge {
     this.chance={
       ball:{x,y:FB.ballRadius,z},
       player:{x:x-forwardX*.84,y:0,z:z-forwardZ*.84},
-      yaw:Math.atan2(-forwardX,-forwardZ),difficulty:Math.max(0,this.score-this.effects.keeperLevelOffset)
+      yaw:Math.atan2(-forwardX,-forwardZ),difficulty:this.keeperDifficulty
     };
     this._prepareChance();
     return this.chance;
