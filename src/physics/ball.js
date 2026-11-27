@@ -3,6 +3,7 @@ import { FB } from "../config.js";
 import { FootballShotSurface, outsidePenaltyArea } from './shot-surface.js';
 
 const SHOT_FOLLOW_THROUGH_SECONDS = .22;
+const MAX_CURL_PACE_BONUS = .08;
 
 /* Football rigid sphere simulation; metres, seconds, kilograms.
    The moving boot and visible shin supply contact velocity, lift and spin. Low-speed
@@ -30,7 +31,7 @@ class FootballPhysics {
     this.ball = {
       position: new V(0, this.config.radius, 0), velocity: new V(), spin: new V(),
       orientation: new FT.Quaternion(), radius: this.config.radius,
-      mass: this.config.mass, curveMultiplier: 1, airRetention: 0, shotSurface: new FootballShotSurface()
+      mass: this.config.mass, curveMultiplier: 1, curvePace: 1, airRetention: 0, shotSurface: new FootballShotSurface()
     };
     this.events = [];
     this.time = 0;
@@ -59,7 +60,6 @@ class FootballPhysics {
     this._launchedFoot = null;
     this._followThroughUntil = 0;
     this._launchDirection = new V();
-    this._landingPrediction = null;
     this.setPlayerAbilities(null);
     this.resetShotHistory();
   }
@@ -83,6 +83,8 @@ class FootballPhysics {
   }
 
   resetShotHistory() {
+    this._curlBoot = null;
+    this.ball.curvePace = 1;
     this._openingStrike = true;
     this._livePlayerShot = false;
     this._frameRebound = false;
@@ -93,6 +95,8 @@ class FootballPhysics {
   }
 
   redirectPlayerShot(surface) {
+    this._curlBoot = null;
+    this.ball.curvePace = 1;
     this.ball.shotSurface.redirect();
     this.ball.airRetention = 0;
     this._frameRebound = surface === 'frame' && this._livePlayerShot && !this._framePaceUsed;
@@ -116,6 +120,7 @@ class FootballPhysics {
   }
 
   clearContacts() {
+    if (this._curlBoot) this._curlBoot.contact = false;
     this.footStates.clear(); this._launchedFoot = null;
   }
 
@@ -219,7 +224,7 @@ class FootballPhysics {
     if (!Number.isFinite(b.position.lengthSq() + b.velocity.lengthSq() + b.spin.lengthSq())) {
       this.reset(new FT.Vector3(0, b.radius, 0)); return;
     }
-    b.velocity.clampLength(0, this._shotSpeedLimit || cfg.maxSpeed);
+    b.velocity.clampLength(0, (this._shotSpeedLimit || cfg.maxSpeed) * b.curvePace);
     const footCount = this.prepareFeet(feet, dt);
     if (nets) nets.beginStep(dt, this, this.footData, footCount);
     let travel = b.velocity.length() * dt;
@@ -239,9 +244,9 @@ class FootballPhysics {
       // Rules observe the resolved path, including crossings within a fixed
       // step. The optional observer never changes the contact simulation.
       if(observeMotion)observeMotion(this._previous,b.position,b.radius,this.events);
-      b.velocity.clampLength(0, this._shotSpeedLimit || cfg.maxSpeed);
-      if(this._shotSpeedLimit && b.velocity.lengthSq() <= cfg.maxSpeed ** 2) this._shotSpeedLimit = 0;
-      b.spin.clampLength(0, cfg.maxSpin);
+      b.velocity.clampLength(0, (this._shotSpeedLimit || cfg.maxSpeed) * b.curvePace);
+      if(this._shotSpeedLimit && b.velocity.lengthSq() <= (cfg.maxSpeed * b.curvePace) ** 2) this._shotSpeedLimit = 0;
+      b.spin.clampLength(0, cfg.maxSpin * b.curvePace);
       const spinSpeed = b.spin.length();
       if (spinSpeed > .001) {
         this._spinAxis.copy(b.spin).multiplyScalar(1 / spinSpeed);
@@ -276,12 +281,24 @@ class FootballPhysics {
         }
       }
     }
+    if (this._curlBoot && !this._curlBoot.contact) {
+      // Wait for the boot to leave: it must produce the original launch angle,
+      // sidespin and follow-through before we shorten the shot's travel time.
+      const bend = this.smoothContactBlend((Math.abs(b.spin.y) - 4) / 17);
+      b.curvePace = 1 + MAX_CURL_PACE_BONUS * bend;
+      b.velocity.multiplyScalar(b.curvePace);
+      b.spin.multiplyScalar(b.curvePace);
+      this._curlBoot = null;
+    }
   }
 
   integrate(dt) {
     const b = this.ball, speed = b.velocity.length();
+    // Replaying a path k times faster scales velocity and spin by k, and
+    // acceleration by k². Use the original path speed for the drag coefficient.
+    const pace = b.curvePace, accelerationScale = pace * pace;
     // Smooth drag crisis approximation; the aerodynamic coefficient is bounded.
-    const drag = .0108 + .0075 / (1 + Math.exp((speed - 16) * .45));
+    const drag = .0108 + .0075 / (1 + Math.exp((speed / pace - 16) * .45));
     this._cross.crossVectors(b.spin, b.velocity).multiplyScalar(this.config.magnus);
     // A little more yaw-spin bend without increasing topspin/backspin lift.
     const cfg = this.config;
@@ -290,26 +307,27 @@ class FootballPhysics {
     this._cross.z-=sideCurve*b.velocity.x;
     const curve = b.curveMultiplier + (b.shotSurface.curveOnGrass && b.position.y <= b.radius + .00015 ? .40 : 0);
     const curveMagnitude = curve > 1 ? this._cross.length() : 0;
-    this._cross.clampLength(0, cfg.maxCurveAcceleration);
+    const maxCurve = cfg.maxCurveAcceleration * accelerationScale;
+    this._cross.clampLength(0, maxCurve);
     if (curveMagnitude > 0) {
       // Boost the existing yaw-spin component after the base cap so even high-spin
       // strikes gain bend without changing the lift generated by topspin/backspin.
-      const limited = Math.min(1, cfg.maxCurveAcceleration / curveMagnitude);
+      const limited = Math.min(1, maxCurve / curveMagnitude);
       const boost = cfg.magnus * cfg.sideCurveMultiplier * b.spin.y * (curve - 1) * limited;
       this._cross.x += boost * b.velocity.z;
       this._cross.z -= boost * b.velocity.x;
     }
     b.velocity.addScaledVector(this._cross, dt);
     const dragFactor = 1 / (1 + drag * speed * dt);
-    if (b.airRetention > 0 && (b.position.y > b.radius + .00015 || b.velocity.y > .15)) {
+    if (b.airRetention > 0 && (b.position.y > b.radius + .00015 || b.velocity.y > .15 * pace)) {
       const planarDrag = dragFactor + (1 - dragFactor) * b.airRetention;
       b.velocity.x *= planarDrag;
       b.velocity.y *= dragFactor;
       b.velocity.z *= planarDrag;
     } else b.velocity.multiplyScalar(dragFactor);
-    b.velocity.y -= this.config.gravity * dt;
+    b.velocity.y -= this.config.gravity * accelerationScale * dt;
     b.position.addScaledVector(b.velocity, dt);
-    b.spin.multiplyScalar(Math.exp(-this.config.airSpinDecay * dt));
+    b.spin.multiplyScalar(Math.exp(-this.config.airSpinDecay * dt * pace));
   }
 
   copyFlight(source) {
@@ -318,36 +336,9 @@ class FootballPhysics {
     b.velocity.copy(source.velocity);
     b.spin.copy(source.spin);
     b.curveMultiplier = source.curveMultiplier ?? 1;
+    b.curvePace = source.curvePace ?? 1;
     b.airRetention = source.airRetention ?? 0;
     b.shotSurface.copy(source.shotSurface);
-  }
-
-  predictLanding(target, seconds = 1) {
-    const b = this.ball;
-    if (b.position.y <= b.radius + .05 || !(seconds > 0) ||
-        !Number.isFinite(seconds + b.position.lengthSq() + b.velocity.lengthSq() + b.spin.lengthSq())) return false;
-    const ghost = this._landingPrediction ??= new FootballPhysics(this.config);
-    ghost.copyFlight(b);
-    const {position, velocity, radius} = ghost.ball;
-    const speedLimit = this._shotSpeedLimit || this.config.maxSpeed;
-    for (let age = 0; age < seconds - 1e-9;) {
-      const frame = Math.min(FB.fixedStep, seconds - age);
-      velocity.clampLength(0, speedLimit);
-      const steps = Math.max(1, Math.min(24, Math.ceil(velocity.length() * frame / .042)));
-      const dt = frame / steps;
-      for (let step = 0; step < steps; step++) {
-        const {x, y, z} = position;
-        ghost.integrate(dt);
-        if (position.y <= radius) {
-          const part = (y - radius) / (y - position.y);
-          target.set(x + (position.x - x) * part, 0, z + (position.z - z) * part);
-          return true;
-        }
-        velocity.clampLength(0, speedLimit);
-      }
-      age += frame;
-    }
-    return false;
   }
 
   closestPoint(point, a, c, target) {
@@ -654,6 +645,7 @@ class FootballPhysics {
       const launchSpeed = b.velocity.length();
       if (localDrive > 2.2 && launchSpeed >= cfg.footStrikeBlendStart) {
         event.shot = true;
+        this._curlBoot = state;
         event.openingStrike = this._openingStrike;
         this._openingStrike = false;
         this._livePlayerShot = true;
@@ -722,16 +714,17 @@ class FootballPhysics {
       return;
     }
     b.position.y = r;
+    const pace = b.curvePace;
     const incoming = Math.max(0, -b.velocity.y);
     if (trackImpact && this._sawFlight) {
       this._sawFlight = false;
-      if (incoming > .105) this.events.push({type: 'bounce', time: this.time, speed: incoming, position: b.position.clone()});
-      if (incoming > .65) this._lastBounceTime = this.time;
+      if (incoming > .105 * pace) this.events.push({type: 'bounce', time: this.time, speed: incoming, position: b.position.clone()});
+      if (incoming > .65 * pace) this._lastBounceTime = this.time;
     }
     b.shotSurface.land();
-    let normalImpulse = this.config.gravity * dt;
+    let normalImpulse = this.config.gravity * pace * pace * dt;
     if (b.velocity.y < 0) {
-      if (incoming > .65) {
+      if (incoming > .65 * pace) {
         b.velocity.y = incoming * this.config.restitution;
         normalImpulse += incoming * (1 + this.config.restitution);
       } else {
@@ -740,8 +733,8 @@ class FootballPhysics {
     }
     this._normal.set(0, 1, 0); this._surface.set(0, 0, 0);
     this.surfaceFriction(this._normal, this._surface, this.config.groundFriction * normalImpulse);
-    if (b.velocity.y > .15) return;
-    const planarSpeed = Math.hypot(b.velocity.x, b.velocity.z);
+    if (b.velocity.y > .15 * pace) return;
+    const planarSpeed = Math.hypot(b.velocity.x, b.velocity.z) / pace;
     if (planarSpeed > 0) {
       // The final slow roll sheds slightly more energy. Smooth entry/exit keep
       // tiny nudges and the fast part of a pass free of a braking threshold.
@@ -758,13 +751,13 @@ class FootballPhysics {
         (1-this.smoothContactBlend((planarSpeed-6)/3));
       const resistance=this.config.rollingResistance+this.config.slowRollingResistance*slowBand+
         this.config.controlRollingResistance*controlBand+this.config.puntRollingResistance*puntBand;
-      const factor = Math.max(0, 1 - resistance * b.shotSurface.rollingFactor(planarSpeed) * dt / planarSpeed);
+      const factor = Math.max(0, 1 - resistance * b.shotSurface.rollingFactor(planarSpeed) * (dt * pace) / planarSpeed);
       b.velocity.x *= factor; b.velocity.z *= factor;
       // Rolling resistance removes both translational and rolling energy.
       b.spin.x *= factor; b.spin.z *= factor;
     }
-    b.spin.y *= Math.exp(-b.shotSurface.yawSpinDecay() * dt);
-    if (Math.hypot(b.velocity.x, b.velocity.z) < .025 && Math.hypot(b.spin.x, b.spin.z) < .3) {
+    b.spin.y *= Math.exp(-b.shotSurface.yawSpinDecay() * dt * pace);
+    if (Math.hypot(b.velocity.x, b.velocity.z) < .025 * pace && Math.hypot(b.spin.x, b.spin.z) < .3 * pace) {
       b.velocity.x = 0; b.velocity.z = 0; b.spin.x = 0; b.spin.z = 0;
     }
   }

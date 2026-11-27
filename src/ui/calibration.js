@@ -10,7 +10,7 @@ class FootballCalibrationPanel {
  update(controls,active){
   const cal=controls.calibration,waiting=!!cal?.awaitRelease;this.mesh.visible=!!(active&&!controls.desktop&&(!controls.isCalibrated||waiting));if(!this.mesh.visible)return;
   const stage=cal?.stage||'floor',ready=stage==='ready',progress=Math.round(footballClamp(cal?.progress||0,0,1)*40)/40,reason=cal?.reason||'';const key=[stage,progress,reason,waiting].join('|');if(key===this.key)return;this.key=key;
-  const c=this.context;panel(c,900,560);tracked(c,'CALIBRATE',44,47,18,UI.muted,3);tracked(c,ready?'02 / 02':stage==='floor'?'01 / 02':'02 / 02',728,47,18,UI.mint,2);label(c,ready?'READY':stage==='floor'?'FLOOR':'PLAYING POSITION',44,106,40,UI.white,'left',800);
+  const c=this.context;panel(c,900,560);tracked(c,'CALIBRATE',44,47,18,UI.muted,3);label(c,ready?'READY':stage==='floor'?'FLOOR':'PLAYING POSITION',44,106,40,UI.white,'left',800);
   label(c,ready?'Release both triggers.':stage==='floor'?'Controllers to the floor.':'Stand up. Hold your normal playing grip.',44,157,25,UI.muted,'left',500);
   c.save();c.translate(450,ready?278:stage==='floor'?264:271);c.lineCap='round';c.lineJoin='round';c.strokeStyle=UI.muted;c.lineWidth=7;
   if(stage==='floor'){

@@ -12,6 +12,7 @@ const SKY_FRAGMENT = `
 varying vec3 vWorldDirection;
 uniform vec3 uZenith, uHorizon, uPlanetShadow, uPlanetLight, uAccent;
 uniform vec3 uPlanet, uRight, uUp, uSunlight;
+uniform vec2 uRingAxis;
 uniform float uRadius, uKind, uStarSeed;
 
 float hash(vec2 p) {
@@ -36,6 +37,35 @@ float stars(vec2 sky, vec2 density, float threshold) {
 float ringLine(float radius, float center, float width) {
   float edge = clamp(fwidth(radius) * .75, .006, .19);
   return (1.0 - smoothstep(width, width + edge, abs(radius - center))) * min(1.0, .025 / edge);
+}
+
+vec3 surfaceAlbedo(vec3 normal) {
+  if (uKind < 2.5) {
+    float bands = .95 + .05 * sin((normal.y - normal.x * .22) * 16.0);
+    return uPlanetLight * bands;
+  }
+  if (uKind < 3.5) {
+    // Broad shelves and a polar cap keep the ocean legible on a tiny disc.
+    float coast = normal.y + .34 * sin(3.7 * normal.x - 1.8 * normal.z)
+                + .15 * cos(5.7 * normal.z + 1.9 * normal.y)
+                + .08 * sin(6.8 * normal.x - 3.6 * normal.y);
+    vec3 ocean = uPlanetLight * (.68 + .11 * normal.z);
+    vec3 land = mix(uPlanetLight,uAccent,.25);
+    vec3 surface = mix(ocean, land, smoothstep(.01,.12,coast));
+    return mix(surface, uAccent, .55 * smoothstep(.75,.93,normal.y + .18 * normal.x));
+  }
+  if (uKind < 4.5) {
+    float basin = smoothstep(.88,.98,dot(normal,vec3(-.40,.12,.909)));
+    float plain = smoothstep(.90,.99,dot(normal,vec3(.42,-.43,.80)));
+    return uPlanetLight * (1.0 - .27 * basin - .19 * plain);
+  }
+  if (uKind < 5.5) {
+    float ridge = abs(normal.y + .47 * normal.x + .16 * sin(3.0 * normal.z));
+    return mix(uPlanetLight, uAccent, .33 * smoothstep(.33,.64,ridge));
+  }
+  float latitude = normal.y - .21 * normal.x + .07 * sin(3.3 * normal.x + normal.z);
+  float belt = smoothstep(-.55,.68,cos(latitude * 11.0 + .38 * sin(latitude * 7.0)));
+  return mix(uPlanetLight * .78,mix(uPlanetLight,uAccent,.18),belt);
 }
 
 void main() {
@@ -63,7 +93,8 @@ void main() {
     float ring = 0.0;
     bool orbit = uKind < .5;
     if (orbit) {
-      vec2 tilted = vec2(.954 * local.x - .30 * local.y, .30 * local.x + .954 * local.y);
+      vec2 tilted = vec2(uRingAxis.x * local.x - uRingAxis.y * local.y,
+                         uRingAxis.y * local.x + uRingAxis.x * local.y);
       float ellipse = length(vec2(tilted.x, tilted.y / .38));
       float dust = smoothstep(1.31, 1.43, ellipse) * (1.0 - smoothstep(1.73, 1.88, ellipse));
       ring = .048 * dust + .17 * ringLine(ellipse, 1.46, .009) + .10 * ringLine(ellipse, 1.70, .013);
@@ -83,8 +114,8 @@ void main() {
       color += uAccent * limb * (.15 + .86 * edgeLight);
     } else {
       float phase = smoothstep(-.055, .62, sunlight);
-      float bands = .95 + .05 * sin((normal.y - normal.x * .22) * 16.0);
-      vec3 surface = mix(uPlanetShadow, uPlanetLight * bands, phase);
+      float diffuse = uKind > 2.5 ? .73 + .27 * max(0.0,sunlight) : 1.0;
+      vec3 surface = mix(uPlanetShadow, surfaceAlbedo(normal) * diffuse, phase);
       color += uAccent * exp(-toDisk * 20.0) * .04 * rimBrightness;
       color = mix(color, surface, disc);
       color += uAccent * limb * (.055 + .56 * rimBrightness);
@@ -119,6 +150,41 @@ const SKY_STAGES = {
     zenith:'#06050c', horizon:'#151021', shadow:'#0c0a15', light:'#7a6b9b', accent:'#a698c6',
     planet:skyDirection(40,56), radius:.016, sunlight:[-.88,.34,-.33], kind:2, stars:14.1,
     lighting:{sky:'#e9defa', ground:'#3b2c50', key:'#f3eaff', fill:'#f3ecfc', pitch:'#f4eaff', runoff:'#8768b3'}
+  },
+  jade: {
+    zenith:'#050b08', horizon:'#0c2017', shadow:'#081611', light:'#568c78', accent:'#a0c5ad',
+    planet:skyDirection(73,22), radius:.0154, sunlight:[.64,.49,.59], kind:3, stars:21.7,
+    lighting:{sky:'#d8efe0', ground:'#284235', key:'#ebf9ed', fill:'#e0efe8', pitch:'#e5f8eb', runoff:'#5c967b'}
+  },
+  crimson: {
+    zenith:'#0c0506', horizon:'#241012', shadow:'#190b0c', light:'#a95952', accent:'#d39b80',
+    planet:skyDirection(-116,16), radius:.0137, sunlight:[-.77,-.26,.58], kind:4, stars:28.4,
+    lighting:{sky:'#f4dcd7', ground:'#4a2b2e', key:'#ffede4', fill:'#f6e1df', pitch:'#fbece7', runoff:'#ad5962'}
+  },
+  turquoise: {
+    zenith:'#040b0d', horizon:'#0b2023', shadow:'#0a171a', light:'#679eaa', accent:'#b8ded9',
+    planet:skyDirection(-36,39), radius:.0129, sunlight:[.77,.44,-.18], kind:5, stars:32.2,
+    lighting:{sky:'#cfedf0', ground:'#244447', key:'#e5f8f7', fill:'#dff1f4', pitch:'#e3f6f7', runoff:'#4c97a2'}
+  },
+  gold: {
+    zenith:'#0c0a04', horizon:'#211d0c', shadow:'#171306', light:'#a89259', accent:'#cebd87',
+    planet:skyDirection(137,29), radius:.0132, sunlight:[.76,.53,.38], kind:0, ringTilt:-36, stars:39.6,
+    lighting:{sky:'#f2eccb', ground:'#444023', key:'#fff6df', fill:'#f7f2dc', pitch:'#fcf5df', runoff:'#a79a4c'}
+  },
+  indigo: {
+    zenith:'#060713', horizon:'#141a32', shadow:'#0a1022', light:'#7684b8', accent:'#a2b1e0',
+    planet:skyDirection(-87,48), radius:.0156, sunlight:[.36,-.91,-.30], kind:2, stars:44.3,
+    lighting:{sky:'#dce2f8', ground:'#2a314e', key:'#e9edff', fill:'#e3e9fb', pitch:'#e8edff', runoff:'#6577b8'}
+  },
+  rose: {
+    zenith:'#0e070b', horizon:'#241221', shadow:'#1a1018', light:'#b47f94', accent:'#d6aab6',
+    planet:skyDirection(55,33), radius:.0148, sunlight:[-.68,.19,.72], kind:6, stars:48.9,
+    lighting:{sky:'#f3dfe9', ground:'#493043', key:'#ffedf2', fill:'#f6e5f0', pitch:'#faeaf3', runoff:'#ae7195'}
+  },
+  lime: {
+    zenith:'#080b04', horizon:'#1a210c', shadow:'#141907', light:'#8c9859', accent:'#bcc48a',
+    planet:skyDirection(-139,35), radius:.0134, sunlight:[.51,.71,-.39], kind:4, stars:54.5,
+    lighting:{sky:'#e4efd0', ground:'#394529', key:'#f4f9e4', fill:'#edf3de', pitch:'#eff6df', runoff:'#8b9b52'}
   }
 };
 
@@ -127,7 +193,7 @@ class FootballSky {
     const color = () => ({value:new FT.Color()}), vector = () => ({value:new FT.Vector3()});
     this.uniforms = {
       uZenith:color(), uHorizon:color(), uPlanetShadow:color(), uPlanetLight:color(), uAccent:color(),
-      uPlanet:vector(), uRight:vector(), uUp:vector(), uSunlight:vector(),
+      uPlanet:vector(), uRight:vector(), uUp:vector(), uSunlight:vector(), uRingAxis:{value:new FT.Vector2()},
       uRadius:{value:.1}, uKind:{value:0}, uStarSeed:{value:0}
     };
     // The camera can travel 70 m across the original run-off area. The dome
@@ -159,6 +225,8 @@ class FootballSky {
     const right = u.uRight.value.set(-planet.z,0,planet.x).normalize();
     u.uUp.value.crossVectors(right,planet).normalize();
     u.uSunlight.value.set(...stage.sunlight).normalize();
+    const tilt = (stage.ringTilt ?? 17.46) * Math.PI / 180;
+    u.uRingAxis.value.set(Math.cos(tilt),Math.sin(tilt));
     u.uRadius.value = stage.radius; u.uKind.value = stage.kind; u.uStarSeed.value = stage.stars;
   }
 

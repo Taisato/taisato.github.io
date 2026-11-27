@@ -55,11 +55,6 @@ const THREE_TOUCH_TREES = Object.freeze([
     ['Once per run, a miss on your last life gives a same-spot retry.', {lastChance: 1}],
     ['Start a chance or retry on your last life with one extra touch.', {lastLifeTouch: 1}],
     ['Your run can use two retries in total.', {lastChance: 1}]
-  ]],
-  ['shot-trace', 'Shot Trace', [
-    ['See each actual shot trail for 2.5 s.', {shotPathSeconds: 2.5}],
-    ['Mark the first bounce or keeper deflection and retain the trail on a retry until kicking.', {shotTraceMarkers: 1}],
-    ['See an airborne ball’s predicted landing point up to one second ahead.', {shotTracePrediction: 1}]
   ]]
 ].map(([treeId, name, phases]) => Object.freeze({
   id: treeId,
@@ -91,8 +86,7 @@ const THREE_TOUCH_BASE_EFFECTS = Object.freeze({
   lowCurveBounce: 0, grassCutter: 0, grassAirLanding: 0, volleyBounceGrace: 0, volleyDriven: 0,
   woodworkCredit: 0, woodworkCarry: 0, woodworkReboundPace: 0, recoverySpeedBonus: 0, freeRecoveryTouch: 0,
   gentleTouchCooldown: 0, freeLastTrap: 0, longRangeBonus: 0, longRangeBank: 0,
-  keeperReverseDelay: 0, keeperWrongFootParry: 0, lastChance: 0, lastLifeTouch: 0,
-  shotPathSeconds: 0, shotTraceMarkers: 0, shotTracePrediction: 0
+  keeperReverseDelay: 0, keeperWrongFootParry: 0, lastChance: 0, lastLifeTouch: 0
 });
 
 function normalizeAbilityLevels(levels) {

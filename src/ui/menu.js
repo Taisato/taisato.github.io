@@ -1,12 +1,13 @@
 import { FT } from "../../vendor/three.js";
 import {SKY_OPTIONS} from '../config.js';
+import {DEFAULT_SETTINGS} from '../settings.js';
 import {UI,panel,label,tracked,brand,heart,touch,pitch,button,shape} from './theme.js';
 import {createOpticalMaterial} from '../render/optics.js';
 import {drawAbilitySwitcher,VR_PAGES} from './ability-switcher.js';
 class FootballInterface {
  constructor(scene,callbacks,credits={attribution:[],thanksTitle:'',thanks:[]}){
   this.callbacks=callbacks;this.credits=credits;this.hover=null;this.visible=false;this.snapshot={mode:'freeroam',phase:'ready',score:0};this.stateKey='';
-  this.page='main';this.settings={turnSpeed:1,chromatic:true,noise:true,wind:'normal',stadium:SKY_OPTIONS[0].id};this.settingsKey='';
+  this.page='main';this.settings=DEFAULT_SETTINGS;this.settingsKey='';
   this.abilityLevels={};this.abilityPage=0;
   this.canvas=document.createElement('canvas');this.canvas.width=960;this.canvas.height=660;this.ctx=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);
   this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;this.width=1.32;this.height=.9075;
@@ -21,9 +22,10 @@ class FootballInterface {
  setSettings(settings={}){
   const next={turnSpeed:Number.isFinite(settings.turnSpeed)?Math.max(.25,Math.min(4,settings.turnSpeed)):this.settings.turnSpeed,
    chromatic:typeof settings.chromatic==='boolean'?settings.chromatic:this.settings.chromatic,noise:typeof settings.noise==='boolean'?settings.noise:this.settings.noise,
+   shotTrace:typeof settings.shotTrace==='boolean'?settings.shotTrace:this.settings.shotTrace,
    wind:settings.wind==='normal'||settings.wind==='heavy'?settings.wind:this.settings.wind,
    stadium:SKY_OPTIONS.some(option=>option.id===settings.stadium)?settings.stadium:this.settings.stadium};
-  const key=[next.turnSpeed,next.chromatic,next.noise,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
+  const key=[next.turnSpeed,next.chromatic,next.noise,next.shotTrace,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
   if(this.visible&&this.page==='settings')this.drawMenu();
  }
  setPage(page){
@@ -34,14 +36,16 @@ class FootballInterface {
  setAbilityLevels(levels){this.abilityLevels=levels;if(this.visible&&this.page==='abilities')this.drawMenu();}
  drawSettings(){
   const c=this.ctx,s=this.settings;panel(c,960,660);brand(c,48,58);tracked(c,'SETTINGS',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
-  const freeroam=this.snapshot.mode==='freeroam',h=freeroam?62:72,gap=freeroam?76:96;
-  const turn=128,chromatic=turn+gap,noise=turn+2*gap,wind=turn+3*gap;
+  const freeroam=this.snapshot.mode==='freeroam',h=freeroam?56:62,gap=freeroam?64:76;
+  const turn=128,chromatic=turn+gap,noise=chromatic+gap,trace=noise+gap,wind=trace+gap;
   label(c,'Turn speed',48,turn+h/2,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,turn+h/2,38,UI.white,'center',800);
   label(c,'Chromatic aberration',48,chromatic+h/2,28);label(c,'Noise',48,noise+h/2,28);label(c,'Wind',48,wind+h/2,28);
+  label(c,'Shot Trace',48,trace+17,28);label(c,'Shows each shot’s path for 2.5 seconds.',48,trace+43,19,UI.muted);
   this.buttons=[{id:'turn-down',label:'−',x:492,y:turn,w:112,h,disabled:s.turnSpeed<=.25},
    {id:'turn-up',label:'+',x:800,y:turn,w:112,h,disabled:s.turnSpeed>=4},
    {id:'toggle-chromatic',label:s.chromatic?'On':'Off',x:720,y:chromatic,w:192,h,on:s.chromatic},
    {id:'toggle-noise',label:s.noise?'On':'Off',x:720,y:noise,w:192,h,on:s.noise},
+   {id:'toggle-shot-trace',label:s.shotTrace?'On':'Off',x:720,y:trace,w:192,h,on:s.shotTrace},
    {id:'toggle-wind',label:s.wind==='heavy'?'Heavy':'Normal',x:720,y:wind,w:192,h,on:true}];
   if(freeroam){
    const y=wind+gap,stadium=SKY_OPTIONS.find(option=>option.id===s.stadium);

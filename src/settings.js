@@ -1,7 +1,7 @@
 import { SKY_OPTIONS } from './config.js';
 
 const SETTINGS_KEY='first-touch.settings.v1';
-const DEFAULT_SETTINGS=Object.freeze({turnSpeed:1,chromatic:true,noise:true,wind:'normal',stadium:SKY_OPTIONS[0].id});
+const DEFAULT_SETTINGS=Object.freeze({turnSpeed:1,chromatic:true,noise:true,shotTrace:false,wind:'normal',stadium:SKY_OPTIONS[0].id});
 const TURN_SPEED=Object.freeze({min:.25,max:4,step:.25});
 
 function normalizeSettings(value){
@@ -11,6 +11,7 @@ function normalizeSettings(value){
   turnSpeed:Math.max(TURN_SPEED.min,Math.min(TURN_SPEED.max,Math.round(speed/TURN_SPEED.step)*TURN_SPEED.step)),
   chromatic:typeof source.chromatic==='boolean'?source.chromatic:DEFAULT_SETTINGS.chromatic,
   noise:typeof source.noise==='boolean'?source.noise:DEFAULT_SETTINGS.noise,
+  shotTrace:typeof source.shotTrace==='boolean'?source.shotTrace:DEFAULT_SETTINGS.shotTrace,
   wind:source.wind==='heavy'?'heavy':DEFAULT_SETTINGS.wind,
   stadium:SKY_OPTIONS.some(sky=>sky.id===source.stadium)?source.stadium:DEFAULT_SETTINGS.stadium
  };

@@ -1,5 +1,5 @@
 import { FT } from "../vendor/three.js";
-import { FB, footballClamp, SKY_OPTIONS } from "./config.js";
+import { FB, footballClamp, SKY_OPTIONS, THREE_TOUCH_SKIES } from "./config.js";
 import { FootballField } from "./world/field.js";
 import { FootballSky } from "./world/sky.js";
 import { FootballPhysics } from "./physics/ball.js";
@@ -70,6 +70,7 @@ class FootballApp {
       'turn-up':()=>this.changeSettings({turnSpeed:this.settings.turnSpeed+TURN_SPEED.step}),
       'toggle-chromatic':()=>this.changeSettings({chromatic:!this.settings.chromatic}),
       'toggle-noise':()=>this.changeSettings({noise:!this.settings.noise}),
+      'toggle-shot-trace':()=>this.changeSettings({shotTrace:!this.settings.shotTrace}),
       'toggle-wind':()=>this.changeSettings({wind:this.settings.wind==='normal'?'heavy':'normal'}),
       'stadium-prev':()=>this.cycleStadium(-1),'stadium-next':()=>this.cycleStadium(1)
     },credits);
@@ -97,6 +98,7 @@ class FootballApp {
       settings:menuPages.settingsButton,
       turnSpeed:document.querySelector('#turn-speed'),turnSpeedValue:document.querySelector('#turn-speed-value'),
       chromatic:document.querySelector('#toggle-chromatic'),noise:document.querySelector('#toggle-noise'),wind:document.querySelector('#toggle-wind'),
+      shotTrace:document.querySelector('#toggle-shot-trace'),
       stadium:document.querySelector('#stadium'),stadiumRow:document.querySelector('#freeroam-stadium-row')};
     this.ui.stadium.append(...SKY_OPTIONS.map(sky=>new Option(sky.name,sky.id)));
     this.abilitySwitcher=new FootballAbilitySwitcher(document.querySelector('#abilities-page'),{
@@ -113,6 +115,7 @@ class FootballApp {
     on(this.ui.turnSpeed,'input',()=>this.changeSettings({turnSpeed:Number(this.ui.turnSpeed.value)}));
     on(this.ui.chromatic,'click',()=>this.changeSettings({chromatic:!this.settings.chromatic}));
     on(this.ui.noise,'click',()=>this.changeSettings({noise:!this.settings.noise}));
+    on(this.ui.shotTrace,'click',()=>this.changeSettings({shotTrace:!this.settings.shotTrace}));
     on(this.ui.wind,'click',()=>this.changeSettings({wind:this.settings.wind==='normal'?'heavy':'normal'}));
     on(this.ui.stadium,'change',()=>{
       if(this.mode==='freeroam')this.changeSettings({stadium:this.ui.stadium.value});
@@ -173,7 +176,8 @@ class FootballApp {
     this.ui.turnSpeed.value=String(settings.turnSpeed);
     this.ui.turnSpeed.setAttribute('aria-valuetext',settings.turnSpeed+' times');
     this.ui.turnSpeedValue.value=settings.turnSpeed+'×';this.ui.turnSpeedValue.textContent=settings.turnSpeed+'×';
-    for(const [element,enabled]of [[this.ui.chromatic,settings.chromatic],[this.ui.noise,settings.noise]]){
+    if(!settings.shotTrace)this.shotTrail.clear();
+    for(const [element,enabled]of [[this.ui.chromatic,settings.chromatic],[this.ui.noise,settings.noise],[this.ui.shotTrace,settings.shotTrace]]){
       element.setAttribute('aria-checked',String(enabled));element.textContent=enabled?'On':'Off';
     }
     this.ui.launcher.dataset.chromatic=String(settings.chromatic);
@@ -185,12 +189,13 @@ class FootballApp {
   changeSettings(patch) {
     const next=normalizeSettings({...this.settings,...patch}),old=this.settings;
     if(next.turnSpeed===old.turnSpeed&&next.chromatic===old.chromatic&&next.noise===old.noise&&
-      next.wind===old.wind&&next.stadium===old.stadium)return;
+      next.wind===old.wind&&next.stadium===old.stadium&&next.shotTrace===old.shotTrace)return;
     this.settings=next;this.applySettings();saveSettings(next);
   }
   applyModeSky(reveal=false) {
-    const index=this.mode==='freeroam'?SKY_OPTIONS.findIndex(sky=>sky.id===this.settings.stadium):
-      (this.active?this.challenge.acceptedRewardCount:0)%SKY_OPTIONS.length;
+    const completed=this.active?this.challenge.acceptedRewardCount:0;
+    const skyId=this.mode==='freeroam'?this.settings.stadium:THREE_TOUCH_SKIES[completed%THREE_TOUCH_SKIES.length].id;
+    const index=SKY_OPTIONS.findIndex(sky=>sky.id===skyId);
     if(this.sky.currentIndex===index)return;
     this.sky.set(index);
     this.field.setSkyLighting(this.sky.lighting,this.sky.horizonLight);
@@ -341,9 +346,7 @@ class FootballApp {
     const effects=this.activeRules?.effects;
     this.physics.setPlayerAbilities(effects);
     this.goalkeeper.setPlayerAbilities(effects);
-    this.shotTrail.setPlayerAbilities(effects);
     this.controls.speedMultiplier=this.activeRules?.movementSpeedMultiplier??1;
-    if(!effects?.shotPathSeconds)this.shotTrail.clear();
   }
   openReward() {
     const choices=this.challenge.beginReward();
@@ -365,13 +368,12 @@ class FootballApp {
     this.advanceChance();
   }
   advanceChance() {
-    const retry=this.challenge.outcome==='retry';
-    this.placeChance(this.challenge.next(),retry);
+    this.placeChance(this.challenge.next());
   }
-  placeChance(chance,retry=false) {
+  placeChance(chance) {
     if(!chance)return;
     this.motion.reset();
-    if(retry)this.shotTrail.replay();else this.shotTrail.clear();
+    this.shotTrail.clear();
     this.spawnPoint.set(chance.player.x,0,chance.player.z);this.controls.place(this.spawnPoint,chance.yaw);
     this.spawnPoint.set(chance.ball.x,chance.ball.y,chance.ball.z);
     this.audio.resetBall();this.physics.reset(this.spawnPoint);
@@ -388,12 +390,13 @@ class FootballApp {
   spawnBall() {
     this.motion.reset();
     this.audio.resetBall();
+    this.shotTrail.clear();
     const retry=this.hasPracticeAbilities&&this.practice.active&&this.practice.outcome==='retry';
     if(retry){
-      this.shotTrail.replay();this.controls.place(this.practicePlayer,this.practiceYaw);
+      this.controls.place(this.practicePlayer,this.practiceYaw);
       this.spawnPoint.copy(this.practiceSpawn);
     }else{
-      this.shotTrail.clear();this.controls.refreshHead();
+      this.controls.refreshHead();
       this.practicePlayer.copy(this.controls.headWorld);this.practicePlayer.y=0;
       this.practiceYaw=Math.atan2(-this.controls.forward.x,-this.controls.forward.z);
       this.spawnPoint.copy(this.controls.headWorld).addScaledVector(this.controls.forward,.72);
@@ -426,14 +429,11 @@ class FootballApp {
   handleEvent(event) {
     const speed=Number.isFinite(event.speed)?Math.max(0,event.speed):null;
     const position=event.position||this.physics.ball.position;
-    if(event.type==='save'||event.type==='bounce')this.shotTrail.mark(event);
     if(event.type==='touch'){
-      if(this.shotTrail.replaying&&!event.shot)this.shotTrail.clear();
       this.audio.kick(speed??this.physics.ball.velocity.length(),position);this.controls.pulse(event.footId,.18+Math.min(.5,(event.speed||0)/24));
-      const rules=this.activeRules;
-      if(event.shot&&rules&&(rules.phase==='ready'||rules.phase==='live')){
-        const duration=rules.effects.shotPathSeconds;
-        if(duration>0)this.shotTrail.start(position,duration);
+      if(this.settings.shotTrace&&event.shot&&
+        (this.mode==='freeroam'||this.challenge.phase==='ready'||this.challenge.phase==='live')){
+        this.shotTrail.start(position);
       }
     }else if(event.type==='frame')this.audio.frame(speed??2,position);
     else if(event.type==='save')this.audio.save(speed??4,position,event.surface);
@@ -574,9 +574,6 @@ class FootballApp {
         }
       }
       if(this.rewardActive)this.rewardPicker.update(dt,this.controls,rewardInteractive);
-      const showLanding=rules&&!worldBlocked&&!this.menu&&!this.rewardActive&&
-        (rules.phase==='ready'||rules.phase==='live');
-      this.shotTrail.updateLanding(this.physics,dt,!!showLanding);
       this.hud.update(this.snapshot,!worldBlocked&&!this.menu&&!this.rewardActive,this.controls.desktop,
         this.renderer.xr.isPresenting?this.renderer.xr.getCamera():this.camera);
     }else{

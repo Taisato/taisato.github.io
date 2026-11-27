@@ -27,8 +27,9 @@ Choose **Settings** in the launcher or in-game menu. In VR, point and press the 
 | Turn speed | 0.25×–4×, in 0.25× steps | 1× |
 | Chromatic aberration | On / Off | On |
 | Noise | On / Off | On |
+| Shot Trace | On / Off | Off |
 | Wind | Normal / Heavy | Normal |
-| Stadium (Freeroam) | Black / Blue / Amber / Violet | Black |
+| Stadium (Freeroam) | Black, Blue, Amber, Violet, Jade, Crimson, Turquoise, Gold, Indigo, Rose, Lime | Black |
 
 Changes apply immediately and are remembered in this browser when local storage is available. **1× turn speed** is the original turning speed. The setting affects the right stick, desktop turn keys and horizontal mouse movement; walking speed and vertical mouse sensitivity stay the same.
 
@@ -43,6 +44,8 @@ Normal wind plays as a continuous stereo background during gameplay. Select **Wi
 The wind follows menu slow motion along with the other sounds. Ball respawns and new chances do not restart it. Leaving the game or a true suspension stops the ambience. Normal wind plays at 40% of its previous level. The wind setting changes sound only.
 
 In Freeroam, **Stadium** changes the sky immediately. In VR, use the arrows beside the current name. Your choice is saved for Freeroam.
+
+Turn on **Shot Trace** to see the path the ball takes after each strike for up to 2.5 seconds. The setting applies in both Freeroam and 3 Touch.
 
 ## Modes
 
@@ -68,9 +71,11 @@ At each five-goal milestone, time slows to quarter speed. Aim at an available ca
 
 Picking Phase I pins that tree in the same slot. Its next phase stays available until you take it. Phase III completes the tree and closes the slot. When all three trees are complete, the run continues with the finished build. A new run resets the slots and effects.
 
+Lilac outlines identify pinned upgrades. Rare upgrades have a gold outline with a soft glow.
+
 Each draft with an open slot has a 20% chance to offer one rare upgrade. **1 Life Slot** adds a slot and restores one life, **Extra Touch** adds a touch per chance, and **Power Strike** adds 10% shot strength. Picking a rare leaves its slot open, and repeat picks stack.
 
-First-Time Finish and Double From Distance each add one goal. A first-strike finish from outside the box scores three and restores the normal one life. Each confirmed draft choice advances the sky through Black, Blue, Amber and Violet.
+First-Time Finish and Double From Distance each add one goal. A first-strike finish from outside the box scores three and restores the normal one life. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime. Black is available in Freeroam.
 
 | Tree | Phase I | Phase II | Phase III |
 | --- | --- | --- | --- |
@@ -85,7 +90,6 @@ First-Time Finish and Double From Distance each add one goal. A first-strike fin
 | Long-Range Bonus | A goal from outside the box adds one touch to your next chance. | Keep that extra touch in reserve until you spend it. | Bank up to two extra touches and spend both in one chance. |
 | Keeper Setback | Lower the keeper difficulty by five goal levels. | The keeper takes 0.12 s longer to reverse after committing. | Once per chance, a wrong-footed keeper parries a ball they would have caught. |
 | Last Chance | Once per run, a miss on your last life gives a same-spot retry. | Start a chance or retry on your last life with one extra touch. | Your run can use two retries in total. |
-| Shot Trace | See each actual shot trail for 2.5 s. | Mark the first bounce or keeper deflection and retain the trail on a retry until kicking. | See an airborne ball’s predicted landing point up to one second ahead. |
 
 ### Freeroam ability switcher
 
@@ -104,6 +108,8 @@ Damage lasts for the **whole 3 TOUCH run**. Scoring, losing one life and advanci
 ## Boot contact and flight
 
 The base ball speed ceiling is 38 m/s. Firm drives shed excess upward speed progressively at launch and keep their horizontal pace and spin. Low lifts use the usual contact response. Rising swings and airborne contacts allow extra height.
+
+After a curved strike leaves the boot, its sidespin determines a pace increase of up to 8%. The ball covers the same arc sooner, including the bend and bounce of low shots.
 
 The follow-through correction addresses repeated contact after a firm strike. A tracked boot can outrun the ball at its speed ceiling, or accelerate and turn upward while the ball is still below that ceiling. These continuing overlaps can redirect an already-launched shot. The contact episode now releases that shot along its established direction rather than treating every overlap as another powered kick. The release also handles position separation, so correcting velocity alone cannot leave an upward position jump.
 

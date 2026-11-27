@@ -5,10 +5,17 @@ import { UI, label, panel, shape, tracked } from './theme.js';
 
 const WIDTH = 1080, HEIGHT = 430, PLANE_WIDTH = 1.76, PLANE_HEIGHT = PLANE_WIDTH * HEIGHT / WIDTH;
 const HOLD_SECONDS = .78;
+const RARE_GOLD = '#efc877';
 const CARDS = Array.from({length: 3}, (_, i) => ({x: 38 + i * 340, y: 152, w: 324, h: 200}));
 
 function cardTitle(choice) {
   return choice.masteredName ?? choice.treeName ?? choice.name;
+}
+
+function cardAccent(choice, state) {
+  if (state.next) return '';
+  if (choice.rare) return 'rare';
+  return choice.pinned ? 'pinned' : '';
 }
 
 function makeReel(catalog, selected, lane) {
@@ -136,6 +143,10 @@ class FootballRewardPicker {
   show(choices, catalog, controls, score) {
     this.hide();
     this.choices = choices;
+    this.desktopCards.forEach(({card}, index) => {
+      if (choices[index].pinned) card.setAttribute('aria-description', 'This slot continues your selected tree.');
+      else card.removeAttribute('aria-description');
+    });
     this.reels = choices.map((choice, lane) => makeReel(catalog, choice, lane));
     this.rollDuration = Math.max(...this.reels.map(reel => reel.end));
     this.score = score;
@@ -273,6 +284,8 @@ class FootballRewardPicker {
     this.desktopCards.forEach(({card, status, reel, current, next, info, name, description}, index) => {
       const state = states[index];
       const choice = this.choices[index];
+      const accent = cardAccent(choice, state);
+      if (card.dataset.accent !== accent) card.dataset.accent = accent;
       card.disabled = !this.ready || choice.closed === true;
       card.dataset.closed = String(Boolean(choice.closed));
       card.style.setProperty('--held', this.hold?.index === index ? progress : 0);
@@ -295,7 +308,7 @@ class FootballRewardPicker {
     if (choice.closed) return 'Complete';
     if (choice.rare) return 'Rare · Slot stays open';
     const numeral = ['I','II','III'][choice.phase - 1];
-    return 'Phase ' + numeral + (choice.pinned ? ' · Pinned' : ' · Start tree');
+    return 'Phase ' + numeral;
   }
 
   paintWorld(states, progress) {
@@ -307,6 +320,7 @@ class FootballRewardPicker {
     states.forEach((state, i) => {
       const {x, y, w, h} = CARDS[i], cx = x + w / 2;
       const choice = this.choices[i];
+      const accent = cardAccent(choice, state);
       const hot = !choice.closed && this.ready && this.hover === i;
       shape(c, x, y, w, h, 14); c.fillStyle = hot ? '#182e38' : UI.panel; c.fill();
       c.save(); c.clip();
@@ -319,15 +333,24 @@ class FootballRewardPicker {
         label(c, cardTitle(state.entry), cx, y + 100 - 66 * state.progress, 24, UI.white, 'center', 780);
         label(c, cardTitle(state.next), cx, y + 166 - 66 * state.progress, 24, UI.lilac, 'center', 780);
       } else {
-        label(c, this.stageLabel(choice), cx, y + 26, 18, choice.rare ? UI.lilac : UI.mint, 'center', 700);
+        label(c, this.stageLabel(choice), cx, y + 26, 18, choice.rare ? RARE_GOLD : UI.mint, 'center', 700);
         label(c, cardTitle(choice), cx, y + 65, 24, choice.closed ? UI.muted : UI.white, 'center', 800);
         c.font = '500 21px Arial, "Liberation Sans", sans-serif';
         const lines = linesFor(c, choice.description, w - 30);
         lines.forEach((line, row) => label(c, line, cx, y + 105 + row * 23, 21, UI.muted, 'center', 500));
       }
       c.restore();
-      c.strokeStyle = hot ? UI.mint : state.next ? UI.line : '#566483'; c.lineWidth = hot ? 2.5 : 1.5;
-      shape(c, x, y, w, h, 14); c.stroke();
+      shape(c, x, y, w, h, 14);
+      c.save();
+      if (accent === 'rare') {
+        c.strokeStyle = RARE_GOLD;
+        c.shadowColor = 'rgba(239,200,119,.48)';
+        c.shadowBlur = 8;
+      } else {
+        c.strokeStyle = accent === 'pinned' ? UI.lilac : hot ? UI.mint : state.next ? UI.line : '#566483';
+      }
+      c.lineWidth = hot ? 3.5 : accent ? 3 : 1.5;
+      c.stroke(); c.restore();
     });
     label(c, this.ready ? 'Point at an ability and hold the trigger.' : 'Rolling abilities…', 38, 391, 21, UI.muted, 'left', 550);
     this.texture.needsUpdate = true;

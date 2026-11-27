@@ -9,10 +9,18 @@ const FB = Object.freeze({
 const footballClamp = (value,min,max)=>Math.max(min,Math.min(max,value));
 
 const SKY_OPTIONS = Object.freeze([
-  Object.freeze({id:'black',name:'Black'}),
-  Object.freeze({id:'quiet-orbit',name:'Blue'}),
-  Object.freeze({id:'solar-edge',name:'Amber'}),
-  Object.freeze({id:'violet-hour',name:'Violet'})
-]);
+  {id:'black',name:'Black'},
+  {id:'quiet-orbit',name:'Blue'},
+  {id:'solar-edge',name:'Amber'},
+  {id:'violet-hour',name:'Violet'},
+  {id:'jade',name:'Jade'},
+  {id:'crimson',name:'Crimson'},
+  {id:'turquoise',name:'Turquoise'},
+  {id:'gold',name:'Gold'},
+  {id:'indigo',name:'Indigo'},
+  {id:'rose',name:'Rose'},
+  {id:'lime',name:'Lime'}
+].map(Object.freeze));
+const THREE_TOUCH_SKIES = Object.freeze(SKY_OPTIONS.filter(sky=>sky.id!=='black'));
 
-export { FB, footballClamp, SKY_OPTIONS };
+export { FB, footballClamp, SKY_OPTIONS, THREE_TOUCH_SKIES };
