@@ -27,7 +27,7 @@ class FootballInterface {
   this.reticleCore=new FT.Mesh(new FT.SphereGeometry(.006,16,10),new FT.MeshBasicMaterial({color:UI.white,transparent:true,depthTest:false,depthWrite:false,toneMapped:false}));this.reticleCore.renderOrder=211;this.reticleCore.frustumCulled=false;this.reticleCore.visible=false;this.reticleCore.name='Menu pointer centre';this.reticle.add(this.reticleCore);
   this.buttons=[];this.localRay=new FT.Vector3();this.localDirection=new FT.Vector3();this.hitPoint=new FT.Vector3();this.inverseQ=new FT.Quaternion();this.drawMenu();
  }
- setState(snapshot={}){this.snapshot={...this.snapshot,...snapshot};const key=[this.snapshot.mode,this.snapshot.phase,this.snapshot.score].join('|');if(key===this.stateKey)return;this.stateKey=key;if(this.visible)this.drawMenu();}
+ setState(snapshot){this.snapshot={...snapshot};const key=[snapshot.mode,snapshot.phase,snapshot.score].join('|');if(key===this.stateKey)return;this.stateKey=key;if(this.visible)this.drawMenu();}
  setSettings(settings={}){
   const next={turnSpeed:Number.isFinite(settings.turnSpeed)?Math.max(.25,Math.min(4,settings.turnSpeed)):this.settings.turnSpeed,
    vrResolution:VR_RESOLUTION_OPTIONS.some(option=>option.scale===settings.vrResolution)?settings.vrResolution:this.settings.vrResolution,

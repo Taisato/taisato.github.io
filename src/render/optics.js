@@ -122,12 +122,11 @@ void main() {
   }
   // Motion has no central dead zone: a hard shot through the aiming axis still
   // separates. Paused sources and camera rotation alone do not generate it.
-  // Opposing motion must not cancel the stationary lens separation. Preserve
-  // the combined direction, but give it the sum of both magnitudes.
   float separation = length(shift) + length(motion);
   vec2 combined = shift + motion;
-  if(length(combined) < .00001) combined = length(motion) > 0.0 ? motion : shift;
-  shift = combined / max(length(combined), .00001) * separation * clarity;
+  // Near cancellation, normalizing a tiny vector flips the red/blue edges
+  // across a moving boot or ball. Let them meet continuously in that range.
+  shift = combined / max(length(combined), max(.00001, .35 * separation)) * separation * clarity;
   // Every tap stays in its own eye, even at an asymmetric atlas seam.
   vec2 redUV = clamp(sourcePixel + shift * sourceScale, low, high) / uResolution;
   vec2 blueUV = clamp(sourcePixel - shift * sourceScale, low, high) / uResolution;

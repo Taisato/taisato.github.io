@@ -1,7 +1,7 @@
 import { FT } from "../../vendor/three.js";
 import { FB } from "../config.js";
 import { FootballPlayerVisuals } from "../player/visuals.js";
-import { applyPitchPaint, PITCH_PAINT } from "../render/markings.js";
+import { applyPitchPaint, PITCH_PAINT, pitchFloodlight, runoffOpacity } from "../render/markings.js";
 
 /* Floodlit full-size training pitch, reconstructed from the supplied reference. Units: metres. */
 class FootballField {
@@ -83,8 +83,7 @@ class FootballField {
     this.pitchLighting=material.userData.pitchLighting;
     const positions=[],colours=[],uvs=[];
     const surface=(x,z)=>{
-      const outside=Math.max(0,Math.abs(x)-FB.halfWidth,Math.abs(z)-FB.halfLength);
-      const fade=outside<=7?1:Math.exp(-Math.pow((outside-7)/11,1.55));
+      const fade=pitchFloodlight(x,z);
       const stripe=(Math.floor((z+FB.halfLength)/(FB.length/12))&1)?.90:1.15;
       const cross=(Math.floor((x+FB.halfWidth)/(FB.width/8))&1)?.985:1.025;
       // Broad, subtle light pools fade smoothly into the unlit run-off area.
@@ -202,8 +201,11 @@ class FootballField {
     geometry.setAttribute('position', new FT.BufferAttribute(new Float32Array(positions), 3));
     geometry.setAttribute('normal', new FT.BufferAttribute(new Float32Array(normals), 3));
     geometry.setAttribute('color', new FT.BufferAttribute(new Float32Array(colours), 3));
-    const material = this.material(new FT.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.78,metalness:0}));
-    this.ballMesh = new FT.Mesh(geometry, material);
+    this.ballMaterial = this.material(new FT.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.78,metalness:0}));
+    this.fadingBallMaterial = this.material(this.ballMaterial.clone());
+    this.fadingBallMaterial.transparent = true;
+    this.fadingBallMaterial.depthWrite = false;
+    this.ballMesh = new FT.Mesh(geometry, this.ballMaterial);
     this.ballMesh.name = 'Football'; this.ballMesh.position.set(0, FB.ballRadius, 0);
     this.root.add(this.ballMesh);
 
@@ -220,11 +222,19 @@ class FootballField {
   updateBall(ball) {
     this.ballMesh.position.copy(ball.position);
     this.ballMesh.quaternion.copy(ball.orientation);
+    const light = pitchFloodlight(ball.position.x, ball.position.z);
+    const opacity = runoffOpacity(light);
+    // Keep the opaque depth pass for play. In deep shade let the turf or sky
+    // show through the ball, including the specular highlights on its panels.
+    const material = opacity < 1 ? this.fadingBallMaterial : this.ballMaterial;
+    material.color.setScalar(light); material.opacity = opacity;
+    this.ballMesh.material = material;
+    this.ballMesh.visible = this.ballShadow.visible = opacity > 0;
     const height = Math.max(0,ball.position.y-FB.ballRadius);
     const scale = .19 + Math.sqrt(Math.min(height,12))*.038;
     this.ballShadow.position.set(ball.position.x,.014,ball.position.z);
     this.ballShadow.scale.set(scale,scale,1);
-    this.ballShadowMaterial.opacity = .72 / (1+height*.28);
+    this.ballShadowMaterial.opacity = .72 * light * opacity / (1+height*.28);
   }
 
   makeFoot(hand) { return this.player.makeFoot(hand); }

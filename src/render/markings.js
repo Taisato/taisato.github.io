@@ -4,6 +4,17 @@ import { FB } from '../config.js';
 const PITCH_PAINT = Object.freeze({lineWidth:.115, minimumPixels:.45, centreRadius:9.15,
   penaltyDepth:FB.penaltyDepth, goalAreaDepth:FB.goalAreaDepth, penaltySpot:11, cornerRadius:1});
 
+// The first seven metres past the lines, including the goal nets, are fully lit.
+function pitchFloodlight(x, z) {
+  const outside = Math.max(Math.abs(x) - FB.halfWidth, Math.abs(z) - FB.halfLength);
+  return outside <= 7 ? 1 : Math.exp(-Math.pow((outside - 7) / 11, 1.55));
+}
+
+function runoffOpacity(light) {
+  const t = Math.max(0, Math.min(1, (light - .025) / (.4 - .025)));
+  return t * t * (3 - 2 * t);
+}
+
 // Paint is part of the opaque turf draw. Filtering the covered interval keeps
 // a line present even when no raster sample lands inside its physical width.
 // Only subpixel paint gets a restrained .45-pixel readability floor; nearby
@@ -131,4 +142,4 @@ function applyPitchPaint(material) {
   return material;
 }
 
-export {PITCH_PAINT, PITCH_PAINT_FRAGMENT, applyPitchPaint};
+export {PITCH_PAINT, PITCH_PAINT_FRAGMENT, applyPitchPaint, pitchFloodlight, runoffOpacity};

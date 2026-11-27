@@ -1,6 +1,7 @@
 import { FT } from '../../vendor/three.js';
 import { FB } from '../config.js';
 import { UI } from '../ui/theme.js';
+import { pitchFloodlight, runoffOpacity } from './markings.js';
 
 const POINTS = 192;
 const MIN_DISTANCE_SQ = .10 ** 2;
@@ -17,6 +18,8 @@ class FootballShotTrail {
     // A tiny triangular tube stays readable for both XR eyes at long range.
     this.attribute = new FT.BufferAttribute(new Float32Array(POINTS * 9), 3).setUsage(35048);
     this.geometry.setAttribute('position', this.attribute);
+    this.colours = new FT.BufferAttribute(new Uint8Array(POINTS * 3 * 4).fill(255), 4, true).setUsage(35048);
+    this.geometry.setAttribute('color', this.colours);
     const indices = new Uint16Array((POINTS - 1) * INDICES_PER_SEGMENT);
     let next = 0;
     for (let i = 0; i < POINTS - 1; i++) {
@@ -27,7 +30,7 @@ class FootballShotTrail {
       }
     }
     this.geometry.setIndex(new FT.BufferAttribute(indices, 1));
-    this.material = new FT.MeshBasicMaterial({color: UI.mint, transparent: true, opacity: 0, depthWrite: false, toneMapped: false});
+    this.material = new FT.MeshBasicMaterial({color: UI.mint, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, toneMapped: false});
     this.line = new FT.Mesh(this.geometry, this.material);
     this.line.name = 'Player shot path';
     this.line.frustumCulled = false;
@@ -57,6 +60,8 @@ class FootballShotTrail {
     const uz = horizontal > 1e-6 ? dx / horizontal : 0;
     const vx = dy * uz / length, vy = (dz * ux - dx * uz) / length, vz = -dy * ux / length;
     const base = index * 3;
+    const light = pitchFloodlight(x, z), opacity = light * runoffOpacity(light);
+    for (let side = 0; side < 3; side++) this.colours.setW(base + side, opacity);
     this.attribute.setXYZ(base, x + WIDTH * ux, y, z + WIDTH * uz);
     this.attribute.setXYZ(base + 1, x + WIDTH * (-.5 * ux + TRIANGLE_HEIGHT * vx), y + WIDTH * TRIANGLE_HEIGHT * vy, z + WIDTH * (-.5 * uz + TRIANGLE_HEIGHT * vz));
     this.attribute.setXYZ(base + 2, x + WIDTH * (-.5 * ux - TRIANGLE_HEIGHT * vx), y - WIDTH * TRIANGLE_HEIGHT * vy, z + WIDTH * (-.5 * uz - TRIANGLE_HEIGHT * vz));
@@ -73,6 +78,7 @@ class FootballShotTrail {
     this.setPoint(this.samples, position);
     this.setRing(this.samples, position.x, position.y, position.z, dx, dy, dz);
     this.attribute.needsUpdate = true;
+    this.colours.needsUpdate = true;
     this.geometry.setDrawRange(0, this.samples * INDICES_PER_SEGMENT);
     this.line.visible = true;
     if (this.steps >= this.interval && this.samples < POINTS - 1) {

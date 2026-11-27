@@ -446,10 +446,13 @@ class FootballGoalkeeper {
     this.visual.updatePose(s,alpha);
   }
 
-  isNear(ball, padding = 0) {
-    return this.enabled && Math.abs(ball.position.z - this.position.z) <= 2.4 + padding &&
-      Math.abs(ball.position.x - this.position.x) <= 3.4 + padding && ball.position.y <= 3.7 + padding;
+  contactClearance(ball) {
+    if(!this.enabled)return Infinity;
+    return Math.max(Math.abs(ball.position.z-this.position.z)-2.4,
+      Math.abs(ball.position.x-this.position.x)-3.4,ball.position.y-3.7);
   }
+
+  isNear(ball,padding=0){return this.contactClearance(ball)<=padding;}
 
   collide(physics, alpha, h) {
     const ball = physics.ball;

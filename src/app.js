@@ -51,7 +51,7 @@ class FootballApp {
     this.practiceLevels=readPracticeLevels();
     this.hasPracticeAbilities=Object.keys(this.practiceLevels).length>0;
     this.practiceSpawn=new FT.Vector3();this.practicePlayer=new FT.Vector3();this.practiceYaw=0;
-    this.freeSnapshot={mode:'freeroam',phase:'ready',score:0,lives:3,touches:3,round:0,outcome:null};
+    this.idleSnapshot={mode:'freeroam',practice:false,phase:'ready',score:0,round:0,outcome:null};
     this.modeInput={ball:this.physics.ball,previous:null,events:this.physics.events,keeper:this.goalkeeper};
     this.observeChallengeMotion=(previous,current,radius,events,offWoodwork)=>this.activeRules?.observeMotion(previous,current,radius,events,offWoodwork);
     const creditsPage=document.querySelector('#credits-page');
@@ -171,7 +171,17 @@ class FootballApp {
   }
   resize(){const w=window.innerWidth||1280,h=window.innerHeight||720;this.renderer.setSize(w,h);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();}
   get activeRules(){return this.mode==='challenge'?this.challenge:this.hasPracticeAbilities&&this.practice.active?this.practice:null;}
-  get snapshot(){return this.activeRules?.snapshot??this.freeSnapshot;}
+  get snapshot(){
+    const rules=this.activeRules;
+    if(rules?.active)return rules.snapshot;
+    this.idleSnapshot.mode=this.mode;
+    return this.idleSnapshot;
+  }
+  get hudSnapshot(){
+    const rules=this.activeRules;
+    if(!rules?.active||(this.mode==='challenge'&&rules.phase==='gameover'))return null;
+    return rules.snapshot;
+  }
   get menuPage(){return this.menuPages.page;}
   get rewardActive(){return this.mode==='challenge'&&this.challenge.phase==='reward';}
   applySettings() {
@@ -224,6 +234,7 @@ class FootballApp {
   }
   syncPage() {
     const over=this.mode==='challenge'&&this.challenge.phase==='gameover';
+    if(!this.active||this.menu||!this.hudSnapshot)this.hud.hide();
     this.abilitySwitcher.setEnabled(this.mode==='freeroam');
     this.ui.stadiumRow.hidden=this.ui.stadium.disabled=this.mode!=='freeroam';
     this.ui.resume.hidden=!this.active||over;this.ui.exit.hidden=!this.active;
@@ -232,7 +243,7 @@ class FootballApp {
     this.ui.restart.textContent=over?'Again':'Restart';
     this.ui.hint.hidden=!(this.active&&this.controls.desktop&&!this.menu&&!this.rewardActive);
     this.ui.pauseLabel.textContent=over?'RUN OVER':'';
-    this.ui.pauseScore.textContent=this.mode==='challenge'?String(this.snapshot.score)+' GOALS':'';
+    this.ui.pauseScore.textContent=this.mode==='challenge'&&this.challenge.active?String(this.snapshot.score)+' GOALS':'';
     this.ui.launcher.dataset.active=String(this.active);this.ui.launcher.dataset.mode=this.mode;
     this.ui.launcher.dataset.input=this.active&&this.controls.desktop?'desktop':'vr';
     this.ui.launcher.dataset.phase=this.snapshot.phase;
@@ -326,7 +337,7 @@ class FootballApp {
     this.interface.setRenderSize(0,0);
     this.setMenuPage('main',false);
     this.calibrationFromGameover=false;
-    this.pendingChance=null;this.challenge.stop();this.practice.stop();this.hud.hide();this.motion.reset();this.clearChallengePresentation();
+    this.pendingChance=null;this.challenge.stop();this.practice.stop();this.motion.reset();this.clearChallengePresentation();
     this.interface.show(false,this.controls);this.calibrationPanel.hide();this.controls.setDesktop(true);this.controls.invalidate();
     this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;this.audio.pause(true);
     this.ui.launcher.hidden=false;this.ui.hint.hidden=true;this.ui.status.textContent='';this.syncPage();this.resize();this.lastTime=0;
@@ -337,7 +348,7 @@ class FootballApp {
     document.exitPointerLock?.();this.active=false;this.menu=false;this.pendingInitialPlacement=false;
     this.setMenuPage('main',false);
     this.calibrationFromGameover=false;
-    this.pendingChance=null;this.challenge.stop();this.practice.stop();this.hud.hide();this.motion.reset();this.clearChallengePresentation();
+    this.pendingChance=null;this.challenge.stop();this.practice.stop();this.motion.reset();this.clearChallengePresentation();
     this.controls.keys.clear();this.controls.invalidate();this.physics.clearContacts();this.nets.clearContacts();this.accumulator=0;
     this.interface.show(false,this.controls);this.calibrationPanel.hide();
     this.ui.launcher.hidden=false;this.ui.hint.hidden=true;this.audio.pause(true);this.syncPage();
@@ -364,8 +375,32 @@ class FootballApp {
     this.syncBallHistory();this.field.updateBall(this.physics.ball);this.setMenu(false);this.audio.pause(false);
   }
   syncBallHistory(){this.ballBefore.copy(this.physics.ball.position);this.orientationBefore.copy(this.physics.ball.orientation);}
+  ballRenderPhase(alpha){
+    const ball=this.physics.ball,p=ball.position,head=this.controls.headWorld;
+    // Close control is seen against boots tracked at display time. Away from
+    // the player and around the keeper/net use their shared interpolation time.
+    const reach=Math.hypot(head.x-p.x,head.z-p.z);
+    let lead=footballClamp(3.5-reach,0,1);
+    if(!lead)return alpha;
+    // Only advance a freely rolling ball. A hard strike, loft or bounce uses
+    // the resolved trajectory. The blends keep the timing continuous on release.
+    const pace=ball.velocity.length();
+    lead*=footballClamp(8-pace,0,1)*footballClamp(1-Math.abs(ball.velocity.y)*5,0,1)*
+      footballClamp(1-(Math.max(p.y,this.ballBefore.y)-ball.radius)*40,0,1);
+    if(!lead||pace<.001)return alpha;
+    let clearance=this.goalkeeper.contactClearance(ball)-ball.radius-this.goalkeeper.maxTravel;
+    for(const net of this.nets.goals)clearance=Math.min(clearance,
+      this.nets.contactClearance(net,p.x,p.y,p.z)-ball.radius-net.maxSpeed*FB.fixedStep);
+    // Ease back onto the solved contact timeline over several ticks. This
+    // avoids displaying either a speculative hit or a staircase at the boot.
+    const margin=Math.max(.16,4*pace*FB.fixedStep);
+    for(const hand of this.controls.hands)if(hand.foot.enabled)
+      clearance=Math.min(clearance,this.controls.ballClearance(hand,ball,margin));
+    const free=footballClamp(clearance/margin,0,1);
+    return alpha+lead*free*free*(3-2*free);
+  }
   clearChallengePresentation() {
-    this.rewardPicker.hide();this.shotTrail.clear();this.rewardAwaitRelease=false;
+    this.hud.hide();this.rewardPicker.hide();this.shotTrail.clear();this.rewardAwaitRelease=false;
   }
   applyChallengeEffects() {
     const effects=this.activeRules?.effects;
@@ -504,7 +539,11 @@ class FootballApp {
     if(this.disposed)return;
     if(this.contextLost){this.audio.update(this.physics.ball,this.controls,false,0);return;}
     const now=milliseconds*.001,rawDt=this.lastTime?now-this.lastTime:0;this.lastTime=now;
-    const dt=footballClamp(rawDt,0,.05);
+    // A short headset stall can still fit the existing eight-tick budget. Keep
+    // those ticks in step with the player's measured travel across the frame.
+    const maxSteps=8;
+    const maxFrameDt=this.renderer.xr.isPresenting&&rawDt<=.1?maxSteps*FB.fixedStep:.05;
+    const dt=footballClamp(rawDt,0,maxFrameDt);
     // The world limits catch-up work on a late frame. The tracked player
     // still travelled for the measured interval. Treat longer gaps as pauses.
     const inputDt=rawDt<=.125?Math.max(0,rawDt):dt;
@@ -558,7 +597,7 @@ class FootballApp {
       this.goalkeeper.preparePlayerContact(this.controls.headWorld,inputDt,blocked||roundResult||rawDt>.1);
       if(!worldBlocked){
         const oldAccumulator=this.accumulator;this.accumulator+=simulationDt;
-        const count=Math.min(8,Math.floor((this.accumulator+1e-9)/FB.fixedStep));
+        const count=Math.min(maxSteps,Math.floor((this.accumulator+1e-9)/FB.fixedStep));
         // A fixed step can straddle frames with different time scales. Track
         // its actual sampled duration so that a hitch cannot power up a kick.
         let previousSampleTime=oldAccumulator>1e-9?-this.inputRemainder:0;
@@ -587,14 +626,20 @@ class FootballApp {
           this.accumulator-=FB.fixedStep;
         }
         this.inputRemainder=inputDt-previousSampleTime;
-        if(count===8)this.accumulator=Math.min(this.accumulator,FB.fixedStep);
+        if(count===maxSteps)this.accumulator=Math.min(this.accumulator,FB.fixedStep);
       }else this.accumulator=0;
-      // Rendering interpolates the fixed-step ball without changing its physical position.
+      // The solver, events and rules always keep their original 120 Hz state.
       const alpha=footballClamp(this.accumulator/FB.fixedStep,0,1);
       if(worldBlocked){this.ballDraw.copy(this.physics.ball.position);this.renderBall.orientation.copy(this.physics.ball.orientation);}
       else{
-        this.ballDraw.lerpVectors(this.ballBefore,this.physics.ball.position,alpha);
-        this.renderBall.orientation.slerpQuaternions(this.orientationBefore,this.physics.ball.orientation,alpha);
+        const ball=this.physics.ball;
+        const phase=this.renderer.xr.isPresenting&&!blocked&&!roundResult?this.ballRenderPhase(alpha):alpha;
+        this.ballDraw.lerpVectors(this.ballBefore,ball.position,Math.min(1,phase));
+        if(phase>1){
+          this.ballDraw.addScaledVector(ball.velocity,(phase-1)*FB.fixedStep);
+          this.ballDraw.y=Math.max(ball.radius,this.ballDraw.y);
+        }
+        this.renderBall.orientation.slerpQuaternions(this.orientationBefore,ball.orientation,phase);
       }
       // Height, rotation and the contact shadow all use the same rendered pose.
       this.field.updateBall(this.renderBall);
@@ -611,7 +656,7 @@ class FootballApp {
         }
       }
       if(this.rewardActive)this.rewardPicker.update(dt,this.controls,rewardInteractive);
-      this.hud.update(this.snapshot,!worldBlocked&&!this.menu&&!this.rewardActive,this.controls.desktop,
+      this.hud.update(this.hudSnapshot,!worldBlocked&&!this.menu&&!this.rewardActive,this.controls.desktop,
         this.renderer.xr.isPresenting?this.renderer.xr.getCamera():this.camera);
     }else{
       for(const hand of this.controls.hands){hand.visual.root.visible=false;hand.ray.visible=false;}

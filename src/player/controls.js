@@ -48,9 +48,11 @@ class FootballControls {
     this.hands=['left','right'].map((name,index)=>{
       const visual=field.makeFoot(name);scene.add(visual.root);visual.root.visible=false;
       const collider=this.colliderFor(visual);
+      const reachOf=mesh=>{const bound=mesh?.geometry?.boundingSphere;return bound?bound.center.length()+bound.radius:0;};
+      const visualReach=Math.max(reachOf(visual.boot),reachOf(visual.shin),collider.offset.length()+collider.radius+collider.halfLength);
       const ray=new FT.Mesh(new FT.CylinderGeometry(.002,.002,1,5),new FT.MeshBasicMaterial({color:0xccf191,transparent:true,opacity:.9,depthTest:false,depthWrite:false,toneMapped:false}));
       ray.renderOrder=200;ray.frustumCulled=false;ray.visible=false;scene.add(ray);
-      return {name,index,visual,ray,source:null,tracked:false,ready:false,previousTracked:false,
+      return {name,index,visual,visualReach,ray,source:null,tracked:false,ready:false,previousTracked:false,
         inputPresent:false,contactTracked:false,rayTracked:false,poseMode:'none',poseAge:Infinity,hasPose:false,hasRayGrip:false,
         lastPosePosition:new FT.Vector3(),lastPoseOrientation:new FT.Quaternion(),
         rayToGripPosition:new FT.Vector3(),rayToGripOrientation:new FT.Quaternion(),
@@ -425,6 +427,24 @@ class FootballControls {
     this.horizontalForward(this.viewOrientation,this.forward);
     this.right.crossVectors(this.forward,this.up).normalize();
     if(this.desktop){this.camera.position.copy(this.headLocal);this.camera.quaternion.copy(this.headOrientation);}
+  }
+  ballClearance(hand,ball,margin){
+    const foot=hand.foot,reach=hand.visualReach,ankle=hand.frameTarget;
+    const translation=ankle.distanceTo(foot.anklePosition);
+    const outer=ball.position.distanceTo(ankle)-reach-translation-ball.radius;
+    if(outer>=margin||!foot.contactShape||!foot.shinContactShape)return outer;
+    // Both authored boxes are ankle-local. Cover the angular sweep as well as
+    // the translation between the solved foot and the displayed controller.
+    const boot=this.shapeClearance(ball.position,ankle,hand.frameTargetOrientation,foot.orientation,foot.contactShape.bounds,reach);
+    const shin=this.shapeClearance(ball.position,ankle,hand.frameTargetShinOrientation,foot.shinOrientation,foot.shinContactShape.bounds,reach);
+    return Math.min(boot,shin)-translation-ball.radius;
+  }
+  shapeClearance(point,ankle,target,solved,bounds,reach){
+    const local=this.temp.copy(point).sub(ankle).applyQuaternion(this.shinQ.copy(target).invert());
+    const {min,max}=bounds;
+    const distance=Math.hypot(Math.max(min[0]-local.x,0,local.x-max[0]),Math.max(min[1]-local.y,0,local.y-max[1]),Math.max(min[2]-local.z,0,local.z-max[2]));
+    const dot=target.dot(solved);
+    return distance-2*reach*Math.sqrt(Math.max(0,1-dot*dot));
   }
   move(dt,blocked) {
     this.refreshHead();

@@ -95,10 +95,11 @@ class FootballGoalNets {
   }
   _releaseBoot(net,state){if(state.mask){net.sleeping=false;net.quietTime=0;}state.id=null;state.mask=0;state.sides.fill(0);state.lastTouch.fill(0);}
   clearContacts(resetBall=false){this.feet=[];this.footCount=0;this._lastEvent=-10;this._freshContact=true;for(const net of this.goals){for(const state of net.bootStates)this._releaseBoot(net,state);if(resetBall){net.ballInside=null;net.exteriorMask=0;}net.ballContact=false;net.footContact=false;}}
-  _near(net,x,y,z,padding=0) {
-    const depth=z*net.sign-FB.halfLength,extra=net.maxDisplacement+padding;
-    return depth>=-.35-extra&&depth<=FB.goalDepth+.35+extra&&Math.abs(x)<=net.half+.35+extra&&y>=-.45-extra&&y<=net.top+.35+extra;
+  contactClearance(net,x,y,z) {
+    const depth=z*net.sign-FB.halfLength;
+    return Math.max(-.35-depth,depth-FB.goalDepth-.35,Math.abs(x)-net.half-.35,-.45-y,y-net.top-.35)-net.maxDisplacement;
   }
+  _near(net,x,y,z,padding=0){return this.contactClearance(net,x,y,z)<=padding;}
   _nearSurface(net,x,y,z,padding=0) {
     if(!this._near(net,x,y,z,padding))return false;
     const depth=z*net.sign-FB.halfLength,range=.38+padding+net.maxDisplacement;
