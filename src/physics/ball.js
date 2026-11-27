@@ -1,5 +1,8 @@
 import { FT } from "../../vendor/three.js";
 import { FB } from "../config.js";
+import { FootballShotSurface } from './shot-surface.js';
+
+const POWER_FOLLOW_THROUGH_SECONDS = .18;
 
 /* Football rigid sphere simulation; metres, seconds, kilograms.
    The moving boot and visible shin supply contact velocity, lift and spin. Low-speed
@@ -27,7 +30,7 @@ class FootballPhysics {
     this.ball = {
       position: new V(0, this.config.radius, 0), velocity: new V(), spin: new V(),
       orientation: new FT.Quaternion(), radius: this.config.radius,
-      mass: this.config.mass, curveMultiplier: 1
+      mass: this.config.mass, curveMultiplier: 1, shotSurface: new FootballShotSurface()
     };
     this.events = [];
     this.time = 0;
@@ -53,6 +56,9 @@ class FootballPhysics {
     this._footLocal = new V(); this._footLocalNormal = new V(); this._contactArm = new V();
     this._frameEventTime = -10;
     this._shotSpeedLimit = 0;
+    this._powerFoot = null;
+    this._powerUntil = 0;
+    this._powerDirection = new V();
     this.shotStrength = this.airShotStrength = 1;
   }
 
@@ -61,7 +67,10 @@ class FootballPhysics {
     this.shotStrength = multiplier(effects?.shotStrength);
     this.airShotStrength = multiplier(effects?.airShotStrength);
     this.ball.curveMultiplier = multiplier(effects?.curve);
-    if (this.shotStrength === 1 && this.airShotStrength === 1) this._shotSpeedLimit = 0;
+    this.ball.shotSurface.configure(effects);
+    if (this.shotStrength === 1 && this.airShotStrength === 1) {
+      this._shotSpeedLimit = 0; this._powerFoot = null;
+    }
   }
 
   reset(position, velocity) {
@@ -70,14 +79,16 @@ class FootballPhysics {
     b.position.y = Math.max(b.radius, b.position.y);
     velocity ? b.velocity.copy(velocity) : b.velocity.set(0, 0, 0);
     b.spin.set(0, 0, 0); b.orientation.identity();
+    b.shotSurface.reset();
     this.events.length = 0;
     this.footStates.clear();
     this._frameEventTime = -10;
     this._shotSpeedLimit = 0;
+    this._powerFoot = null;
   }
 
   clearContacts() {
-    this.footStates.clear();
+    this.footStates.clear(); this._powerFoot = null;
   }
 
   prepareFeet(feet, dt) {
@@ -158,10 +169,17 @@ class FootballPhysics {
         this.footStates.set(f.id, state);
       }
       state.seen = false; state.present = true; f.state = state;
+      if (state === this._powerFoot) {
+        if (f.ankleVelocity.dot(this._powerDirection) < -1) {
+          this._powerFoot = null;
+          state.strikeUntil = state.releaseUntil = 0;
+        } else if (this.time >= this._powerUntil) this._powerFoot = null;
+      }
       count++;
     }
     for (const state of this.footStates.values()) if (!state.present) {
       state.contact = false; state.strikeUntil = state.releaseUntil = 0;
+      if (state === this._powerFoot) this._powerFoot = null;
     }
     return count;
   }
@@ -223,6 +241,10 @@ class FootballPhysics {
         }
         if(separated){
           f.state.contact=false;
+          if(f.state===this._powerFoot&&f.ankleVelocity.lengthSq()<.25**2&&f.bootDriveAngularVelocity.lengthSq()<1){
+            this._powerFoot=null;
+            f.state.strikeUntil=f.state.releaseUntil=0;
+          }
           if(f.state.strikeUntil>this.time&&f.foot.contactShape&&
             this.contactDistance(f,b.radius+.08)>b.radius+.08)f.state.strikeUntil=f.state.releaseUntil=0;
         }
@@ -397,6 +419,18 @@ class FootballPhysics {
   releaseFootStrike(f, penetration) {
     const state=f.state,b=this.ball,cfg=this.config;
     state.correctDirection=false;
+    if (state === this._powerFoot) {
+      const outgoing = b.velocity.dot(this._powerDirection);
+      const drive = this._surface.dot(this._powerDirection);
+      if (outgoing > Math.max(1.8, b.velocity.length() * .45) && drive >= -1) {
+        // The boost has already launched this ball. A faster or rotating boot
+        // can sweep the same space again during the stroke. Let the ball fly
+        // on its own without an extra impulse or a positional shove from it.
+        state.contact = true;
+        return true;
+      }
+      this._powerFoot = null;
+    }
     if(state.strikeUntil<=this.time)return false;
     const direction=state.releaseDirection,outgoing=b.velocity.dot(direction);
     const drive=this._surface.dot(direction),alignment=this._normal.dot(direction);
@@ -459,6 +493,8 @@ class FootballPhysics {
     const newTouch=!state.contact&&(approach>.045||(penetration>.008&&f.velocity.lengthSq()>.003));
     let event;
     if (newTouch) {
+      this._powerFoot = null;
+      b.shotSurface.touch(b);
       event = {
         type: 'touch', footId: f.id, time: this.time, speed: Math.max(0, approach),
         instep: instep>.5, instepAmount: instep, surface: f.contactPart, position: b.position.clone()
@@ -534,7 +570,11 @@ class FootballPhysics {
           const active = Math.min(launchSpeed, impulse * Math.min(1, drive / approach));
           b.velocity.multiplyScalar(1 + (strength - 1) * active / launchSpeed);
           if (b.velocity.lengthSq() > cfg.maxSpeed ** 2) this._shotSpeedLimit = cfg.maxSpeed * strength;
+          this._powerFoot = state;
+          this._powerUntil = this.time + POWER_FOLLOW_THROUGH_SECONDS;
+          this._powerDirection.copy(b.velocity).normalize();
         }
+        b.shotSurface.launch(b);
       }
     }
     const speedSq=b.velocity.lengthSq();
@@ -567,7 +607,7 @@ class FootballPhysics {
 
   collideGround(dt) {
     const b = this.ball, r = b.radius;
-    if (b.position.y > r + .00015) return;
+    if (b.position.y > r + .00015) {b.shotSurface.observeAir(b.position.y-r);return;}
     b.position.y = r;
     const incoming = Math.max(0, -b.velocity.y);
     let normalImpulse = this.config.gravity * dt;
@@ -581,6 +621,7 @@ class FootballPhysics {
     }
     this._normal.set(0, 1, 0); this._surface.set(0, 0, 0);
     this.surfaceFriction(this._normal, this._surface, this.config.groundFriction * normalImpulse);
+    b.shotSurface.land(b,incoming);
     if (b.velocity.y > .15) return;
     const planarSpeed = Math.hypot(b.velocity.x, b.velocity.z);
     if (planarSpeed > 0) {
@@ -599,7 +640,7 @@ class FootballPhysics {
         (1-this.smoothContactBlend((planarSpeed-6)/3));
       const resistance=this.config.rollingResistance+this.config.slowRollingResistance*slowBand+
         this.config.controlRollingResistance*controlBand+this.config.puntRollingResistance*puntBand;
-      const factor = Math.max(0, 1 - resistance * dt / planarSpeed);
+      const factor = Math.max(0, 1 - resistance * b.shotSurface.rollingFactor(planarSpeed) * dt / planarSpeed);
       b.velocity.x *= factor; b.velocity.z *= factor;
       // Rolling resistance removes both translational and rolling energy.
       b.spin.x *= factor; b.spin.z *= factor;
@@ -622,6 +663,7 @@ class FootballPhysics {
     const speed = -b.velocity.dot(this._normal);
     b.position.addScaledVector(this._normal, total - distance + .0001);
     if (speed > 0) {
+      b.shotSurface.redirect();
       b.velocity.addScaledVector(this._normal, speed * 1.72);
       this._surface.set(0, 0, 0);
       this.surfaceFriction(this._normal, this._surface, speed * .16);

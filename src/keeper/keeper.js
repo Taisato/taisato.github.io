@@ -147,6 +147,7 @@ class FootballGoalkeeper {
     const simulator = this._prediction, predicted = simulator.ball;
     predicted.position.copy(ball.position); predicted.velocity.copy(ball.velocity); predicted.spin.copy(ball.spin);
     predicted.curveMultiplier = ball.curveMultiplier ?? 1;
+    predicted.shotSurface.copy(ball.shotSurface);
     const plane = this.homeZ - end * .36, h = 1 / 90;
     // Reuse the released ball integrator: drag, Magnus and the actual turf
     // friction/bounce all participate. There is no invisible save target force.
@@ -351,6 +352,7 @@ class FootballGoalkeeper {
       ball.position.addScaledVector(this._normal, sum - distance + .00015);
       const incoming = -this._relative.copy(ball.velocity).sub(this._surface).dot(this._normal);
       if (incoming <= 0) continue;
+      ball.shotSurface?.redirect();
       const centerHit = capsule.aName === 'pelvis' || capsule.aName === 'head';
       if ((this.ragdoll.active && incoming > 5.5) || (!this.ragdoll.active && centerHit && incoming > 24)) {
         this._impactPoint.copy(this._point).addScaledVector(this._normal, capsule.radius);

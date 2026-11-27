@@ -2,6 +2,7 @@ import { FB, footballClamp } from '../config.js';
 import { THREE_TOUCH_ABILITIES, THREE_TOUCH_BASE_EFFECTS } from './abilities.js';
 
 const EMPTY_REWARDS=Object.freeze([]);
+const REPEATABLE_ABILITIES=Object.freeze(THREE_TOUCH_ABILITIES.filter(ability=>ability.id!=='last-chance'));
 
 class FootballChallenge {
   constructor({random=Math.random}={}) {
@@ -12,12 +13,15 @@ class FootballChallenge {
     this.savePending=false;this._lastPhysicalTouchTime=-Infinity;
     this._motion=null;this._motionObserved=false;
     this.effects={...THREE_TOUCH_BASE_EFFECTS};
+    this._chanceBonusTouches=0;this._nextBonusTouches=0;this._lastChanceUsed=false;
+    this._registeredTouches=0;this._woodworkUsed=false;this._lastTouchOutsideBox=false;
     this.rewardChoices=EMPTY_REWARDS;this._rewardedScore=0;
     this._snapshot={mode:'challenge',phase:'idle',score:0,lives:3,touches:3,maxLives:3,maxTouches:3,round:0,outcome:null};
   }
 
   get maxLives() {return this.effects.maxLives;}
-  get maxTouches() {return this.effects.maxTouches;}
+  get maxTouches() {return this.effects.maxTouches+this._chanceBonusTouches;}
+  get rewardPool() {return this.effects.lastChance?REPEATABLE_ABILITIES:THREE_TOUCH_ABILITIES;}
 
   get snapshot() {
     const s=this._snapshot;
@@ -34,7 +38,7 @@ class FootballChallenge {
 
   beginReward() {
     if(!this.rewardDue)return null;
-    const pool=[...THREE_TOUCH_ABILITIES];
+    const pool=[...this.rewardPool];
     // Partial Fisher-Yates. Each of the three slots draws from the remaining pool.
     for(let i=0;i<3;i++){
       const j=i+Math.floor(this._random()*(pool.length-i));
@@ -60,6 +64,7 @@ class FootballChallenge {
   start() {
     Object.assign(this.effects,THREE_TOUCH_BASE_EFFECTS);
     this.rewardChoices=EMPTY_REWARDS;this._rewardedScore=0;
+    this._chanceBonusTouches=0;this._nextBonusTouches=0;this._lastChanceUsed=false;
     this.active=true;this.score=0;this.lives=this.maxLives;this.round=0;this.time=0;
     this.chance=null;
     return this._newChance();
@@ -67,6 +72,7 @@ class FootballChallenge {
 
   next() {
     if(!this.active||this.phase!=='result'||this.lives<=0||this.rewardDue)return null;
+    if(this.outcome==='retry'){this._resetAttempt();return this.chance;}
     return this._newChance();
   }
 
@@ -100,10 +106,17 @@ class FootballChallenge {
       player:{x:x-forwardX*.84,y:0,z:z-forwardZ*.84},
       yaw:Math.atan2(-forwardX,-forwardZ),difficulty:Math.max(0,this.score-this.effects.keeperLevelOffset)
     };
-    this.round++;this.touches=this.maxTouches;this.phase='ready';this.outcome=null;this.resultAge=0;
-    this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
-    this._lastPhysicalTouchTime=-Infinity;this._motion=null;this._motionObserved=false;
+    this.round++;
+    this._chanceBonusTouches=this._nextBonusTouches;this._nextBonusTouches=0;
+    this._resetAttempt();
     return this.chance;
+  }
+
+  _resetAttempt() {
+    this.touches=this.maxTouches;this.phase='ready';this.outcome=null;this.resultAge=0;
+    this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
+    this._registeredTouches=0;this._woodworkUsed=false;this._lastTouchOutsideBox=false;
+    this._lastPhysicalTouchTime=-Infinity;this._motion=null;this._motionObserved=false;
   }
 
   _crossing(from,to,plane) {
@@ -139,17 +152,28 @@ class FootballChallenge {
     this._lastPhysicalTouchTime=time;
     this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
     this.phase='live';
+    if(this.effects.longRangeBonus){
+      const point=event.position;
+      this._lastTouchOutsideBox=!!point&&Number.isFinite(point.x+point.z)&&
+        (point.z>-FB.halfLength+FB.penaltyDepth||Math.abs(point.x)>FB.goalWidth*.5+FB.penaltyDepth);
+    }
     if(gap<this.effects.touchCooldown-1e-9)return false;
     if(this.touches===0)return true;
-    this.touches--;
+    this.touches--;this._registeredTouches++;
     return false;
   }
 
   _resolve(outcome) {
     if(this.phase!=='ready'&&this.phase!=='live')return null;
+    if(outcome==='goal'){
+      this.score++;
+      const bonusLives=this._registeredTouches===1?this.effects.firstTimeFinish:0;
+      this.lives=Math.min(this.maxLives,this.lives+1+bonusLives);
+      this._nextBonusTouches=this._lastTouchOutsideBox?this.effects.longRangeBonus:0;
+    }else if(this.lives===1&&this.effects.lastChance&&!this._lastChanceUsed){
+      this._lastChanceUsed=true;outcome='retry';
+    }else this.lives=Math.max(0,this.lives-1);
     this.outcome=outcome;this.resultAge=0;
-    if(outcome==='goal'){this.score++;this.lives=Math.min(this.maxLives,this.lives+1);}
-    else this.lives=Math.max(0,this.lives-1);
     this.phase=this.lives>0?'result':'gameover';
     this._motion=null;this._motionObserved=false;
     return outcome;
@@ -166,14 +190,18 @@ class FootballChallenge {
     if(!this._motionObserved&&previous)this.observeMotion(previous,p,r,events);
     const motion=this._motion;
     const count=Math.min(events.length,motion?.eventCount??events.length);
-    let extraTouch=false;
     for(let i=0;i<count;i++){
       const event=events[i];
-      if(event.type==='touch')extraTouch=this._touch(event)||extraTouch;
+      if(event.type==='touch'){
+        if(this._touch(event))return this._resolve('touches');
+      }
       else if(event.type==='save')this.savePending=true;
+      else if(event.type==='frame'&&this.phase==='live'&&this.effects.woodworkCredit&&!this._woodworkUsed){
+        this._woodworkUsed=true;
+        this.touches=Math.min(this.maxTouches,this.touches+this.effects.woodworkCredit);
+      }
     }
     this._motion=null;this._motionObserved=false;
-    if(extraTouch)return this._resolve('touches');
     if(motion){
       if(motion.kind!=='goal'||this.phase==='live')return this._resolve(motion.kind);
     }

@@ -2,7 +2,7 @@ import { FT } from '../../vendor/three.js';
 import { FB } from '../config.js';
 
 const PITCH_PAINT = Object.freeze({lineWidth:.115, minimumPixels:.45, centreRadius:9.15,
-  penaltyDepth:16.5, goalAreaDepth:5.5, penaltySpot:11, cornerRadius:1});
+  penaltyDepth:FB.penaltyDepth, goalAreaDepth:5.5, penaltySpot:11, cornerRadius:1});
 
 // Paint is part of the opaque turf draw. Filtering the covered interval keeps
 // a line present even when no raster sample lands inside its physical width.
@@ -58,7 +58,7 @@ float pitchPaintCoverage(vec2 point) {
   coverage = max(coverage, pitchBand(p.y - halfZ, footprint.y) * across);
   coverage = max(coverage, pitchBand(point.y, footprint.y) * across);
 
-  float penaltyFront = halfZ - 16.5, penaltyHalf = uPitchGoalHalf + 16.5;
+  float penaltyFront = halfZ - ${PITCH_PAINT.penaltyDepth.toFixed(1)}, penaltyHalf = uPitchGoalHalf + ${PITCH_PAINT.penaltyDepth.toFixed(1)};
   float smallFront = halfZ - 5.5, smallHalf = uPitchGoalHalf + 5.5;
   coverage = max(coverage, pitchBand(p.y - penaltyFront, footprint.y) * pitchBelow(p.x, penaltyHalf + pitchHalfWidth, footprint.x));
   coverage = max(coverage, pitchBand(p.x - penaltyHalf, footprint.x) * pitchSpan(p.y, penaltyFront, halfZ, footprint.y));

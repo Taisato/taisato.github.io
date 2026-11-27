@@ -14,7 +14,6 @@ import { FootballCalibrationPanel } from "./ui/calibration.js";
 import { FootballHUD } from "./ui/hud.js";
 import { FootballRewardPicker } from "./ui/rewards.js";
 import { FootballChallenge } from "./game/challenge.js";
-import { THREE_TOUCH_ABILITIES } from "./game/abilities.js";
 import { FootballAudio } from "./audio.js";
 import { TURN_SPEED, normalizeSettings, readSettings, saveSettings } from "./settings.js";
 
@@ -273,7 +272,7 @@ class FootballApp {
     if(this.controls.desktop)document.exitPointerLock?.();
     this.controls.keys.clear();this.controls.invalidate();this.controls.prepareFeet(0,true);
     this.goalkeeper.clearContacts();this.motion.reset();
-    this.rewardPicker.show(choices,THREE_TOUCH_ABILITIES,this.controls,this.challenge.score);
+    this.rewardPicker.show(choices,this.challenge.rewardPool,this.controls,this.challenge.score);
     this.syncPage();
   }
   chooseReward(id,hand) {

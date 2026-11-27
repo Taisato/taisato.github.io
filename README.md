@@ -61,7 +61,7 @@ Use the menu to switch modes, restart or recalibrate. Recalibration preserves th
 
 ### Abilities
 
-At every five goals, the world slows to quarter speed and three reels cycle through the ability pool. Each reel stops on a different random ability. To choose one in VR, aim at its box and hold the trigger until the box fills. On desktop, hold the box or its number key (**1**, **2** or **3**). Your choice takes effect on the next chance. Abilities stack within the run and reset when you start a new one.
+At every five goals, the world slows to quarter speed and three reels cycle through the eligible ability pool. Each reel stops on a different random ability. To choose one in VR, aim at its box and hold the trigger until the box fills. On desktop, hold the box or its number key (**1**, **2** or **3**). Your choice takes effect on the next chance. Repeatable abilities stack within the run and reset when you start a new one. Last Chance can be picked once per run.
 
 | Ability | Effect per pick |
 | --- | --- |
@@ -74,6 +74,12 @@ At every five goals, the world slows to quarter speed and three reels cycle thro
 | Keeper Setback | Sets the keeper back five goals in difficulty, down to a minimum of zero. |
 | Touch Window | Adds 0.5 seconds to the gap needed to count a new touch. |
 | Shot Trace | Shows the flight path behind your shot. Each pick adds 2.5 seconds of visibility. |
+| Woodwork Credit | Your first post or crossbar hit each chance refunds one used touch per pick. |
+| Soft Landing | The ball sheds more horizontal speed on its first bounce after your kick. |
+| First-Time Finish | Scoring with one counted touch restores an extra life per pick, up to your life limit. |
+| Last Chance | One failed chance on your final life gives you a retry with the same starting positions. |
+| Grass Cutter | Firm, low shots lose less speed as they roll on the turf. |
+| Long-Range Bonus | If you score from a last touch outside the penalty area, the next chance starts with one extra touch per pick. |
 
 ## Net damage
 
@@ -88,6 +94,8 @@ Damage lasts for the **whole 3 TOUCH run**. Scoring, losing one life and advanci
 The V41 changes to shot power, instep assistance and upward aerodynamic lift have been reverted. Base shot strength, the 38 m/s base speed ceiling, instep launch tuning, curve, ground rolling and receiving response use the previous tuning again.
 
 The follow-through correction addresses repeated contact after a firm strike. A tracked boot can outrun the ball at its speed ceiling, or accelerate and turn upward while the ball is still below that ceiling. These continuing overlaps can redirect an already-launched shot. The contact episode now releases that shot along its established direction rather than treating every overlap as another powered kick. The release also handles position separation, so correcting velocity alone cannot leave an upward position jump.
+
+Power Strike and Volley Boost add speed at launch. The follow-through of that same swing leaves the boosted ball in free flight, and a separate kick or trap can contact it again.
 
 Genuinely separate kicks remain available. Ordinary controlled touches, rising kicks and curved shots continue through the existing contact solver. Returning from menu slow motion preserves the real speed of controller swings, so reduced simulation time does not multiply foot-impact power.
 

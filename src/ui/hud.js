@@ -29,8 +29,8 @@ function drawHUD(c,s,width=900,height=250,textRegions=null){
  drawCapacity(c,touches,maxTouches,42,false);
  c.fillStyle=UI.line;c.fillRect(296,30,1,84);tracked(c,'GOALS',338,42,17,UI.muted,2);textRegion(c,textRegions,1,'GOALS',338,42,17,2,width,height);label(c,String(s.score||0),338,94,54,UI.white,'left',800);textRegion(c,textRegions,2,String(s.score||0),338,94,54,0,width,height);c.fillStyle=UI.line;c.fillRect(592,30,1,84);tracked(c,'LIVES',634,42,17,UI.muted,2);textRegion(c,textRegions,3,'LIVES',634,42,17,2,width,height);
  drawCapacity(c,lives,maxLives,634,true);
- const over=s.phase==='gameover',result=s.phase==='result',word=over?'RUN OVER':result?({goal:'GOAL',out:'OUT',saved:'SAVED',touches:'NO TOUCHES',miss:'MISS'}[s.outcome]||'NEXT'):'';
- if(word){shape(c,250,158,400,78,13);c.fillStyle=s.outcome==='goal'&&!over?UI.mint:over?UI.lilac:UI.white;c.fill();label(c,word,450,197,35,UI.ink,'center',900);textRegion(c,textRegions,4,word,450,197,35,0,width,height);}
+ const over=s.phase==='gameover',result=s.phase==='result',word=over?'RUN OVER':result?({goal:'GOAL',out:'OUT',saved:'SAVED',touches:'NO TOUCHES',miss:'MISS',retry:'RETRY'}[s.outcome]||'NEXT'):'';
+ if(word){shape(c,250,158,400,78,13);c.fillStyle=s.outcome==='goal'&&!over?UI.mint:over||s.outcome==='retry'?UI.lilac:UI.white;c.fill();label(c,word,450,197,35,UI.ink,'center',900);textRegion(c,textRegions,4,word,450,197,35,0,width,height);}
 }
 class FootballHUD{
  constructor(camera){

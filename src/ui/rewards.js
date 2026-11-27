@@ -14,10 +14,12 @@ function makeReel(catalog, selected, lane) {
     const pick = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[pick]] = [deck[pick], deck[i]];
   }
+  // Keep the reel cadence brisk as the ability pool grows. Every entry still appears.
+  const pace = Math.min(1, (12 + lane * 2) / steps);
   let end = 0;
   for (let i = 0; i < steps; i++) {
     entries.push(deck[i % deck.length]);
-    end += .067 + i * .005 + Math.max(0, i - steps + 4) * .032;
+    end += (.067 + i * .005 * pace) * pace + Math.max(0, i - steps + 4) * .032;
     ends.push(end);
   }
   if (entries.at(-1).id === selected.id) [entries[steps - 2], entries[steps - 1]] = [entries[steps - 1], entries[steps - 2]];
