@@ -2,7 +2,7 @@ import { FT } from "../../vendor/three.js";
 import { FB } from "../config.js";
 import { FootballShotSurface } from './shot-surface.js';
 
-const POWER_FOLLOW_THROUGH_SECONDS = .18;
+const SHOT_FOLLOW_THROUGH_SECONDS = .22;
 
 /* Football rigid sphere simulation; metres, seconds, kilograms.
    The moving boot and visible shin supply contact velocity, lift and spin. Low-speed
@@ -56,9 +56,9 @@ class FootballPhysics {
     this._footLocal = new V(); this._footLocalNormal = new V(); this._contactArm = new V();
     this._frameEventTime = -10;
     this._shotSpeedLimit = 0;
-    this._powerFoot = null;
-    this._powerUntil = 0;
-    this._powerDirection = new V();
+    this._launchedFoot = null;
+    this._followThroughUntil = 0;
+    this._launchDirection = new V();
     this.shotStrength = this.airShotStrength = 1;
   }
 
@@ -69,7 +69,7 @@ class FootballPhysics {
     this.ball.curveMultiplier = multiplier(effects?.curve);
     this.ball.shotSurface.configure(effects);
     if (this.shotStrength === 1 && this.airShotStrength === 1) {
-      this._shotSpeedLimit = 0; this._powerFoot = null;
+      this._shotSpeedLimit = 0; this._launchedFoot = null;
     }
   }
 
@@ -84,14 +84,15 @@ class FootballPhysics {
     this.footStates.clear();
     this._frameEventTime = -10;
     this._shotSpeedLimit = 0;
-    this._powerFoot = null;
+    this._launchedFoot = null;
   }
 
   clearContacts() {
-    this.footStates.clear(); this._powerFoot = null;
+    this.footStates.clear(); this._launchedFoot = null;
   }
 
   prepareFeet(feet, dt) {
+    if (this.time >= this._followThroughUntil) this._launchedFoot = null;
     let count = 0;
     for (const state of this.footStates.values()) state.present = false;
     for (let i = 0; i < feet.length; i++) {
@@ -169,17 +170,14 @@ class FootballPhysics {
         this.footStates.set(f.id, state);
       }
       state.seen = false; state.present = true; f.state = state;
-      if (state === this._powerFoot) {
-        if (f.ankleVelocity.dot(this._powerDirection) < -1) {
-          this._powerFoot = null;
-          state.strikeUntil = state.releaseUntil = 0;
-        } else if (this.time >= this._powerUntil) this._powerFoot = null;
+      if (state === this._launchedFoot && f.ankleVelocity.dot(this._launchDirection) < -1) {
+        this._launchedFoot = null;
+        state.strikeUntil = state.releaseUntil = 0;
       }
       count++;
     }
     for (const state of this.footStates.values()) if (!state.present) {
       state.contact = false; state.strikeUntil = state.releaseUntil = 0;
-      if (state === this._powerFoot) this._powerFoot = null;
     }
     return count;
   }
@@ -241,8 +239,8 @@ class FootballPhysics {
         }
         if(separated){
           f.state.contact=false;
-          if(f.state===this._powerFoot&&f.ankleVelocity.lengthSq()<.25**2&&f.bootDriveAngularVelocity.lengthSq()<1){
-            this._powerFoot=null;
+          if(f.state===this._launchedFoot&&f.ankleVelocity.lengthSq()<.25**2&&f.bootDriveAngularVelocity.lengthSq()<1){
+            this._launchedFoot=null;
             f.state.strikeUntil=f.state.releaseUntil=0;
           }
           if(f.state.strikeUntil>this.time&&f.foot.contactShape&&
@@ -416,20 +414,38 @@ class FootballPhysics {
     b.velocity.x*=scale;b.velocity.z*=scale;b.velocity.y=vertical;
   }
 
+  moderateShotLift(foot, clearance) {
+    const velocity = this.ball.velocity;
+    const naturalLift = 3.25;
+    // Driven shots keep their horizontal pace and spin. Allow a little more
+    // height for a genuinely rising boot or when striking an airborne ball.
+    if (velocity.y <= naturalLift || Math.hypot(velocity.x, velocity.z) < this.config.footStrikeBlendStart) return false;
+    const swing = foot.ankleVelocity;
+    const upward = swing.y / Math.max(1, Math.hypot(swing.x, swing.z));
+    const chip = this.smoothContactBlend((upward - .22) / .56);
+    const volley = this.smoothContactBlend((clearance - .045) / .30);
+    const knee = naturalLift + .75 * chip + 1.25 * volley;
+    const excess = velocity.y - knee;
+    if (excess <= 0) return false;
+    const range = 2.45 + 2.9 * chip + 2.2 * volley;
+    const reduced = excess * range / (range + excess);
+    velocity.y = knee + reduced;
+    return excess - reduced > .15;
+  }
+
   releaseFootStrike(f, penetration) {
     const state=f.state,b=this.ball,cfg=this.config;
     state.correctDirection=false;
-    if (state === this._powerFoot) {
-      const outgoing = b.velocity.dot(this._powerDirection);
-      const drive = this._surface.dot(this._powerDirection);
+    if (state === this._launchedFoot) {
+      const outgoing = b.velocity.dot(this._launchDirection);
+      const drive = this._surface.dot(this._launchDirection);
       if (outgoing > Math.max(1.8, b.velocity.length() * .45) && drive >= -1) {
-        // The boost has already launched this ball. A faster or rotating boot
-        // can sweep the same space again during the stroke. Let the ball fly
-        // on its own without an extra impulse or a positional shove from it.
+        // The same boot can sweep through again after a boosted or moderated
+        // launch. Let the ball fly without a second impulse or positional shove.
         state.contact = true;
         return true;
       }
-      this._powerFoot = null;
+      this._launchedFoot = null;
     }
     if(state.strikeUntil<=this.time)return false;
     const direction=state.releaseDirection,outgoing=b.velocity.dot(direction);
@@ -487,13 +503,14 @@ class FootballPhysics {
     const approach = -this._relative.dot(this._normal);
     const penetration = radius - distance;
     const liftRestore=this.liftRestoration();
-    const grounded=1-this.smoothContactBlend((b.position.y-b.radius-.004)/.03);
+    const clearance = b.position.y - b.radius;
+    const grounded=1-this.smoothContactBlend((clearance-.004)/.03);
     const airborne = b.position.y > b.radius + .05;
     const controlPunt=this.controlledPunt(f);
     const newTouch=!state.contact&&(approach>.045||(penetration>.008&&f.velocity.lengthSq()>.003));
     let event;
     if (newTouch) {
-      this._powerFoot = null;
+      this._launchedFoot = null;
       b.shotSurface.touch(b);
       event = {
         type: 'touch', footId: f.id, time: this.time, speed: Math.max(0, approach),
@@ -569,10 +586,13 @@ class FootballPhysics {
           // resolved direction, instep lift, receive response and contact spin.
           const active = Math.min(launchSpeed, impulse * Math.min(1, drive / approach));
           b.velocity.multiplyScalar(1 + (strength - 1) * active / launchSpeed);
-          if (b.velocity.lengthSq() > cfg.maxSpeed ** 2) this._shotSpeedLimit = cfg.maxSpeed * strength;
-          this._powerFoot = state;
-          this._powerUntil = this.time + POWER_FOLLOW_THROUGH_SECONDS;
-          this._powerDirection.copy(b.velocity).normalize();
+        }
+        const reducedLift = this.moderateShotLift(f, clearance);
+        if (strength > 1 && b.velocity.lengthSq() > cfg.maxSpeed ** 2) this._shotSpeedLimit = cfg.maxSpeed * strength;
+        if (strength > 1 || reducedLift) {
+          this._launchedFoot = state;
+          this._followThroughUntil = this.time + SHOT_FOLLOW_THROUGH_SECONDS;
+          this._launchDirection.copy(b.velocity).normalize();
         }
         b.shotSurface.launch(b);
       }

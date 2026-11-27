@@ -2,6 +2,7 @@ import { FB, footballClamp } from '../config.js';
 import { THREE_TOUCH_ABILITIES, THREE_TOUCH_BASE_EFFECTS } from './abilities.js';
 
 const EMPTY_REWARDS=Object.freeze([]);
+const GOALS_PER_REWARD=10;
 const REPEATABLE_ABILITIES=Object.freeze(THREE_TOUCH_ABILITIES.filter(ability=>ability.id!=='last-chance'));
 
 class FootballChallenge {
@@ -33,7 +34,7 @@ class FootballChallenge {
 
   get rewardDue() {
     return this.active&&this.phase==='result'&&this.outcome==='goal'&&
-      this.score>0&&this.score%5===0&&this._rewardedScore<this.score;
+      this.score>0&&this.score%GOALS_PER_REWARD===0&&this._rewardedScore<this.score;
   }
 
   beginReward() {

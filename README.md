@@ -61,7 +61,7 @@ Use the menu to switch modes, restart or recalibrate. Recalibration preserves th
 
 ### Abilities
 
-At every five goals, the world slows to quarter speed and three reels cycle through the eligible ability pool. Each reel stops on a different random ability. To choose one in VR, aim at its box and hold the trigger until the box fills. On desktop, hold the box or its number key (**1**, **2** or **3**). Your choice takes effect on the next chance. Repeatable abilities stack within the run and reset when you start a new one. Last Chance can be picked once per run.
+At every ten goals, the world slows to quarter speed and three reels cycle through the eligible ability pool. Each reel stops on a different random ability. To choose one in VR, aim at its box and hold the trigger until the box fills. On desktop, hold the box or its number key (**1**, **2** or **3**). Your choice takes effect on the next chance. Repeatable abilities stack within the run and reset when you start a new one. Last Chance can be picked once per run.
 
 | Ability | Effect per pick |
 | --- | --- |
@@ -91,11 +91,11 @@ Damage lasts for the **whole 3 TOUCH run**. Scoring, losing one life and advanci
 
 ## Boot contact and flight
 
-The V41 changes to shot power, instep assistance and upward aerodynamic lift have been reverted. Base shot strength, the 38 m/s base speed ceiling, instep launch tuning, curve, ground rolling and receiving response use the previous tuning again.
+The base ball speed ceiling is 38 m/s. Firm drives shed excess upward speed progressively at launch and keep their horizontal pace and spin. Low lifts use the usual contact response. Rising swings and airborne contacts allow extra height.
 
 The follow-through correction addresses repeated contact after a firm strike. A tracked boot can outrun the ball at its speed ceiling, or accelerate and turn upward while the ball is still below that ceiling. These continuing overlaps can redirect an already-launched shot. The contact episode now releases that shot along its established direction rather than treating every overlap as another powered kick. The release also handles position separation, so correcting velocity alone cannot leave an upward position jump.
 
-Power Strike and Volley Boost add speed at launch. The follow-through of that same swing leaves the boosted ball in free flight, and a separate kick or trap can contact it again.
+Power Strike and Volley Boost add speed at launch. The follow-through of that same swing leaves the boosted ball in free flight even across a brief tracking gap. A separate kick or trap can contact it again.
 
 Genuinely separate kicks remain available. Ordinary controlled touches, rising kicks and curved shots continue through the existing contact solver. Returning from menu slow motion preserves the real speed of controller swings, so reduced simulation time does not multiply foot-impact power.
 
