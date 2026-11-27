@@ -49,15 +49,31 @@ A direct kick, a fast body collision or a hard shot to the torso or head can kno
 
 **3 TOUCH** starts each chance with a stationary ball and the player facing the guarded goal. You have three touches and three lives. Opening chances are central, 11–15 metres from the goal line. Scoring gradually introduces longer approaches, tighter angles and a more capable keeper. At 15 goals, starts average about 20.7 metres from the goal line, roughly 4.2 metres outside the penalty area. Starting depth remains bounded at 27 metres.
 
-- Score to regain one life, up to three, and move to a new chance.
+- Score to regain one life, up to your current life limit, and move to a new chance.
 - Lose one life when the ball goes out, the keeper secures it, or the final shot fails.
-- The third touch gets time to complete its shot. A fourth distinct touch loses the chance.
-- Contacts less than 0.5 seconds apart count as one continuous sequence across both feet. Every contact still affects the ball normally.
+- The final allowed touch gets time to complete its shot. The next distinct touch loses the chance.
+- By default, contacts less than 0.5 seconds apart count as one continuous sequence across both feet. Every contact still affects the ball normally.
 - A parry remains playable when touches remain. Recovering the ball clears the pending save.
 - There is no preparation timer or timer while touches remain. A final shot resolves when it stops, leaves play, scores or reaches the 14-second simulation-time failsafe.
 - At zero lives, choose **Again**. Right-controller **A** also restarts a finished VR run. Free-ball respawn is disabled during a live challenge.
 
 Use the menu to switch modes, restart or recalibrate. Recalibration preserves the current chance, ball, touches and lives. New chances refresh both legs before rendering their new position and clear old contact histories.
+
+### Abilities
+
+At every five goals, the world slows to quarter speed and three reels cycle through the ability pool. Each reel stops on a different random ability. To choose one in VR, aim at its box and hold the trigger until the box fills. On desktop, hold the box or its number key (**1**, **2** or **3**). Your choice takes effect on the next chance. Abilities stack within the run and reset when you start a new one.
+
+| Ability | Effect per pick |
+| --- | --- |
+| Power Strike | +10% strength on shots. |
+| Bend It | +10% sideways curve on shots with spin. |
+| 1 Life Slot | Adds one life slot and restores one life immediately. |
+| Extra Touch | Adds one touch per chance. |
+| Volley Boost | +25% strength when you strike an airborne ball. |
+| Quick Feet | +10% walk and sprint speed. |
+| Keeper Setback | Sets the keeper back five goals in difficulty, down to a minimum of zero. |
+| Touch Window | Adds 0.5 seconds to the gap needed to count a new touch. |
+| Shot Trace | Shows the flight path behind your shot. Each pick adds 2.5 seconds of visibility. |
 
 ## Net damage
 
@@ -65,11 +81,11 @@ An exceptionally fast ball impact can rupture the back, side or roof of the net.
 
 The impact and swept-crossing paths both require at least **33 m/s** of ball speed and outward impact speed relative to the cloth. The previous low-speed escape fallback has been removed. A lower-speed numerical crossing is contained. Shared material edges between panels are explicitly retained, including the corner where the side and back meet. Existing holes remain open and passable.
 
-Damage lasts for the **whole 3 TOUCH run**. Scoring, losing one life and advancing to another chance do not repair the nets. After all three lives are lost, the holes remain visible on the game-over screen. Choosing **Again**, pressing right-controller **A** at game over, or explicitly restarting begins a new run with repaired nets. Launching Freeroam again also repairs them. Free-ball respawns, menus, recalibration and tracking recovery preserve damage. A legal goal still counts when the ball subsequently breaks through the net.
+Damage lasts for the **whole 3 TOUCH run**. Scoring, losing one life and advancing to another chance do not repair the nets. At zero lives, the holes remain visible on the game-over screen. Choosing **Again**, pressing right-controller **A** at game over, or explicitly restarting begins a new run with repaired nets. Launching Freeroam again also repairs them. Free-ball respawns, menus, recalibration and tracking recovery preserve damage. A legal goal still counts when the ball subsequently breaks through the net.
 
 ## Boot contact and flight
 
-The V41 changes to shot power, instep assistance and upward aerodynamic lift have been reverted. Shot strength, the 38 m/s general speed ceiling, instep launch tuning, curve, ground rolling and receiving response use the previous tuning again.
+The V41 changes to shot power, instep assistance and upward aerodynamic lift have been reverted. Base shot strength, the 38 m/s base speed ceiling, instep launch tuning, curve, ground rolling and receiving response use the previous tuning again.
 
 The follow-through correction addresses repeated contact after a firm strike. A tracked boot can outrun the ball at its speed ceiling, or accelerate and turn upward while the ball is still below that ceiling. These continuing overlaps can redirect an already-launched shot. The contact episode now releases that shot along its established direction rather than treating every overlap as another powered kick. The release also handles position separation, so correcting velocity alone cannot leave an upward position jump.
 

@@ -16,11 +16,19 @@ function textRegion(c,regions,index,value,x,y,size,spacing,width,height){
  // Two canvas pixels include bilinear filtering and the complete .35 px fringe.
  regions[index].set((left-2)/width,1-(bottom+2)/height,(right+2)/width,1-(top-2)/height);
 }
+function drawCapacity(c,count,capacity,x,isLife){
+ if(capacity>5){label(c,`${count} / ${capacity}`,x,91,38,isLife?UI.lilac:UI.mint,'left',800);return;}
+ const icon=isLife?heart:touch;
+ for(let i=0;i<capacity;i++)icon(c,x+22+i*(isLife?44:46),isLife?95:91,isLife?27:30,i<count);
+}
 function drawHUD(c,s,width=900,height=250,textRegions=null){
  if(textRegions)for(const region of textRegions)region.set(2,2,-1,-1);
  c.clearRect(0,0,width,height);if(s.mode!=='challenge')return;shape(c,6,6,888,132,18);c.fillStyle='rgba(8,13,29,.94)';c.fill();c.strokeStyle=UI.line;c.lineWidth=2;c.stroke();c.fillStyle=UI.mint;c.fillRect(34,6,70,3);tracked(c,'TOUCHES',42,41,17,UI.muted,2);textRegion(c,textRegions,0,'TOUCHES',42,41,17,2,width,height);
- const touches=Math.max(0,Math.min(3,s.touches??s.touchesLeft??3)),lives=Math.max(0,Math.min(3,s.lives??3));for(let i=0;i<3;i++)touch(c,64+i*46,91,30,i<touches);
- c.fillStyle=UI.line;c.fillRect(296,30,1,84);tracked(c,'GOALS',338,42,17,UI.muted,2);textRegion(c,textRegions,1,'GOALS',338,42,17,2,width,height);label(c,String(s.score||0),338,94,54,UI.white,'left',800);textRegion(c,textRegions,2,String(s.score||0),338,94,54,0,width,height);c.fillStyle=UI.line;c.fillRect(592,30,1,84);tracked(c,'LIVES',634,42,17,UI.muted,2);textRegion(c,textRegions,3,'LIVES',634,42,17,2,width,height);for(let i=0;i<3;i++)heart(c,656+i*44,95,27,i<lives);
+ const maxTouches=s.maxTouches??3,maxLives=s.maxLives??3;
+ const touches=Math.max(0,Math.min(maxTouches,s.touches??s.touchesLeft??3)),lives=Math.max(0,Math.min(maxLives,s.lives??3));
+ drawCapacity(c,touches,maxTouches,42,false);
+ c.fillStyle=UI.line;c.fillRect(296,30,1,84);tracked(c,'GOALS',338,42,17,UI.muted,2);textRegion(c,textRegions,1,'GOALS',338,42,17,2,width,height);label(c,String(s.score||0),338,94,54,UI.white,'left',800);textRegion(c,textRegions,2,String(s.score||0),338,94,54,0,width,height);c.fillStyle=UI.line;c.fillRect(592,30,1,84);tracked(c,'LIVES',634,42,17,UI.muted,2);textRegion(c,textRegions,3,'LIVES',634,42,17,2,width,height);
+ drawCapacity(c,lives,maxLives,634,true);
  const over=s.phase==='gameover',result=s.phase==='result',word=over?'RUN OVER':result?({goal:'GOAL',out:'OUT',saved:'SAVED',touches:'NO TOUCHES',miss:'MISS'}[s.outcome]||'NEXT'):'';
  if(word){shape(c,250,158,400,78,13);c.fillStyle=s.outcome==='goal'&&!over?UI.mint:over?UI.lilac:UI.white;c.fill();label(c,word,450,197,35,UI.ink,'center',900);textRegion(c,textRegions,4,word,450,197,35,0,width,height);}
 }
@@ -49,8 +57,9 @@ class FootballHUD{
  update(snapshot={},visible=true,desktop=false,viewCamera=this.camera){
   const show=!!visible&&snapshot.mode==='challenge';this.mesh.visible=show&&!desktop;if(this.desktopCanvas)this.desktopCanvas.hidden=!(show&&desktop);if(!show)return;
   if(!desktop)this.fitToCamera(viewCamera);
-  const key=[snapshot.mode,snapshot.phase,snapshot.score,snapshot.lives,snapshot.touches??snapshot.touchesLeft,snapshot.outcome,desktop].join('|');if(key===this.key)return;this.key=key;drawHUD(this.context,snapshot,900,250,this.textRegions);this.texture.needsUpdate=true;
-  if(this.desktopContext){this.desktopContext.clearRect(0,0,900,250);this.desktopContext.drawImage(this.canvas,0,0);}if(this.desktopCanvas)this.desktopCanvas.setAttribute?.('aria-label',(snapshot.score||0)+' goals, '+(snapshot.touches??snapshot.touchesLeft??3)+' touches, '+(snapshot.lives??3)+' lives');
+  const touches=snapshot.touches??snapshot.touchesLeft??3,maxTouches=snapshot.maxTouches??3,lives=snapshot.lives??3,maxLives=snapshot.maxLives??3;
+  const key=[snapshot.mode,snapshot.phase,snapshot.score,lives,maxLives,touches,maxTouches,snapshot.outcome,desktop].join('|');if(key===this.key)return;this.key=key;drawHUD(this.context,snapshot,900,250,this.textRegions);this.texture.needsUpdate=true;
+  if(this.desktopContext){this.desktopContext.clearRect(0,0,900,250);this.desktopContext.drawImage(this.canvas,0,0);}if(this.desktopCanvas)this.desktopCanvas.setAttribute?.('aria-label',`${snapshot.score||0} goals, ${touches} of ${maxTouches} touches, ${lives} of ${maxLives} lives`);
  }
  hide(){this.mesh.visible=false;if(this.desktopCanvas)this.desktopCanvas.hidden=true;}
  dispose(){this.hide();this.mesh.removeFromParent();this.mesh.geometry.dispose();this.mesh.material.dispose();this.texture.dispose();}

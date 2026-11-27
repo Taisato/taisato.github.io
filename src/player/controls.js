@@ -27,7 +27,7 @@ class FootballControls {
     this.poseInverse=new FT.Quaternion();this.poseVector=new FT.Vector3();
     this.trackingHoldSeconds=.12;
     this.keys=new Set();this.kickAge=10;
-    this.edges={ball:false,menu:false,calibrate:false};this.left={x:0,y:0};this.turn=0;this.turnSpeedMultiplier=1;this.sprint=false;
+    this.edges={ball:false,menu:false,calibrate:false};this.left={x:0,y:0};this.turn=0;this.turnSpeedMultiplier=1;this.speedMultiplier=1;this.sprint=false;
     this.hands=['left','right'].map((name,index)=>{
       const visual=field.makeFoot(name);scene.add(visual.root);visual.root.visible=false;
       const collider=this.colliderFor(visual);
@@ -378,7 +378,7 @@ class FootballControls {
       this.rig.position.x+=this.temp.x-this.temp2.x;this.rig.position.z+=this.temp.z-this.temp2.z;
       this.refreshHead();
     }
-    const speed=this.sprint?FB.sprintSpeed:FB.walkSpeed;
+    const speed=(this.sprint?FB.sprintSpeed:FB.walkSpeed)*this.speedMultiplier;
     this.temp.copy(this.forward).multiplyScalar(-this.left.y).addScaledVector(this.right,this.left.x);
     const inputLength=this.temp.length();
     if(inputLength>1e-6){

@@ -39,6 +39,21 @@
 </main>
 <canvas id="desktop-hud" width="900" height="250" hidden role="img" aria-label="Challenge status"></canvas>
 <div id="desktop-hint" hidden><b>WASD</b> Move <b>Space</b> Kick <b>Esc</b> Menu</div>
+<section id="desktop-rewards" hidden role="dialog" aria-modal="true" aria-labelledby="reward-title" aria-describedby="reward-hint" tabindex="-1">
+  <div class="reward-panel">
+    <div class="reward-meta"><span>3 TOUCH</span><span id="reward-score"></span></div>
+    <h2 id="reward-title">Choose an ability</h2>
+    <div class="reward-cards"></div>
+    <p id="reward-hint" role="status">Rolling abilities…</p>
+  </div>
+</section>
+<template id="reward-card-template">
+  <button type="button" class="reward-card" disabled>
+    <span class="reward-key" aria-hidden="true"></span>
+    <span class="reward-reel" aria-hidden="true"><span class="reward-current"></span><span class="reward-next"></span></span>
+    <span class="reward-info" hidden><strong class="reward-name"></strong><span class="reward-description"></span></span>
+  </button>
+</template>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

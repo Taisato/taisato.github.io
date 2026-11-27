@@ -288,11 +288,13 @@ class FootballOptics {
     u.uHUDVisible.value = mesh?.visible ? 1 : 0;
     if(!u.uHUDVisible.value) return;
     let left = Infinity, bottom = Infinity, right = -Infinity, top = -Infinity;
-    // The UI plane is fixed at .9 x .25 m; its current matrix contains the
-    // fitted, lowered HUD pose. Reading it leaves all camera transforms intact.
+    const {width=.9,height=.25} = mesh.geometry.parameters || {};
+    // Use the current UI plane so the reward text stays readable in slow motion.
     for(let i = 0; i < 4; i++) {
-      this._corner.set(i & 1 ? .45 : -.45, i & 2 ? .125 : -.125, 0)
-        .applyMatrix4(mesh.matrixWorld).applyMatrix4(camera.matrixWorldInverse).applyMatrix4(camera.projectionMatrix);
+      this._corner.set((i & 1 ? .5 : -.5) * width, (i & 2 ? .5 : -.5) * height, 0)
+        .applyMatrix4(mesh.matrixWorld).applyMatrix4(camera.matrixWorldInverse);
+      if(this._corner.z>=-camera.near){u.uHUDVisible.value=0;return;}
+      this._corner.applyMatrix4(camera.projectionMatrix);
       const x = this._corner.x * .5 + .5, y = this._corner.y * .5 + .5;
       left = Math.min(left, x); right = Math.max(right, x);
       bottom = Math.min(bottom, y); top = Math.max(top, y);

@@ -1,4 +1,7 @@
 import { FB, footballClamp } from '../config.js';
+import { THREE_TOUCH_ABILITIES, THREE_TOUCH_BASE_EFFECTS } from './abilities.js';
+
+const EMPTY_REWARDS=Object.freeze([]);
 
 class FootballChallenge {
   constructor({random=Math.random}={}) {
@@ -8,29 +11,68 @@ class FootballChallenge {
     this.time=0;this.lastTouchTime=0;this.settledAge=0;this.saveStoppedAge=0;
     this.savePending=false;this._lastPhysicalTouchTime=-Infinity;
     this._motion=null;this._motionObserved=false;
-    this._snapshot={mode:'challenge',phase:'idle',score:0,lives:3,touches:3,round:0,outcome:null};
+    this.effects={...THREE_TOUCH_BASE_EFFECTS};
+    this.rewardChoices=EMPTY_REWARDS;this._rewardedScore=0;
+    this._snapshot={mode:'challenge',phase:'idle',score:0,lives:3,touches:3,maxLives:3,maxTouches:3,round:0,outcome:null};
   }
+
+  get maxLives() {return this.effects.maxLives;}
+  get maxTouches() {return this.effects.maxTouches;}
 
   get snapshot() {
     const s=this._snapshot;
     s.phase=this.phase;s.score=this.score;s.lives=this.lives;s.touches=this.touches;
+    s.maxLives=this.maxLives;s.maxTouches=this.maxTouches;
     s.round=this.round;s.outcome=this.outcome;
     return s;
   }
 
+  get rewardDue() {
+    return this.active&&this.phase==='result'&&this.outcome==='goal'&&
+      this.score>0&&this.score%5===0&&this._rewardedScore<this.score;
+  }
+
+  beginReward() {
+    if(!this.rewardDue)return null;
+    const pool=[...THREE_TOUCH_ABILITIES];
+    // Partial Fisher-Yates. Each of the three slots draws from the remaining pool.
+    for(let i=0;i<3;i++){
+      const j=i+Math.floor(this._random()*(pool.length-i));
+      [pool[i],pool[j]]=[pool[j],pool[i]];
+    }
+    this.rewardChoices=Object.freeze(pool.slice(0,3));
+    this.phase='reward';
+    return this.rewardChoices;
+  }
+
+  chooseReward(id) {
+    if(!this.active||this.phase!=='reward')return false;
+    const reward=this.rewardChoices.find(choice=>choice.id===id);
+    if(!reward)return false;
+    this.effects[reward.stat]+=reward.amount;
+    if(reward.stat==='maxLives')this.lives=Math.min(this.maxLives,this.lives+1);
+    this._rewardedScore=this.score;
+    this.rewardChoices=EMPTY_REWARDS;
+    this.phase='result';
+    return true;
+  }
+
   start() {
-    this.active=true;this.score=0;this.lives=3;this.round=0;this.time=0;
+    Object.assign(this.effects,THREE_TOUCH_BASE_EFFECTS);
+    this.rewardChoices=EMPTY_REWARDS;this._rewardedScore=0;
+    this.active=true;this.score=0;this.lives=this.maxLives;this.round=0;this.time=0;
     this.chance=null;
     return this._newChance();
   }
 
   next() {
-    if(!this.active||this.phase!=='result'||this.lives<=0)return null;
+    if(!this.active||this.phase!=='result'||this.lives<=0||this.rewardDue)return null;
     return this._newChance();
   }
 
   stop() {
     this.active=false;this.phase='idle';this.outcome=null;this.resultAge=0;
+    this.rewardChoices=EMPTY_REWARDS;
     this._motion=null;this._motionObserved=false;this._lastPhysicalTouchTime=-Infinity;
   }
 
@@ -56,9 +98,9 @@ class FootballChallenge {
     this.chance={
       ball:{x,y:FB.ballRadius,z},
       player:{x:x-forwardX*.84,y:0,z:z-forwardZ*.84},
-      yaw:Math.atan2(-forwardX,-forwardZ),difficulty:this.score
+      yaw:Math.atan2(-forwardX,-forwardZ),difficulty:Math.max(0,this.score-this.effects.keeperLevelOffset)
     };
-    this.round++;this.touches=3;this.phase='ready';this.outcome=null;this.resultAge=0;
+    this.round++;this.touches=this.maxTouches;this.phase='ready';this.outcome=null;this.resultAge=0;
     this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
     this._lastPhysicalTouchTime=-Infinity;this._motion=null;this._motionObserved=false;
     return this.chance;
@@ -92,13 +134,12 @@ class FootballChallenge {
   _touch(event) {
     const time=Number.isFinite(event.time)?event.time:this.time;
     const gap=time-this._lastPhysicalTouchTime;
-    // A fresh half-second gap between physical contacts is required globally,
-    // including opposite feet. Every contact slides the window forward, while
-    // the physical response and a recovery from the keeper remain unaffected.
+    // The required gap is shared by both feet. Every physical contact slides
+    // the window forward, including contacts in the same touch sequence.
     this._lastPhysicalTouchTime=time;
     this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
     this.phase='live';
-    if(gap<.5-1e-9)return false;
+    if(gap<this.effects.touchCooldown-1e-9)return false;
     if(this.touches===0)return true;
     this.touches--;
     return false;
@@ -107,7 +148,7 @@ class FootballChallenge {
   _resolve(outcome) {
     if(this.phase!=='ready'&&this.phase!=='live')return null;
     this.outcome=outcome;this.resultAge=0;
-    if(outcome==='goal'){this.score++;this.lives=Math.min(3,this.lives+1);}
+    if(outcome==='goal'){this.score++;this.lives=Math.min(this.maxLives,this.lives+1);}
     else this.lives=Math.max(0,this.lives-1);
     this.phase=this.lives>0?'result':'gameover';
     this._motion=null;this._motionObserved=false;
@@ -118,6 +159,7 @@ class FootballChallenge {
     if(!this.active||!(dt>0)||!Number.isFinite(dt))return null;
     dt=Math.min(dt,.1);this.time+=dt;
     if(this.phase==='result'||this.phase==='gameover'){this.resultAge+=dt;return null;}
+    if(this.phase==='reward')return null;
     if(!ball?.position||!ball.velocity)return null;
     const p=ball.position,v=ball.velocity,r=ball.radius??FB.ballRadius;
     if(!Number.isFinite(p.x+p.y+p.z+v.x+v.y+v.z))return this._resolve('miss');

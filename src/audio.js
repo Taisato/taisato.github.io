@@ -229,13 +229,18 @@ class FootballAudio {
     if(!entry?.buffer)return false;
     return !!this.voice(entry.buffer,level*footballClamp(entry.definition.gain??1,0,4),position,rate);
   }
-  kick(value=5,position){
+  kick(value=5,position,pitchRate=1){
     if(!this.available())return false;const speed=this.speed(value);if(speed<.05)return false;
     const id=speed<1.5?'ball_touch_soft_01':speed<5?'ball_kick_medium_01':speed<14?('ball_kick_strong_0'+(1+(this.strongVariant++%2))):'ball_kick_hard_01';
     // Feather contacts rise smoothly from silence; firm strikes keep their level.
     const soft=footballClamp(speed/1.5,0,1);
     const level=footballClamp(.16+.035*speed,.16,1.1)*(soft*soft*(3-2*soft));
-    return this.play(id,level,position,this.variation())||!!this.voice(this.fallbackKick,level*.7,position);
+    return this.play(id,level,position,pitchRate*this.variation())||!!this.voice(this.fallbackKick,level*.7,position,pitchRate);
+  }
+  keeperKick(value=5,position){
+    const speed=this.speed(value),strength=footballClamp((speed-3)/12,0,1);
+    const semitones=3-7*strength;
+    return this.kick(speed,position,2**(semitones/12));
   }
   frame(value,position){
     if(!this.available())return false;const speed=this.speed(value);if(speed<.1)return false;

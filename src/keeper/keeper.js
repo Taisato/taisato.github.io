@@ -146,6 +146,7 @@ class FootballGoalkeeper {
       ball.position.z * end > this.homeZ * end + .5) return;
     const simulator = this._prediction, predicted = simulator.ball;
     predicted.position.copy(ball.position); predicted.velocity.copy(ball.velocity); predicted.spin.copy(ball.spin);
+    predicted.curveMultiplier = ball.curveMultiplier ?? 1;
     const plane = this.homeZ - end * .36, h = 1 / 90;
     // Reuse the released ball integrator: drag, Magnus and the actual turf
     // friction/bounce all participate. There is no invisible save target force.

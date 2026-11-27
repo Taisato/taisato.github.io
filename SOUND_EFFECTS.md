@@ -18,7 +18,7 @@ Every destination below is inside **`assets/audio/`**.
 | `net.mp3` | `goal_net_01.mp3` | Net contact, variant 1 |
 | `net 2.mp3` | `goal_net_02.mp3` | Net contact, variant 2 |
 | `net 3.mp3` | `goal_net_03.mp3` | Net contact, variant 3 |
-| `Goalkeeper being hit.mp3` | `keeper_hit_01.mp3` | Ball saves and direct player impacts on the keeper |
+| `Goalkeeper being hit.mp3` | `keeper_hit_01.mp3` | Ball saves and player body collisions with the keeper |
 | `roll.mp3` | `ball_roll_grass_loop.mp3` | Continuous rolling while the ball moves on the ground |
 | `Whistle.mp3` | `whistle_start_01.mp3` | Once when a fresh mode entry or new run becomes ready |
 | `normal wind.mp3` | `wind_normal.mp3` | Default continuous wind ambience |
@@ -27,6 +27,7 @@ Every destination below is inside **`assets/audio/`**.
 ## Playback behavior
 
 - Small, medium, strong and hard contacts use different recordings. The two strong-shot clips alternate. Sound selection uses the actual normal contact speed, independently of the ball's physics.
+- Direct boot kicks to the keeper use the same recordings and volume curve as ball kicks. Gentler impacts raise the pitch and faster impacts lower it, with up to three semitones up or four down.
 - Very slow boot contacts fade smoothly toward silence. Contacts at 1.5 m/s and above retain their previous sound levels.
 - Light and hard frame hits use their own recordings. All three net recordings cycle without immediate repetition; touching the net with a boot is quieter.
 - Physical sounds come from their world positions and follow the player's head direction and distance. The starting whistle stays centred and keeps its stereo recording.
