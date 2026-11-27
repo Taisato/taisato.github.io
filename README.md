@@ -30,6 +30,7 @@ Choose **Settings** in the launcher or in-game menu. In VR, point and press the 
 | Chromatic aberration | On / Off | On |
 | Noise | On / Off | On |
 | Wind | Normal / Heavy | Normal |
+| Stadium (Freeroam) | Quiet Orbit / Solar Edge / Violet Hour | Quiet Orbit |
 
 Changes apply immediately and are remembered in this browser when local storage is available. **1× turn speed** is the original turning speed. The setting affects the right stick, desktop turn keys and horizontal mouse movement; walking speed and vertical mouse sensitivity stay the same.
 
@@ -40,6 +41,8 @@ The two effects are independent. Disabling aberration removes world colour separ
 Normal wind plays as a continuous stereo background during gameplay. Select **Wind → Heavy** for the second recording. Switching blends between the ambiences smoothly, and the choice is remembered with the other settings. Older saved settings automatically use Normal without resetting any existing preferences.
 
 The wind follows menu slow motion along with the other sounds. Ball respawns and new chances do not restart it. Leaving the game or a true suspension stops the ambience. Normal wind plays at 40% of its previous level. The wind setting changes sound only.
+
+In Freeroam, **Stadium** changes the sky immediately. In VR, use the arrows beside the current name. Your choice is saved for Freeroam.
 
 ## Modes
 
@@ -62,6 +65,8 @@ Use the menu to switch modes, restart or recalibrate. Recalibration preserves th
 ### Abilities
 
 At every ten goals, the world slows to quarter speed and three reels cycle through the eligible ability pool. Each reel stops on a different random ability. To choose one in VR, aim at its box and hold the trigger until the box fills. On desktop, hold the box or its number key (**1**, **2** or **3**). Your choice takes effect on the next chance. Repeatable abilities stack within the run and reset when you start a new one. Last Chance can be picked once per run.
+
+Confirming the ability brings in the next sky. A run starts under Quiet Orbit, then changes to Solar Edge after the first choice and Violet Hour after the second before cycling back. The same open pitch and low sideline stand serve all three skies.
 
 | Ability | Effect per pick |
 | --- | --- |

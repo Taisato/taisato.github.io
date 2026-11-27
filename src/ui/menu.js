@@ -1,10 +1,11 @@
 import { FT } from "../../vendor/three.js";
+import {SKY_OPTIONS} from '../config.js';
 import {UI,panel,label,tracked,brand,heart,touch,pitch,button,shape} from './theme.js';
 import {createOpticalMaterial} from '../render/optics.js';
 class FootballInterface {
- constructor(scene,callbacks){
-  this.callbacks=callbacks;this.hover=null;this.visible=false;this.snapshot={mode:'freeroam',phase:'ready',score:0};this.stateKey='';
-  this.page='main';this.settings={turnSpeed:1,chromatic:true,noise:true,wind:'normal'};this.settingsKey='1|true|true|normal';
+ constructor(scene,callbacks,credits={attribution:[],thanksTitle:'',thanks:[]}){
+  this.callbacks=callbacks;this.credits=credits;this.hover=null;this.visible=false;this.snapshot={mode:'freeroam',phase:'ready',score:0};this.stateKey='';
+  this.page='main';this.settings={turnSpeed:1,chromatic:true,noise:true,wind:'normal',stadium:SKY_OPTIONS[0].id};this.settingsKey='';
   this.canvas=document.createElement('canvas');this.canvas.width=960;this.canvas.height=660;this.ctx=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);
   this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;this.width=1.32;this.height=.9075;
   this.root=new FT.Mesh(new FT.PlaneGeometry(this.width,this.height),createOpticalMaterial(this.texture,{strength:.5}));this.root.visible=false;this.root.frustumCulled=false;this.root.renderOrder=90;scene.add(this.root);
@@ -18,29 +19,52 @@ class FootballInterface {
  setSettings(settings={}){
   const next={turnSpeed:Number.isFinite(settings.turnSpeed)?Math.max(.25,Math.min(4,settings.turnSpeed)):this.settings.turnSpeed,
    chromatic:typeof settings.chromatic==='boolean'?settings.chromatic:this.settings.chromatic,noise:typeof settings.noise==='boolean'?settings.noise:this.settings.noise,
-   wind:settings.wind==='normal'||settings.wind==='heavy'?settings.wind:this.settings.wind};
-  const key=[next.turnSpeed,next.chromatic,next.noise,next.wind].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
+   wind:settings.wind==='normal'||settings.wind==='heavy'?settings.wind:this.settings.wind,
+   stadium:SKY_OPTIONS.some(option=>option.id===settings.stadium)?settings.stadium:this.settings.stadium};
+  const key=[next.turnSpeed,next.chromatic,next.noise,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
   if(this.visible&&this.page==='settings')this.drawMenu();
  }
  setPage(page){
-  const next=page==='settings'?'settings':'main';if(next===this.page)return;this.page=next;this.hover=null;this.reticle.visible=false;this.reticleCore.visible=false;
+  const next=page==='settings'||page==='credits'?page:'main';if(next===this.page)return;this.page=next;this.hover=null;this.reticle.visible=false;this.reticleCore.visible=false;
   if(this.visible)this.drawMenu();
  }
  drawSettings(){
   const c=this.ctx,s=this.settings;panel(c,960,660);brand(c,48,58);tracked(c,'SETTINGS',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
-  label(c,'Turn speed',48,164,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,164,38,UI.white,'center',800);
-  label(c,'Chromatic aberration',48,260,28);label(c,'Noise',48,356,28);label(c,'Wind',48,452,28);
-  this.buttons=[{id:'turn-down',label:'−',x:492,y:128,w:112,h:72,disabled:s.turnSpeed<=.25},
-   {id:'turn-up',label:'+',x:800,y:128,w:112,h:72,disabled:s.turnSpeed>=4},
-   {id:'toggle-chromatic',label:s.chromatic?'On':'Off',x:720,y:224,w:192,h:72,on:s.chromatic},
-   {id:'toggle-noise',label:s.noise?'On':'Off',x:720,y:320,w:192,h:72,on:s.noise},
-   {id:'toggle-wind',label:s.wind==='heavy'?'Heavy':'Normal',x:720,y:416,w:192,h:72,on:true},
-   {id:'settings-back',label:'Back',x:48,y:520,w:864,h:66}];
+  const freeroam=this.snapshot.mode==='freeroam',h=freeroam?62:72,gap=freeroam?76:96;
+  const turn=128,chromatic=turn+gap,noise=turn+2*gap,wind=turn+3*gap;
+  label(c,'Turn speed',48,turn+h/2,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,turn+h/2,38,UI.white,'center',800);
+  label(c,'Chromatic aberration',48,chromatic+h/2,28);label(c,'Noise',48,noise+h/2,28);label(c,'Wind',48,wind+h/2,28);
+  this.buttons=[{id:'turn-down',label:'−',x:492,y:turn,w:112,h,disabled:s.turnSpeed<=.25},
+   {id:'turn-up',label:'+',x:800,y:turn,w:112,h,disabled:s.turnSpeed>=4},
+   {id:'toggle-chromatic',label:s.chromatic?'On':'Off',x:720,y:chromatic,w:192,h,on:s.chromatic},
+   {id:'toggle-noise',label:s.noise?'On':'Off',x:720,y:noise,w:192,h,on:s.noise},
+   {id:'toggle-wind',label:s.wind==='heavy'?'Heavy':'Normal',x:720,y:wind,w:192,h,on:true}];
+  if(freeroam){
+   const y=wind+gap,stadium=SKY_OPTIONS.find(option=>option.id===s.stadium);
+   label(c,'Stadium',48,y+h/2,28);label(c,stadium.name,691,y+h/2,25,UI.mint,'center',750);
+   this.buttons.push({id:'stadium-prev',label:'‹',x:470,y,w:78,h},{id:'stadium-next',label:'›',x:834,y,w:78,h});
+  }
+  this.buttons.push({id:'settings-back',label:'Back',x:48,y:520,w:420,h:66},
+   {id:'credits',label:'Credits',x:492,y:520,w:420,h:66});
   for(const b of this.buttons){c.save();if(b.disabled)c.globalAlpha=.32;button(c,b,{primary:b.on||b.id==='settings-back',hover:!b.disabled&&this.hover===b.id});c.restore();}
+  label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
+ }
+ drawCredits(){
+  const c=this.ctx,{attribution,thanksTitle,thanks}=this.credits;
+  panel(c,960,660);brand(c,48,58);tracked(c,'CREDITS',724,58,18,UI.mint,2);
+  c.fillStyle=UI.line;c.fillRect(48,106,864,1);
+  let y=156;
+  for(const line of attribution){label(c,line,48,y,28);y+=45;}
+  y+=21;
+  label(c,thanksTitle,48,y,27,UI.mint,'left',750);y+=60;
+  for(const line of thanks){label(c,'•',48,y,24,UI.lilac);label(c,line,75,y,27);y+=46;}
+  this.buttons=[{id:'credits-back',label:'Back',x:48,y:520,w:864,h:66}];
+  button(c,this.buttons[0],{primary:true,hover:this.hover==='credits-back'});
   label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
  }
  drawMenu(){
   if(this.page==='settings'){this.drawSettings();return;}
+  if(this.page==='credits'){this.drawCredits();return;}
   const c=this.ctx,s=this.snapshot,over=s.mode==='challenge'&&s.phase==='gameover';panel(c,960,660);brand(c,48,58);tracked(c,s.mode==='challenge'?'3 TOUCH':'FREEROAM',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
   tracked(c,over?'RUN OVER':'SLOW MOTION',48,153,21,over?UI.lilac:UI.muted,3);
   if(s.mode==='challenge'){label(c,String(s.score||0),912,149,54,UI.white,'right',800);label(c,'GOALS',822,151,18,UI.muted,'right');}

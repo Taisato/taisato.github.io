@@ -8,4 +8,10 @@ const FB = Object.freeze({
 });
 const footballClamp = (value,min,max)=>Math.max(min,Math.min(max,value));
 
-export { FB, footballClamp };
+const SKY_OPTIONS = Object.freeze([
+  Object.freeze({id:'quiet-orbit',name:'Quiet Orbit'}),
+  Object.freeze({id:'solar-edge',name:'Solar Edge'}),
+  Object.freeze({id:'violet-hour',name:'Violet Hour'})
+]);
+
+export { FB, footballClamp, SKY_OPTIONS };

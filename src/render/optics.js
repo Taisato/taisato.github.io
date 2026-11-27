@@ -4,11 +4,12 @@ import { FT } from '../../vendor/three.js';
 // The renderer retains ownership of XR cameras, their viewports and the XR target.
 const OPTICS = Object.freeze({
   fadeSeconds: .60,
-  playSplitPixels: 3.0,
-  menuSplitPixels: 7.0,
+  skyRevealSeconds: .36,
+  playSplitPixels: 1.7,
+  menuSplitPixels: 4.1,
   motionSplitPixels: 8.0,
-  playGrain: 12 / 255,
-  menuGrain: 16 / 255,
+  playGrain: 8 / 255,
+  menuGrain: 12 / 255,
   playVignette: .025,
   menuVignette: .095,
   uiSplitPixels: 1.4,
@@ -41,6 +42,7 @@ uniform float uSplit;
 uniform float uGrain;
 uniform float uVignette;
 uniform float uNoiseFrame;
+uniform float uSkyCover;
 
 float sensorGrain(vec2 p) {
   // Integer avalanche avoids the diagonal pattern of the old linear hash when
@@ -136,6 +138,7 @@ void main() {
   float shadow = 1.0 - smoothstep(.06, .42, luminance);
   colour *= mix(vec3(1.0), vec3(.985, 1.004, 1.025), shadow);
   colour *= 1.0 - uVignette * edge * edge * (1.0 - .65 * hudZone);
+  colour = mix(colour, vec3(.003, .005, .012), uSkyCover);
   gl_FragColor = vec4(max(colour, vec3(0.0)), centre.a);
   #include <colorspace_fragment>
   // Monochrome sensor texture is deliberately strongest in dark areas. Unlike
@@ -146,7 +149,7 @@ void main() {
   float outputLight = dot(gl_FragColor.rgb, vec3(.2126, .7152, .0722));
   float darkGrain = 1.0 - smoothstep(.06, .46, outputLight);
   float grainAmount = uGrain * mix(.35, 1.0, darkGrain) * (1.0 - .70 * hudZone);
-  gl_FragColor.rgb = clamp(gl_FragColor.rgb + grain * grainAmount, 0.0, 1.0);
+  gl_FragColor.rgb = clamp(gl_FragColor.rgb + grain * grainAmount * (1.0 - .7 * uSkyCover), 0.0, 1.0);
 }`;
 
 const UI_MAP_FRAGMENT = `
@@ -212,6 +215,7 @@ class FootballOptics {
     this.scene = scene;
     this.camera = camera;
     this.menuAmount = 0;
+    this.skyReveal = 0;
     this.time = 0;
     this.disposed = false;
     this.target = null;
@@ -234,7 +238,7 @@ class FootballOptics {
       uMotionSphere:{value:Array.from({length:OPTICS.maxMotionSources}, () => new FT.Vector4())},
       uMotionShift:{value:Array.from({length:OPTICS.maxMotionSources}, () => new FT.Vector2())},
       uSplit:{value:OPTICS.playSplitPixels},
-      uGrain:{value:OPTICS.playGrain}, uVignette:{value:OPTICS.playVignette}, uNoiseFrame:{value:0}
+      uGrain:{value:OPTICS.playGrain}, uVignette:{value:OPTICS.playVignette}, uNoiseFrame:{value:0}, uSkyCover:{value:0}
     };
     this.material = new FT.ShaderMaterial({
       name:'Football optical response', uniforms:this.uniforms,
@@ -262,6 +266,9 @@ class FootballOptics {
     this.menuAmount += Math.max(-step, Math.min(step, goal - this.menuAmount));
     const t = this.menuAmount * this.menuAmount * (3 - 2 * this.menuAmount);
     this.time = (this.time + elapsed) % 4096;
+    this.skyReveal = Math.max(0, this.skyReveal - elapsed);
+    const reveal = this.skyReveal / OPTICS.skyRevealSeconds;
+    this.uniforms.uSkyCover.value = .82 * reveal * reveal * (3 - 2 * reveal);
     this._effects(t);
     this.uniforms.uVignette.value = OPTICS.playVignette + (OPTICS.menuVignette - OPTICS.playVignette) * t;
     this.uniforms.uNoiseFrame.value = Math.floor(this.time * 24);
@@ -278,6 +285,11 @@ class FootballOptics {
   _effects(t) {
     this.uniforms.uSplit.value = this.chromaticEnabled ? OPTICS.playSplitPixels + (OPTICS.menuSplitPixels - OPTICS.playSplitPixels) * t : 0;
     this.uniforms.uGrain.value = this.noiseEnabled ? OPTICS.playGrain + (OPTICS.menuGrain - OPTICS.playGrain) * t : 0;
+  }
+
+  revealSky(show = true) {
+    this.skyReveal = show ? OPTICS.skyRevealSeconds : 0;
+    this.uniforms.uSkyCover.value = show ? .82 : 0;
   }
 
   setMotionSources(sources) { this.motionSources = sources || []; }

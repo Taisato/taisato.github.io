@@ -32,7 +32,21 @@
 <div class="setting-row"><span id="chromatic-label">Chromatic aberration</span><button id="toggle-chromatic" class="setting-toggle" type="button" role="switch" aria-checked="true" aria-labelledby="chromatic-label">On</button></div>
 <div class="setting-row"><span id="noise-label">Noise</span><button id="toggle-noise" class="setting-toggle" type="button" role="switch" aria-checked="true" aria-labelledby="noise-label">On</button></div>
 <div class="setting-row"><span id="wind-label">Wind</span><button id="toggle-wind" class="setting-toggle wind-choice" type="button" data-wind="normal" aria-label="Wind: Normal. Switch to Heavy">Normal</button></div>
-<button id="settings-back" class="secondary" type="button">Back</button>
+<div class="setting-row" id="freeroam-stadium-row" hidden><label for="stadium">Stadium</label><select id="stadium" class="setting-stadium"></select></div>
+<div class="settings-actions">
+  <button id="settings-back" class="secondary" type="button">Back</button>
+  <button id="credits" class="secondary" type="button" aria-controls="credits-page" aria-expanded="false">Credits</button>
+</div>
+</section>
+<section id="credits-page" class="settings-page credits-page" hidden aria-labelledby="credits-title">
+<h2 id="credits-title" tabindex="-1">Credits</h2>
+<p class="credits-attribution"><span>All sound effects are taken from the public domain,</span> <span>game made by Taisato</span></p>
+<h3>Special thanks to:</h3>
+<ul>
+  <li><strong>Ludi</strong>, for help with nailing the physics system</li>
+  <li><strong>Jensen</strong>, for guidance in general game design</li>
+</ul>
+<button id="credits-back" class="secondary" type="button">Back</button>
 </section>
 <p class="status" id="status" role="status">Loading…</p>
 </section>

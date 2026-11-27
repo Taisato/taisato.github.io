@@ -23,7 +23,7 @@ class FootballControls {
     this._calibrationAnchorQ=[new FT.Quaternion(),new FT.Quaternion()];
     this._calibrationMeanQ=[new FT.Quaternion(),new FT.Quaternion()];
     this._desktopProfile=Object.freeze({length:.91,offset:Object.freeze(new FT.Vector3(0,-.91,0)),correction:Object.freeze(new FT.Quaternion())});
-    this.poseValid=false;this.desktop=false;this.desktopPitch=-.78;
+    this.poseValid=false;this.desktop=false;this.desktopPitch=-.45;
     this.poseInverse=new FT.Quaternion();this.poseVector=new FT.Vector3();
     this.trackingHoldSeconds=.12;
     this.keys=new Set();this.kickAge=10;
