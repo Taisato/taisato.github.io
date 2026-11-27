@@ -8,6 +8,7 @@ import { FootballGoalNetVisual } from "./render/net.js";
 import { FootballOptics, setOpticalEffects, OPTICS } from "./render/optics.js";
 import { FootballMotionSources } from "./render/motion.js";
 import { FootballShotTrail } from "./render/shot-trail.js";
+import { nativeXRScale } from "./render/xr-resolution.js";
 import { FootballGoalkeeper } from "./keeper/keeper.js";
 import { FootballControls } from "./player/controls.js";
 import { FootballInterface } from "./ui/menu.js";
@@ -18,7 +19,7 @@ import { FootballChallenge } from "./game/challenge.js";
 import { normalizeAbilityLevels } from "./game/abilities.js";
 import { FootballAbilitySwitcher } from "./ui/ability-switcher.js";
 import { FootballAudio } from "./audio.js";
-import { TURN_SPEED, normalizeSettings, readSettings, saveSettings } from "./settings.js";
+import { TURN_SPEED, VR_RESOLUTION_OPTIONS, normalizeSettings, readSettings, saveSettings } from "./settings.js";
 
 const PRACTICE_STORAGE = 'first-touch.practice-abilities.v1';
 function readPracticeLevels() {
@@ -34,7 +35,6 @@ class FootballApp {
     this.renderer=new FT.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
     this.renderer.outputColorSpace=FT.SRGBColorSpace;this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.4));
     this.renderer.xr.enabled=true;this.renderer.xr.setReferenceSpaceType('local-floor');
-    if(this.renderer.xr.setFramebufferScaleFactor)this.renderer.xr.setFramebufferScaleFactor(.9);
     if(this.renderer.xr.setFoveation)this.renderer.xr.setFoveation(0);
     this.renderer.domElement.id='pitch-view';document.body.prepend(this.renderer.domElement);
     this.field=new FootballField(this.scene);this.physics=new FootballPhysics();
@@ -71,6 +71,7 @@ class FootballApp {
       'toggle-chromatic':()=>this.changeSettings({chromatic:!this.settings.chromatic}),
       'toggle-noise':()=>this.changeSettings({noise:!this.settings.noise}),
       'toggle-shot-trace':()=>this.changeSettings({shotTrace:!this.settings.shotTrace}),
+      'vr-resolution':value=>this.changeSettings({vrResolution:value}),
       'toggle-wind':()=>this.changeSettings({wind:this.settings.wind==='normal'?'heavy':'normal'}),
       'stadium-prev':()=>this.cycleStadium(-1),'stadium-next':()=>this.cycleStadium(1)
     },credits);
@@ -99,8 +100,10 @@ class FootballApp {
       turnSpeed:document.querySelector('#turn-speed'),turnSpeedValue:document.querySelector('#turn-speed-value'),
       chromatic:document.querySelector('#toggle-chromatic'),noise:document.querySelector('#toggle-noise'),wind:document.querySelector('#toggle-wind'),
       shotTrace:document.querySelector('#toggle-shot-trace'),
+      vrResolution:document.querySelector('#vr-resolution'),
       stadium:document.querySelector('#stadium'),stadiumRow:document.querySelector('#freeroam-stadium-row')};
     this.ui.stadium.append(...SKY_OPTIONS.map(sky=>new Option(sky.name,sky.id)));
+    this.ui.vrResolution.append(...VR_RESOLUTION_OPTIONS.map(({scale,label})=>new Option(label,String(scale))));
     this.abilitySwitcher=new FootballAbilitySwitcher(document.querySelector('#abilities-page'),{
       change:(id,level)=>this.setPracticeLevels({...this.practiceLevels,[id]:level}),
       clear:()=>this.setPracticeLevels({})
@@ -116,6 +119,7 @@ class FootballApp {
     on(this.ui.chromatic,'click',()=>this.changeSettings({chromatic:!this.settings.chromatic}));
     on(this.ui.noise,'click',()=>this.changeSettings({noise:!this.settings.noise}));
     on(this.ui.shotTrace,'click',()=>this.changeSettings({shotTrace:!this.settings.shotTrace}));
+    on(this.ui.vrResolution,'change',()=>this.changeSettings({vrResolution:Number(this.ui.vrResolution.value)}));
     on(this.ui.wind,'click',()=>this.changeSettings({wind:this.settings.wind==='normal'?'heavy':'normal'}));
     on(this.ui.stadium,'change',()=>{
       if(this.mode==='freeroam')this.changeSettings({stadium:this.ui.stadium.value});
@@ -185,11 +189,12 @@ class FootballApp {
     this.ui.wind.textContent=wind;this.ui.wind.dataset.wind=settings.wind;
     this.ui.wind.setAttribute('aria-label','Wind: '+wind+'. Switch to '+(settings.wind==='heavy'?'Normal':'Heavy'));
     this.ui.stadium.value=settings.stadium;
+    this.ui.vrResolution.value=String(settings.vrResolution);
   }
   changeSettings(patch) {
     const next=normalizeSettings({...this.settings,...patch}),old=this.settings;
     if(next.turnSpeed===old.turnSpeed&&next.chromatic===old.chromatic&&next.noise===old.noise&&
-      next.wind===old.wind&&next.stadium===old.stadium&&next.shotTrace===old.shotTrace)return;
+      next.wind===old.wind&&next.stadium===old.stadium&&next.shotTrace===old.shotTrace&&next.vrResolution===old.vrResolution)return;
     this.settings=next;this.applySettings();saveSettings(next);
   }
   applyModeSky(reveal=false) {
@@ -277,7 +282,11 @@ class FootballApp {
       const session=await sessionRequest;
       if(this.disposed){await session.end();return;}
       this.session=session;session.addEventListener('end',this.onSessionEnd);session.addEventListener('visibilitychange',this.onXRVisibility);
+      const nativeScale=await nativeXRScale(session,this.renderer.getContext());
+      if(this.disposed||this.session!==session)return;
+      this.renderer.xr.setFramebufferScaleFactor(nativeScale*this.settings.vrResolution);
       await this.renderer.xr.setSession(session);
+      if(this.disposed||this.session!==session)return;
       this.reference=this.renderer.xr.getReferenceSpace();this.reference?.addEventListener('reset',this.onReferenceReset);
       this.controls.setDesktop(false);this.active=true;this.paused=false;this.lastTime=0;
       this.start();this.onXRVisibility();this.ui.status.textContent='';

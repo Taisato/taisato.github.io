@@ -25,13 +25,16 @@ Choose **Settings** in the launcher or in-game menu. In VR, point and press the 
 | Setting | Options | Default |
 | --- | --- | --- |
 | Turn speed | 0.25×–4×, in 0.25× steps | 1× |
+| VR resolution | 100% (Native), 85%, 70%, 50% | 100% (Native) |
 | Chromatic aberration | On / Off | On |
 | Noise | On / Off | On |
 | Shot Trace | On / Off | Off |
 | Wind | Normal / Heavy | Normal |
 | Stadium (Freeroam) | Black, Blue, Amber, Violet, Jade, Crimson, Turquoise, Gold, Indigo, Rose, Lime | Black |
 
-Changes apply immediately and are remembered in this browser when local storage is available. **1× turn speed** is the original turning speed. The setting affects the right stick, desktop turn keys and horizontal mouse movement; walking speed and vertical mouse sensitivity stay the same.
+Settings are saved in this browser when local storage is available. **VR resolution** applies the next time you enter VR. At 100%, the game requests the headset browser’s native rendering resolution. At 70%, each eye renders at 70% of that width and height, roughly half the pixels. If the browser does not report a native scale, the game uses its recommended framebuffer size as the baseline.
+
+Other settings apply immediately. **1× turn speed** is the original turning speed. The setting affects the right stick, desktop turn keys and horizontal mouse movement; walking speed and vertical mouse sensitivity stay the same.
 
 The two effects are independent. Disabling aberration removes world colour separation, motion-based separation, and the fringe on the HUD, menus and calibration panels. Disabling noise removes animated grain, including behind the menu. Re-enabling either restores its original strength. Menu slow motion works with either effect disabled.
 

@@ -1,6 +1,6 @@
 import { FT } from "../../vendor/three.js";
 import {SKY_OPTIONS} from '../config.js';
-import {DEFAULT_SETTINGS} from '../settings.js';
+import {DEFAULT_SETTINGS,VR_RESOLUTION_OPTIONS} from '../settings.js';
 import {UI,panel,label,tracked,brand,heart,touch,pitch,button,shape} from './theme.js';
 import {createOpticalMaterial} from '../render/optics.js';
 import {drawAbilitySwitcher,VR_PAGES} from './ability-switcher.js';
@@ -21,11 +21,12 @@ class FootballInterface {
  setState(snapshot={}){this.snapshot={...this.snapshot,...snapshot};const key=[this.snapshot.mode,this.snapshot.phase,this.snapshot.score].join('|');if(key===this.stateKey)return;this.stateKey=key;if(this.visible)this.drawMenu();}
  setSettings(settings={}){
   const next={turnSpeed:Number.isFinite(settings.turnSpeed)?Math.max(.25,Math.min(4,settings.turnSpeed)):this.settings.turnSpeed,
+   vrResolution:VR_RESOLUTION_OPTIONS.some(option=>option.scale===settings.vrResolution)?settings.vrResolution:this.settings.vrResolution,
    chromatic:typeof settings.chromatic==='boolean'?settings.chromatic:this.settings.chromatic,noise:typeof settings.noise==='boolean'?settings.noise:this.settings.noise,
    shotTrace:typeof settings.shotTrace==='boolean'?settings.shotTrace:this.settings.shotTrace,
    wind:settings.wind==='normal'||settings.wind==='heavy'?settings.wind:this.settings.wind,
    stadium:SKY_OPTIONS.some(option=>option.id===settings.stadium)?settings.stadium:this.settings.stadium};
-  const key=[next.turnSpeed,next.chromatic,next.noise,next.shotTrace,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
+  const key=[next.turnSpeed,next.vrResolution,next.chromatic,next.noise,next.shotTrace,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
   if(this.visible&&this.page==='settings')this.drawMenu();
  }
  setPage(page){
@@ -36,13 +37,18 @@ class FootballInterface {
  setAbilityLevels(levels){this.abilityLevels=levels;if(this.visible&&this.page==='abilities')this.drawMenu();}
  drawSettings(){
   const c=this.ctx,s=this.settings;panel(c,960,660);brand(c,48,58);tracked(c,'SETTINGS',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
-  const freeroam=this.snapshot.mode==='freeroam',h=freeroam?56:62,gap=freeroam?64:76;
-  const turn=128,chromatic=turn+gap,noise=chromatic+gap,trace=noise+gap,wind=trace+gap;
+  const freeroam=this.snapshot.mode==='freeroam',h=freeroam?52:56,gap=freeroam?58:66;
+  const turn=117,resolution=turn+gap,chromatic=resolution+gap,noise=chromatic+gap,trace=noise+gap,wind=trace+gap;
+  const quality=VR_RESOLUTION_OPTIONS.findIndex(option=>option.scale===s.vrResolution);
   label(c,'Turn speed',48,turn+h/2,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,turn+h/2,38,UI.white,'center',800);
+  label(c,'VR resolution',48,resolution+14,28);label(c,'Applies the next time you enter VR.',48,resolution+40,19,UI.muted);
+  label(c,VR_RESOLUTION_OPTIONS[quality].label,691,resolution+h/2,25,UI.mint,'center',750);
   label(c,'Chromatic aberration',48,chromatic+h/2,28);label(c,'Noise',48,noise+h/2,28);label(c,'Wind',48,wind+h/2,28);
   label(c,'Shot Trace',48,trace+17,28);label(c,'Shows each shot’s path for 2.5 seconds.',48,trace+43,19,UI.muted);
   this.buttons=[{id:'turn-down',label:'−',x:492,y:turn,w:112,h,disabled:s.turnSpeed<=.25},
    {id:'turn-up',label:'+',x:800,y:turn,w:112,h,disabled:s.turnSpeed>=4},
+   {id:'vr-resolution-lower',label:'‹',x:470,y:resolution,w:78,h,disabled:quality===VR_RESOLUTION_OPTIONS.length-1,scale:VR_RESOLUTION_OPTIONS[quality+1]?.scale},
+   {id:'vr-resolution-higher',label:'›',x:834,y:resolution,w:78,h,disabled:quality===0,scale:VR_RESOLUTION_OPTIONS[quality-1]?.scale},
    {id:'toggle-chromatic',label:s.chromatic?'On':'Off',x:720,y:chromatic,w:192,h,on:s.chromatic},
    {id:'toggle-noise',label:s.noise?'On':'Off',x:720,y:noise,w:192,h,on:s.noise},
    {id:'toggle-shot-trace',label:s.shotTrace?'On':'Off',x:720,y:trace,w:192,h,on:s.shotTrace},
@@ -52,10 +58,10 @@ class FootballInterface {
    label(c,'Stadium',48,y+h/2,28);label(c,stadium.name,691,y+h/2,25,UI.mint,'center',750);
    this.buttons.push({id:'stadium-prev',label:'‹',x:470,y,w:78,h},{id:'stadium-next',label:'›',x:834,y,w:78,h});
   }
-  if(freeroam)this.buttons.push({id:'settings-back',label:'Back',x:48,y:520,w:276,h:66},
-   {id:'credits',label:'Credits',x:342,y:520,w:276,h:66},{id:'abilities',label:'Abilities',x:636,y:520,w:276,h:66});
-  else this.buttons.push({id:'settings-back',label:'Back',x:48,y:520,w:420,h:66},
-   {id:'credits',label:'Credits',x:492,y:520,w:420,h:66});
+  if(freeroam)this.buttons.push({id:'settings-back',label:'Back',x:48,y:535,w:276,h:60},
+   {id:'credits',label:'Credits',x:342,y:535,w:276,h:60},{id:'abilities',label:'Abilities',x:636,y:535,w:276,h:60});
+  else this.buttons.push({id:'settings-back',label:'Back',x:48,y:535,w:420,h:60},
+   {id:'credits',label:'Credits',x:492,y:535,w:420,h:60});
   for(const b of this.buttons){c.save();if(b.disabled)c.globalAlpha=.32;button(c,b,{primary:b.on||b.id==='settings-back',hover:!b.disabled&&this.hover===b.id});c.restore();}
   label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
  }
@@ -96,6 +102,7 @@ class FootballInterface {
  select(id){
   const target=this.buttons.find(button=>button.id===id);
   if(target?.disabled)return;
+  if(target?.scale){this.callbacks['vr-resolution']?.(target.scale);return;}
   if(target?.abilityId){this.callbacks['ability-level']?.(target.abilityId,target.level);return;}
   if(id==='ability-page-prev'||id==='ability-page-next'){
    this.abilityPage=Math.max(0,Math.min(VR_PAGES-1,this.abilityPage+(id==='ability-page-next'?1:-1)));
