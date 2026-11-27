@@ -20,7 +20,7 @@ A shot already in flight can score, be saved or go out while the menu is open. T
 
 ## Settings
 
-Choose **Settings** in the launcher or in-game menu. In VR, point and press the trigger to select a control.
+Choose **Settings** in the launcher or in-game menu. Settings opens on **Graphics**, with tabs for **Gameplay** and **Other**. In VR, point and press the trigger to select a tab or control.
 
 | Setting | Options | Default |
 | --- | --- | --- |
@@ -30,23 +30,23 @@ Choose **Settings** in the launcher or in-game menu. In VR, point and press the 
 | Noise | On / Off | On |
 | Shot Trace | On / Off | Off |
 | Wind | Normal / Heavy | Normal |
-| Stadium (Freeroam) | Black, Blue, Amber, Violet, Jade, Crimson, Turquoise, Gold, Indigo, Rose, Lime | Black |
+| Stadium (Freeroam) | Blue, Amber, Violet, Jade, Crimson, Turquoise, Gold, Indigo, Rose, Lime | Blue |
 
-Settings are saved in this browser when local storage is available. **VR resolution** applies the next time you enter VR. At 100%, the game requests the headset browser’s native rendering resolution. At 70%, each eye renders at 70% of that width and height, roughly half the pixels. If the browser does not report a native scale, the game uses its recommended framebuffer size as the baseline.
+**Graphics → VR resolution** applies immediately, including during a run. The in-headset Graphics tab shows the dimensions the game renders for each eye. At 100%, the scene uses the full eye viewport the headset browser grants for native rendering. At 70%, the scene uses 70% of that width and height, roughly half the pixels, before the game scales it for headset output. If the browser does not report its native scale, its recommended eye size sets the baseline. The browser saves your preferences when local storage is available.
 
-Other settings apply immediately. **1× turn speed** is the original turning speed. The setting affects the right stick, desktop turn keys and horizontal mouse movement; walking speed and vertical mouse sensitivity stay the same.
+**Gameplay → Turn speed** affects the right stick, desktop turn keys and horizontal mouse movement. The default is **1×**. Shot Trace is also under Gameplay.
 
 The two effects are independent. Disabling aberration removes world colour separation, motion-based separation, and the fringe on the HUD, menus and calibration panels. Disabling noise removes animated grain, including behind the menu. Re-enabling either restores its original strength. Menu slow motion works with either effect disabled.
 
 **Back** returns to the main menu while the world remains in slow motion. Desktop **Esc** does the same from Settings. **Resume** returns to play. Preferences survive restarting a run or changing modes.
 
-Open **Settings → Credits** to see the game and sound attribution and special thanks.
+Open **Settings → Other → Credits** for the game and sound attribution and special thanks.
 
 Normal wind plays as a continuous stereo background during gameplay. Select **Wind → Heavy** for the second recording. Switching blends between the ambiences smoothly, and the choice is remembered with the other settings. Older saved settings automatically use Normal without resetting any existing preferences.
 
 The wind follows menu slow motion along with the other sounds. Ball respawns and new chances do not restart it. Leaving the game or a true suspension stops the ambience. Normal wind plays at 40% of its previous level. The wind setting changes sound only.
 
-In Freeroam, **Stadium** changes the sky immediately. In VR, use the arrows beside the current name. Your choice is saved for Freeroam.
+In Freeroam, **Graphics → Stadium** changes the sky and its lighting immediately. In VR, use the arrows beside the current name. Your choice is saved for Freeroam.
 
 Turn on **Shot Trace** to see the path the ball takes after each strike for up to 2.5 seconds. The setting applies in both Freeroam and 3 Touch.
 
@@ -78,25 +78,27 @@ Lilac outlines identify pinned upgrades. Rare upgrades have a gold outline with 
 
 Each draft with an open slot has a 20% chance to offer one rare upgrade. **1 Life Slot** adds a slot and restores one life, **Extra Touch** adds a touch per chance, and **Power Strike** adds 10% shot strength. Picking a rare leaves its slot open, and repeat picks stack.
 
-First-Time Finish and Double From Distance each add one goal. A first-strike finish from outside the box scores three and restores the normal one life. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime. Black is available in Freeroam.
+First-Time Finish I, Double From Distance I and Woodwork Credit III each add one goal for a qualifying finish. With all three equipped, scoring off the post or crossbar on your first strike from outside the box is worth four goals and restores one life. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime.
 
 | Tree | Phase I | Phase II | Phase III |
 | --- | --- | --- | --- |
 | First-Time Finish | Score with a genuine strike on first contact to add one goal. | Your opening strike gains 10% forward pace. | Keep the bonus with an immediate airborne finish after a keeper parry. |
-| Double From Distance | Score from outside the penalty area to add one goal. | Outside shots lose 15% less horizontal speed in flight. | Score from 23 m or farther to bank a same-spot retry for an outside shot that goes straight out. |
+| Double From Distance | Score from outside the penalty area to add one goal. | Shots struck from outside the penalty area launch with 10% more forward pace. | Score from 23 m or farther to bank a same-spot retry for an outside shot that goes straight out. |
 | Bend It | Add 10% sideways curve to spinning shots. | Increase the curve bonus to 20%. | Low curlers retain their sidespin on the first bounce. |
 | Grass Cutter | Firm ground shots have up to 40% less rolling resistance. | Increase the rolling resistance reduction to 55%. | Drive a knee-high ball downward to activate the bonus on landing. |
 | Volley Boost | Airborne strikes gain 25% shot strength. | Keep the volley bonus for 0.25 s after a bounce. | Downward volleys retain more forward pace. |
-| Woodwork Credit | The first post or bar hit each chance refunds one touch. | A shot out directly off the frame costs a life but carries one touch to the next chance. | Your first strike directly off a live frame rebound gains 25% forward pace. |
+| Woodwork Credit | The first post or bar hit each chance refunds one touch. | A shot out directly off the frame costs a life but carries one touch to the next chance. | A goal scored off a post or the crossbar adds one goal. |
 | Quick Feet | Move 10% faster. | Move 25% faster for 2 s after a frame hit or keeper parry. | Your first recovery touch is free once per chance. |
 | Touch Window | Add 0.5 s to the gap needed to count a new touch. | Gentle control uses a 1.25 s touch window. | Once per chance, a soft trap that would use your last touch is free. |
 | Long-Range Bonus | A goal from outside the box adds one touch to your next chance. | Keep that extra touch in reserve until you spend it. | Bank up to two extra touches and spend both in one chance. |
 | Keeper Setback | Lower the keeper difficulty by five goal levels. | The keeper takes 0.12 s longer to reverse after committing. | Once per chance, a wrong-footed keeper parries a ball they would have caught. |
 | Last Chance | Once per run, a miss on your last life gives a same-spot retry. | Start a chance or retry on your last life with one extra touch. | Your run can use two retries in total. |
 
+Quick Feet increases movement speed. Its extra run-up speed can add up to 10% to the forward pace of a shot compared with the same swing and contact at ordinary running speed. A stationary swing gets no extra pace from Quick Feet.
+
 ### Freeroam ability switcher
 
-Open **Settings → Abilities** in Freeroam. Select I, II or III to equip a tree through that phase, combine any trees and adjust rare counts with the minus and plus buttons. Select **Off** to remove one tree or **Clear** to empty the loadout. Your Freeroam choices are saved in this browser.
+Open **Settings → Gameplay → Abilities** in Freeroam. Select I, II or III to equip a tree through that phase, combine any trees and adjust rare counts with the minus and plus buttons. Select **Off** to remove one tree or **Clear** to empty the loadout. Your Freeroam choices are saved in this browser.
 
 With abilities equipped, the HUD shows practice goals, touches and lives for shots at the guarded goal. Press **B** on desktop or **A** on the right controller for the next ball. Starting-touch bonuses apply when you spawn the next ball. A protected retry returns to the original spot. A new ball after the last life starts fresh practice counters.
 

@@ -8,7 +8,7 @@ const THREE_TOUCH_TREES = Object.freeze([
   ]],
   ['double-from-distance', 'Double From Distance', [
     ['Score from outside the penalty area to add one goal.', {doubleFromDistance: 1}],
-    ['Outside shots lose 15% less horizontal speed in flight.', {distanceAirRetention: .15}],
+    ['Shots from outside the penalty area gain 10% forward pace.', {outsideShotPace: .10}],
     ['Score from 23 m or farther to bank a retry for an outside shot that goes straight out.', {distanceProtection: 1}]
   ]],
   ['bend-it', 'Bend It', [
@@ -29,7 +29,7 @@ const THREE_TOUCH_TREES = Object.freeze([
   ['woodwork-credit', 'Woodwork Credit', [
     ['The first post or bar hit each chance refunds one touch.', {woodworkCredit: 1}],
     ['A shot out directly off the frame costs a life but carries one touch to the next chance.', {woodworkCarry: 1}],
-    ['Your first strike directly off a live frame rebound gains 25% forward pace.', {woodworkReboundPace: .25}]
+    ['Score off a post or the crossbar to add one goal.', {woodworkGoal: 1}]
   ]],
   ['quick-feet', 'Quick Feet', [
     ['Move 10% faster.', {playerSpeed: .10}],
@@ -82,9 +82,9 @@ const THREE_TOUCH_BASE_EFFECTS = Object.freeze({
   shotStrength: 1, curve: 1, airShotStrength: 1, playerSpeed: 1,
   maxLives: 3, maxTouches: 3, keeperLevelOffset: 0, touchCooldown: .5,
   firstTimeFinish: 0, openingStrikePace: 0, firstTimeParry: 0,
-  doubleFromDistance: 0, distanceAirRetention: 0, distanceProtection: 0,
+  doubleFromDistance: 0, outsideShotPace: 0, distanceProtection: 0,
   lowCurveBounce: 0, grassCutter: 0, grassAirLanding: 0, volleyBounceGrace: 0, volleyDriven: 0,
-  woodworkCredit: 0, woodworkCarry: 0, woodworkReboundPace: 0, recoverySpeedBonus: 0, freeRecoveryTouch: 0,
+  woodworkCredit: 0, woodworkCarry: 0, woodworkGoal: 0, recoverySpeedBonus: 0, freeRecoveryTouch: 0,
   gentleTouchCooldown: 0, freeLastTrap: 0, longRangeBonus: 0, longRangeBank: 0,
   keeperReverseDelay: 0, keeperWrongFootParry: 0, lastChance: 0, lastLifeTouch: 0
 });

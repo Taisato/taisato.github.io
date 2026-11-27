@@ -8,6 +8,8 @@ class FootballControls {
     this.headWorld=new FT.Vector3();this.viewOrientation=new FT.Quaternion();
     this.forward=new FT.Vector3(0,0,-1);this.right=new FT.Vector3(1,0,0);
     this.velocity=new FT.Vector3();this.up=new FT.Vector3(0,1,0);
+    this.runBonusSpeed=0;this.runBonusTravel=new FT.Vector3();this.previousRunBonusTravel=new FT.Vector3();
+    this.runBonusSample=new FT.Vector3();this.runBonusVelocity=new FT.Vector3();
     this.temp=new FT.Vector3();this.temp2=new FT.Vector3();this.instepQ=new FT.Quaternion();this.shinQ=new FT.Quaternion();
     this.pitchAxis=new FT.Vector3(1,0,0);
     // Player feet may pass through the turf during a low swing. This limit is
@@ -65,7 +67,7 @@ class FootballControls {
         frameStartLocomotion:new FT.Vector3(),frameTargetLocomotion:new FT.Vector3(),
         frameStart:new FT.Vector3(),frameTarget:new FT.Vector3(),sampleVelocity:new FT.Vector3(),
         foot:{id:name,position:new FT.Vector3(),previous:new FT.Vector3(),velocity:new FT.Vector3(),anklePosition:new FT.Vector3(),previousAnklePosition:new FT.Vector3(),ankleVelocity:new FT.Vector3(),orientation:new FT.Quaternion(),previousOrientation:new FT.Quaternion(),angularVelocity:new FT.Vector3(),contactShape:collider.shape||null,contactOffset:collider.offset,radius:collider.radius,halfLength:collider.halfLength,
-          drivePosition:new FT.Vector3(),previousDrivePosition:new FT.Vector3(),driveVelocity:new FT.Vector3(),locomotionPosition:new FT.Vector3(),previousLocomotionPosition:new FT.Vector3(),locomotionVelocity:new FT.Vector3(),controlOrientation:new FT.Quaternion(),previousControlOrientation:new FT.Quaternion(),controlAngularVelocity:new FT.Vector3(),
+          drivePosition:new FT.Vector3(),previousDrivePosition:new FT.Vector3(),driveVelocity:new FT.Vector3(),locomotionPosition:new FT.Vector3(),previousLocomotionPosition:new FT.Vector3(),locomotionVelocity:new FT.Vector3(),runBonusVelocity:new FT.Vector3(),controlOrientation:new FT.Quaternion(),previousControlOrientation:new FT.Quaternion(),controlAngularVelocity:new FT.Vector3(),
           shinContactShape:visual.shinContactShape||visual.shin?.geometry?.userData?.footballShin?.contact||null,shinOrientation:new FT.Quaternion(),previousShinOrientation:new FT.Quaternion(),shinAngularVelocity:new FT.Vector3(),instep:false,instepAmount:0,enabled:false}}
     });
     this.feet=this.hands.map(hand=>hand.foot);this.angularDelta=new FT.Quaternion();
@@ -402,7 +404,8 @@ class FootballControls {
   }
   move(dt,blocked) {
     this.refreshHead();
-    if(blocked||!this.poseValid||!this.isCalibrated||(!this.desktop&&this.calibration.awaitRelease)){this.velocity.set(0,0,0);return;}
+    this.previousRunBonusTravel.copy(this.runBonusTravel);
+    if(blocked||!this.poseValid||!this.isCalibrated||(!this.desktop&&this.calibration.awaitRelease)){this.velocity.set(0,0,0);this.runBonusSpeed=0;return;}
     const yaw=-this.turn*FB.turnSpeed*this.turnSpeedMultiplier*dt;
     if(Math.abs(yaw)>1e-6){
       this.temp.copy(this.headWorld);this.rig.rotation.y+=yaw;this.rig.updateMatrixWorld(true);
@@ -410,24 +413,34 @@ class FootballControls {
       this.rig.position.x+=this.temp.x-this.temp2.x;this.rig.position.z+=this.temp.z-this.temp2.z;
       this.refreshHead();
     }
-    const speed=(this.sprint?FB.sprintSpeed:FB.walkSpeed)*this.speedMultiplier;
+    const baseSpeed=this.sprint?FB.sprintSpeed:FB.walkSpeed;
+    const speed=baseSpeed*this.speedMultiplier;
     this.temp.copy(this.forward).multiplyScalar(-this.left.y).addScaledVector(this.right,this.left.x);
     const inputLength=this.temp.length();
+    if(this.velocity.lengthSq()===0)this.runBonusSpeed=0;
     if(inputLength>1e-6){
       // Direction follows the stick immediately. Smoothing the velocity vector
       // makes a reversal brake through zero, even while the stick stays fully held.
       const targetSpeed=speed*Math.min(inputLength,1),currentSpeed=this.velocity.length();
-      const nextSpeed=currentSpeed+(targetSpeed-currentSpeed)*(1-Math.exp(-24*dt));
+      const blend=1-Math.exp(-24*dt),nextSpeed=currentSpeed+(targetSpeed-currentSpeed)*blend;
+      this.runBonusSpeed+=((speed-baseSpeed)*Math.min(inputLength,1)-this.runBonusSpeed)*blend;
       this.velocity.copy(this.temp).multiplyScalar(nextSpeed/inputLength);
     }else{
-      this.velocity.multiplyScalar(Math.exp(-18*dt));
+      const decay=Math.exp(-18*dt);
+      this.velocity.multiplyScalar(decay);this.runBonusSpeed*=decay;
       if(this.velocity.lengthSq()<1e-8)this.velocity.set(0,0,0);
     }
+    const startX=this.rig.position.x,startZ=this.rig.position.z;
     this.rig.position.addScaledVector(this.velocity,dt);this.rig.updateMatrixWorld(true);
     this.temp.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
     const bx=FB.halfWidth+5,bz=FB.halfLength+5;
     this.rig.position.x+=footballClamp(this.temp.x,-bx,bx)-this.temp.x;
     this.rig.position.z+=footballClamp(this.temp.z,-bz,bz)-this.temp.z;
+    // Only the perk's actual stick translation contributes extra run-up power.
+    // Exclude turning, controller swings, and travel blocked by the pitch bounds.
+    const fraction=this.runBonusSpeed/Math.max(.000001,this.velocity.length());
+    this.runBonusTravel.x+=(this.rig.position.x-startX)*fraction;
+    this.runBonusTravel.z+=(this.rig.position.z-startZ)*fraction;
     this.refreshHead();
   }
   place(position,yaw=0) {
@@ -536,7 +549,11 @@ class FootballControls {
     output.set(this.angularDelta.x*rate,this.angularDelta.y*rate,this.angularDelta.z*rate);
   }
   physicsFeet(alpha1) {
+    this.runBonusVelocity.copy(this.runBonusSample);
+    this.runBonusSample.lerpVectors(this.previousRunBonusTravel,this.runBonusTravel,alpha1);
+    this.runBonusVelocity.subVectors(this.runBonusSample,this.runBonusVelocity).multiplyScalar(1/FB.fixedStep);
     for(const hand of this.hands){
+      hand.foot.runBonusVelocity.copy(this.runBonusVelocity);
       hand.foot.previous.copy(hand.foot.position);hand.foot.previousOrientation.copy(hand.foot.orientation);
       hand.foot.previousShinOrientation.copy(hand.foot.shinOrientation);
       hand.foot.previousDrivePosition.copy(hand.foot.drivePosition);
@@ -573,7 +590,7 @@ class FootballControls {
     const actuator=this.hands.find(hand=>hand.name===footId)?.source?.gamepad?.hapticActuators?.[0];
     if(actuator?.pulse)try{const p=actuator.pulse(footballClamp(strength,0,1),35);p?.catch?.(()=>{});}catch{}
   }
-  invalidate(){this.requireCalibrationRelease();this._xrMenuSelections.clear();for(const hand of this.hands){this.resetFootHistory(hand);hand.ready=false;hand.foot.enabled=false;hand.poseAge=this.trackingHoldSeconds;}this.velocity.set(0,0,0);}
+  invalidate(){this.requireCalibrationRelease();this._xrMenuSelections.clear();for(const hand of this.hands){this.resetFootHistory(hand);hand.ready=false;hand.foot.enabled=false;hand.poseAge=this.trackingHoldSeconds;}this.velocity.set(0,0,0);this.runBonusSpeed=0;this.runBonusSample.copy(this.runBonusTravel);}
   clearEdges(){this.edges.ball=false;this.edges.menu=false;this.edges.calibrate=false;}
   dispose(){this.abort.abort();this._setXRMenuSession(null);for(const hand of this.hands){hand.ray.geometry.dispose();hand.ray.material.dispose();hand.ray.removeFromParent();hand.visual.root.removeFromParent();}}
 }

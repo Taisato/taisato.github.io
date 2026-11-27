@@ -5,8 +5,17 @@
 .setting-description{display:block;margin-top:3px;color:var(--muted);font-size:13px;line-height:1.35;font-weight:400}
 .settings-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:28px}
 #launcher[data-mode=challenge] #abilities{display:none}
-#launcher[data-mode=freeroam] #settings-page .settings-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
-#settings-page #abilities{border-color:#496774;color:var(--mint)}
+#launcher[data-mode=freeroam] .pause-title{display:none}
+.settings-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:0 0 14px}
+.settings-tabs button{min-width:0;min-height:44px;padding:8px 2px;border:1px solid var(--line);border-radius:8px 2px 8px 2px;color:var(--muted);background:var(--panel);font-size:14px;font-weight:700}
+.settings-tabs button:hover{color:var(--white);border-color:#8298bc}
+.settings-tabs button[aria-selected=true]{border-color:var(--mint);color:var(--mint);background:#183c3a}
+.settings-tabs button:focus-visible{outline-offset:2px}
+.settings-link{display:flex;align-items:center;justify-content:space-between;margin-top:10px;text-align:left}
+.settings-link span{color:var(--mint);font-size:20px;line-height:1}
+#settings-back{margin-top:22px}
+#settings-page h2{margin-bottom:18px}
+#settings-page [role=tabpanel]{min-height:272px}
 #launcher[data-page=abilities]{align-items:safe center}
 #launcher[data-page=abilities] .card{display:flex;flex-direction:column;width:min(960px,100%);max-height:calc(100dvh - 48px);padding:clamp(20px,4vw,32px)}
 #launcher[data-page=abilities] .brand{flex:none;min-height:0;margin-bottom:14px}

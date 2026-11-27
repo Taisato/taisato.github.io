@@ -1,9 +1,9 @@
 import { FootballMenuPages } from './ui/menu-pages.js';
 
 export let footballApp=null;
-const pages=new FootballMenuPages(page=>{
-  if(footballApp)footballApp.setMenuPage(page);
-  else pages.setPage(page);
+const pages=new FootballMenuPages((page,category)=>{
+  if(footballApp)footballApp.setMenuPage(page,true,category);
+  else pages.setPage(page,true,category);
 });
 window.addEventListener('keydown',event=>{
   if(footballApp||event.code!=='Escape'||pages.page==='main')return;

@@ -9,7 +9,6 @@ const FB = Object.freeze({
 const footballClamp = (value,min,max)=>Math.max(min,Math.min(max,value));
 
 const SKY_OPTIONS = Object.freeze([
-  {id:'black',name:'Black'},
   {id:'quiet-orbit',name:'Blue'},
   {id:'solar-edge',name:'Amber'},
   {id:'violet-hour',name:'Violet'},
@@ -21,6 +20,4 @@ const SKY_OPTIONS = Object.freeze([
   {id:'rose',name:'Rose'},
   {id:'lime',name:'Lime'}
 ].map(Object.freeze));
-const THREE_TOUCH_SKIES = Object.freeze(SKY_OPTIONS.filter(sky=>sky.id!=='black'));
-
-export { FB, footballClamp, SKY_OPTIONS, THREE_TOUCH_SKIES };
+export { FB, footballClamp, SKY_OPTIONS };

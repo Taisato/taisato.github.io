@@ -133,9 +133,6 @@ function skyDirection(bearing, elevation) {
 }
 
 const SKY_STAGES = {
-  black: {
-    lighting:{sky:'#f3f6e8', ground:'#2d421d', key:'#f4f6ff', fill:'#fff9df', pitch:'#ffffff', runoff:'#000000'}
-  },
   'quiet-orbit': {
     zenith:'#03060b', horizon:'#0a131e', shadow:'#080d16', light:'#537b96', accent:'#7aa5c1',
     planet:skyDirection(-62,25), radius:.014, sunlight:[-.82,.44,.27], kind:0, stars:3.6,
@@ -216,9 +213,7 @@ class FootballSky {
     if (this.currentIndex === index) return;
     const stage = SKY_STAGES[SKY_OPTIONS[index].id], u = this.uniforms;
     this.currentIndex = index;
-    this.mesh.visible = Boolean(stage.planet);
-    u.uHorizon.value.set(stage.horizon??0x000000);
-    if (!this.mesh.visible) return;
+    u.uHorizon.value.set(stage.horizon);
     u.uZenith.value.set(stage.zenith);
     u.uPlanetShadow.value.set(stage.shadow); u.uPlanetLight.value.set(stage.light); u.uAccent.value.set(stage.accent);
     const planet = u.uPlanet.value.set(...stage.planet).normalize();

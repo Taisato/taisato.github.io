@@ -7,7 +7,8 @@ import {drawAbilitySwitcher,VR_PAGES} from './ability-switcher.js';
 class FootballInterface {
  constructor(scene,callbacks,credits={attribution:[],thanksTitle:'',thanks:[]}){
   this.callbacks=callbacks;this.credits=credits;this.hover=null;this.visible=false;this.snapshot={mode:'freeroam',phase:'ready',score:0};this.stateKey='';
-  this.page='main';this.settings=DEFAULT_SETTINGS;this.settingsKey='';
+  this.page='main';this.category='graphics';this.settings=DEFAULT_SETTINGS;this.settingsKey='';
+  this.renderSize={width:0,height:0,rightWidth:0,rightHeight:0};this.renderSizeLabel='';
   this.abilityLevels={};this.abilityPage=0;
   this.canvas=document.createElement('canvas');this.canvas.width=960;this.canvas.height=660;this.ctx=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);
   this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;this.width=1.32;this.height=.9075;
@@ -29,51 +30,84 @@ class FootballInterface {
   const key=[next.turnSpeed,next.vrResolution,next.chromatic,next.noise,next.shotTrace,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
   if(this.visible&&this.page==='settings')this.drawMenu();
  }
- setPage(page){
-  const next=['settings','credits','abilities'].includes(page)?page:'main';if(next===this.page)return;this.page=next;this.hover=null;this.reticle.visible=false;this.reticleCore.visible=false;
+ setRenderSize(width,height,rightWidth=width,rightHeight=height){
+  const size=this.renderSize;
+  if(size.width===width&&size.height===height&&size.rightWidth===rightWidth&&size.rightHeight===rightHeight)return;
+  this.renderSize={width,height,rightWidth,rightHeight};
+  this.renderSizeLabel='';
+  if(width>0&&height>0){
+   const left=width+' × '+height;
+   if(!(rightWidth>0&&rightHeight>0))this.renderSizeLabel='Rendering '+left;
+   else if(width===rightWidth&&height===rightHeight)this.renderSizeLabel='Rendering '+left+' per eye';
+   else this.renderSizeLabel='L '+left+'   R '+rightWidth+' × '+rightHeight;
+  }
+  if(this.visible&&this.page==='settings'&&this.category==='graphics')this.drawMenu();
+ }
+ setPage(page,category=this.category){
+  const next=['settings','credits','abilities'].includes(page)?page:'main';
+  if(next===this.page&&category===this.category)return;
+  this.page=next;this.category=category;this.hover=null;this.reticle.visible=false;this.reticleCore.visible=false;
   if(next==='abilities')this.abilityPage=0;
   if(this.visible)this.drawMenu();
  }
  setAbilityLevels(levels){this.abilityLevels=levels;if(this.visible&&this.page==='abilities')this.drawMenu();}
  drawSettings(){
   const c=this.ctx,s=this.settings;panel(c,960,660);brand(c,48,58);tracked(c,'SETTINGS',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
-  const freeroam=this.snapshot.mode==='freeroam',h=freeroam?52:56,gap=freeroam?58:66;
-  const turn=117,resolution=turn+gap,chromatic=resolution+gap,noise=chromatic+gap,trace=noise+gap,wind=trace+gap;
-  const quality=VR_RESOLUTION_OPTIONS.findIndex(option=>option.scale===s.vrResolution);
-  label(c,'Turn speed',48,turn+h/2,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,turn+h/2,38,UI.white,'center',800);
-  label(c,'VR resolution',48,resolution+14,28);label(c,'Applies the next time you enter VR.',48,resolution+40,19,UI.muted);
-  label(c,VR_RESOLUTION_OPTIONS[quality].label,691,resolution+h/2,25,UI.mint,'center',750);
-  label(c,'Chromatic aberration',48,chromatic+h/2,28);label(c,'Noise',48,noise+h/2,28);label(c,'Wind',48,wind+h/2,28);
-  label(c,'Shot Trace',48,trace+17,28);label(c,'Shows each shot’s path for 2.5 seconds.',48,trace+43,19,UI.muted);
-  this.buttons=[{id:'turn-down',label:'−',x:492,y:turn,w:112,h,disabled:s.turnSpeed<=.25},
-   {id:'turn-up',label:'+',x:800,y:turn,w:112,h,disabled:s.turnSpeed>=4},
-   {id:'vr-resolution-lower',label:'‹',x:470,y:resolution,w:78,h,disabled:quality===VR_RESOLUTION_OPTIONS.length-1,scale:VR_RESOLUTION_OPTIONS[quality+1]?.scale},
-   {id:'vr-resolution-higher',label:'›',x:834,y:resolution,w:78,h,disabled:quality===0,scale:VR_RESOLUTION_OPTIONS[quality-1]?.scale},
-   {id:'toggle-chromatic',label:s.chromatic?'On':'Off',x:720,y:chromatic,w:192,h,on:s.chromatic},
-   {id:'toggle-noise',label:s.noise?'On':'Off',x:720,y:noise,w:192,h,on:s.noise},
-   {id:'toggle-shot-trace',label:s.shotTrace?'On':'Off',x:720,y:trace,w:192,h,on:s.shotTrace},
-   {id:'toggle-wind',label:s.wind==='heavy'?'Heavy':'Normal',x:720,y:wind,w:192,h,on:true}];
-  if(freeroam){
-   const y=wind+gap,stadium=SKY_OPTIONS.find(option=>option.id===s.stadium);
-   label(c,'Stadium',48,y+h/2,28);label(c,stadium.name,691,y+h/2,25,UI.mint,'center',750);
-   this.buttons.push({id:'stadium-prev',label:'‹',x:470,y,w:78,h},{id:'stadium-next',label:'›',x:834,y,w:78,h});
+  const freeroam=this.snapshot.mode==='freeroam',h=58;
+  this.buttons=['Graphics','Gameplay','Other'].map((name,i)=>({
+   id:'settings-'+name.toLowerCase(),category:name.toLowerCase(),label:name,x:48+i*294,y:125,w:276,h:54
+  }));
+  if(this.category==='graphics'){
+   const quality=VR_RESOLUTION_OPTIONS.findIndex(option=>option.scale===s.vrResolution);
+   label(c,'VR resolution',48,219,28);
+   label(c,this.renderSizeLabel||'Applies immediately in VR.',48,251,21,UI.muted);
+   label(c,VR_RESOLUTION_OPTIONS[quality].label,691,231,25,UI.mint,'center',750);
+   label(c,'Chromatic aberration',48,313,28);label(c,'Noise',48,388,28);
+   this.buttons.push(
+    {id:'vr-resolution-lower',label:'‹',x:470,y:202,w:78,h,disabled:quality===VR_RESOLUTION_OPTIONS.length-1,scale:VR_RESOLUTION_OPTIONS[quality+1]?.scale},
+    {id:'vr-resolution-higher',label:'›',x:834,y:202,w:78,h,disabled:quality===0,scale:VR_RESOLUTION_OPTIONS[quality-1]?.scale},
+    {id:'toggle-chromatic',label:s.chromatic?'On':'Off',x:720,y:284,w:192,h,on:s.chromatic},
+    {id:'toggle-noise',label:s.noise?'On':'Off',x:720,y:359,w:192,h,on:s.noise});
+   if(freeroam){
+    const stadium=SKY_OPTIONS.find(option=>option.id===s.stadium);
+    label(c,'Stadium',48,463,28);label(c,stadium.name,691,463,25,UI.mint,'center',750);
+    this.buttons.push({id:'stadium-prev',label:'‹',x:470,y:434,w:78,h},{id:'stadium-next',label:'›',x:834,y:434,w:78,h});
+   }
+  }else if(this.category==='gameplay'){
+   label(c,'Turn speed',48,241,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,241,36,UI.white,'center',800);
+   label(c,'Shot Trace',48,320,28);label(c,'Shows each shot’s path for 2.5 seconds.',48,352,21,UI.muted);
+   this.buttons.push({id:'turn-down',label:'−',x:492,y:212,w:112,h,disabled:s.turnSpeed<=.25},
+    {id:'turn-up',label:'+',x:800,y:212,w:112,h,disabled:s.turnSpeed>=4},
+    {id:'toggle-shot-trace',label:s.shotTrace?'On':'Off',x:720,y:305,w:192,h,on:s.shotTrace});
+   if(freeroam)this.buttons.push({id:'abilities',label:'Abilities',x:48,y:400,w:864,h});
+  }else{
+   label(c,'Wind',48,241,28);
+   this.buttons.push({id:'toggle-wind',label:s.wind==='heavy'?'Heavy':'Normal',x:720,y:212,w:192,h,on:true},
+    {id:'credits',label:'Credits',x:48,y:303,w:864,h});
   }
-  if(freeroam)this.buttons.push({id:'settings-back',label:'Back',x:48,y:535,w:276,h:60},
-   {id:'credits',label:'Credits',x:342,y:535,w:276,h:60},{id:'abilities',label:'Abilities',x:636,y:535,w:276,h:60});
-  else this.buttons.push({id:'settings-back',label:'Back',x:48,y:535,w:420,h:60},
-   {id:'credits',label:'Credits',x:492,y:535,w:420,h:60});
-  for(const b of this.buttons){c.save();if(b.disabled)c.globalAlpha=.32;button(c,b,{primary:b.on||b.id==='settings-back',hover:!b.disabled&&this.hover===b.id});c.restore();}
+  this.buttons.push({id:'settings-back',label:'Back',x:48,y:527,w:864,h:62});
+  for(const b of this.buttons){c.save();if(b.disabled)c.globalAlpha=.32;button(c,b,{selected:b.category===this.category,primary:b.on||b.id==='settings-back',hover:!b.disabled&&this.hover===b.id});c.restore();}
   label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
  }
  drawCredits(){
   const c=this.ctx,{attribution,thanksTitle,thanks}=this.credits;
   panel(c,960,660);brand(c,48,58);tracked(c,'CREDITS',724,58,18,UI.mint,2);
   c.fillStyle=UI.line;c.fillRect(48,106,864,1);
-  let y=156;
-  for(const line of attribution){label(c,line,48,y,28);y+=45;}
-  y+=21;
-  label(c,thanksTitle,48,y,27,UI.mint,'left',750);y+=60;
-  for(const line of thanks){label(c,'•',48,y,24,UI.lilac);label(c,line,75,y,27);y+=46;}
+  let y=148;
+  for(const line of attribution){label(c,line,48,y,28);y+=37;}
+  y+=30;
+  label(c,thanksTitle,48,y,27,UI.mint,'left',750);y+=48;
+  for(const credit of thanks){
+   label(c,'•',48,y,26,UI.lilac);
+   let line='';
+   for(const word of credit.split(/\s+/)){
+    const joined=line?line+' '+word:word;
+    if(line&&c.measureText(joined).width>837){
+     label(c,line,75,y,26);y+=33;line=word;
+    }else line=joined;
+   }
+   label(c,line,75,y,26);y+=45;
+  }
   this.buttons=[{id:'credits-back',label:'Back',x:48,y:520,w:864,h:66}];
   button(c,this.buttons[0],{primary:true,hover:this.hover==='credits-back'});
   label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
@@ -86,9 +120,10 @@ class FootballInterface {
    this.texture.needsUpdate=true;return;
   }
   const c=this.ctx,s=this.snapshot,over=s.mode==='challenge'&&s.phase==='gameover';panel(c,960,660);brand(c,48,58);tracked(c,s.mode==='challenge'?'3 TOUCH':'FREEROAM',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
-  tracked(c,over?'RUN OVER':'SLOW MOTION',48,153,21,over?UI.lilac:UI.muted,3);
+  if(over)tracked(c,'RUN OVER',48,153,21,UI.lilac,3);
   if(s.mode==='challenge'){label(c,String(s.score||0),912,149,54,UI.white,'right',800);label(c,'GOALS',822,151,18,UI.muted,'right');}
-  this.buttons=[{id:over?'restart':'resume',label:over?'Again':'Resume',x:48,y:196,w:864,h:88},{id:'freeroam',label:'Freeroam',x:48,y:310,w:420,h:154},{id:'challenge',label:'3 TOUCH',x:492,y:310,w:420,h:154}];
+  const resumeY=s.mode==='freeroam'?138:196;
+  this.buttons=[{id:over?'restart':'resume',label:over?'Again':'Resume',x:48,y:resumeY,w:864,h:284-resumeY},{id:'freeroam',label:'Freeroam',x:48,y:310,w:420,h:154},{id:'challenge',label:'3 TOUCH',x:492,y:310,w:420,h:154}];
   button(c,this.buttons[0],{primary:true,hover:this.hover===this.buttons[0].id});
   for(const b of this.buttons.slice(1)){
    const selected=s.mode===b.id;shape(c,b.x,b.y,b.w,b.h,14);c.fillStyle=this.hover===b.id?'#263653':selected?'#153630':UI.panel;c.fill();c.strokeStyle=selected?UI.mint:this.hover===b.id?'#7b90b1':UI.line;c.lineWidth=selected?2.5:1.5;c.stroke();label(c,b.label,b.x+26,b.y+43,31,selected?UI.mint:UI.white,'left',800);
@@ -102,6 +137,7 @@ class FootballInterface {
  select(id){
   const target=this.buttons.find(button=>button.id===id);
   if(target?.disabled)return;
+  if(target?.category){this.callbacks['settings-category']?.(target.category);return;}
   if(target?.scale){this.callbacks['vr-resolution']?.(target.scale);return;}
   if(target?.abilityId){this.callbacks['ability-level']?.(target.abilityId,target.level);return;}
   if(id==='ability-page-prev'||id==='ability-page-next'){

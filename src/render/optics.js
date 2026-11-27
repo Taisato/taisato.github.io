@@ -1,7 +1,8 @@
 import { FT } from '../../vendor/three.js';
 
 // One scene render and one optical pass, including in stereo.
-// The renderer retains ownership of XR cameras, their viewports and the XR target.
+// The scene can render below native resolution. The final pass always draws to
+// the XR compositor's own eye rectangles using the same poses and projections.
 const OPTICS = Object.freeze({
   fadeSeconds: .60,
   skyRevealSeconds: .36,
@@ -27,6 +28,7 @@ uniform sampler2D tDepth;
 uniform float uCopyDepth;
 uniform vec2 uResolution;
 uniform vec4 uViewport;
+uniform vec4 uSceneViewport;
 uniform vec2 uCentre;
 uniform vec4 uProjection;
 uniform vec2 uDepthProjection;
@@ -83,9 +85,11 @@ void main() {
   // V32 squared its edge mask, reducing 0.6 px to 0.014 px at UV(.8,.5).
   // A visible floor now extends across the view, with only a tiny axis fade.
   vec2 shift = direction * uSplit * uPixelScale * (.22 + .78 * edge) * smoothstep(0.0, .035, radius);
-  vec2 low = uViewport.xy + vec2(.5);
-  vec2 high = uViewport.xy + uViewport.zw - vec2(.5);
-  vec2 uv = clamp(gl_FragCoord.xy, low, high) / uResolution;
+  vec2 sourceScale = uSceneViewport.zw / uViewport.zw;
+  vec2 sourcePixel = uSceneViewport.xy + (gl_FragCoord.xy - uViewport.xy) * sourceScale;
+  vec2 low = uSceneViewport.xy + vec2(.5);
+  vec2 high = uSceneViewport.xy + uSceneViewport.zw - vec2(.5);
+  vec2 uv = clamp(sourcePixel, low, high) / uResolution;
   float sceneDepth = texture2D(tDepth, uv).r;
   float pixelDepth = viewDepth(sceneDepth);
   vec2 pixelRay = (localUV * 2.0 - 1.0 + uProjection.zw) / uProjection.xy;
@@ -107,12 +111,12 @@ void main() {
     float belongs = belongsToSphere(localUV, sceneDepth, sphere);
     // Shifted depth taps extend the coloured silhouette itself, while a source
     // hidden behind foreground depth still cannot tint that foreground.
-    vec2 redPixel = clamp(gl_FragCoord.xy + displacement, low, high);
-    vec2 bluePixel = clamp(gl_FragCoord.xy - displacement, low, high);
+    vec2 redPixel = clamp(sourcePixel + displacement * sourceScale, low, high);
+    vec2 bluePixel = clamp(sourcePixel - displacement * sourceScale, low, high);
     float redDepth = texture2D(tDepth, redPixel / uResolution).r;
     float blueDepth = texture2D(tDepth, bluePixel / uResolution).r;
-    belongs = max(belongs, belongsToSphere((redPixel - uViewport.xy) / uViewport.zw, redDepth, sphere));
-    belongs = max(belongs, belongsToSphere((bluePixel - uViewport.xy) / uViewport.zw, blueDepth, sphere));
+    belongs = max(belongs, belongsToSphere((redPixel - uSceneViewport.xy) / uSceneViewport.zw, redDepth, sphere));
+    belongs = max(belongs, belongsToSphere((bluePixel - uSceneViewport.xy) / uSceneViewport.zw, blueDepth, sphere));
     float weight = belongs * (1.0 - smoothstep(.82, 1.0, ellipse));
     if(weight > motionWeight) { motion = displacement * weight; motionWeight = weight; }
   }
@@ -125,8 +129,8 @@ void main() {
   if(length(combined) < .00001) combined = length(motion) > 0.0 ? motion : shift;
   shift = combined / max(length(combined), .00001) * separation * clarity;
   // Every tap stays in its own eye, even at an asymmetric atlas seam.
-  vec2 redUV = clamp(gl_FragCoord.xy + shift, low, high) / uResolution;
-  vec2 blueUV = clamp(gl_FragCoord.xy - shift, low, high) / uResolution;
+  vec2 redUV = clamp(sourcePixel + shift * sourceScale, low, high) / uResolution;
+  vec2 blueUV = clamp(sourcePixel - shift * sourceScale, low, high) / uResolution;
   vec4 centre = texture2D(tScene, uv);
   // Projection layers that consume depth receive the unshifted scene depth.
   if(uCopyDepth > .5) gl_FragDepth = sceneDepth;
@@ -220,6 +224,11 @@ class FootballOptics {
     this.disposed = false;
     this.target = null;
     this.targetSize = new FT.Vector2();
+    this.vrResolution = 1;
+    this.sceneViewports = new WeakMap();
+    this.outputViewports = [];
+    this.eyeSize = new FT.Vector2();
+    this.rightEyeSize = new FT.Vector2();
     this.motionSources = [];
     this.motionEnabled = true;
     this.chromaticEnabled = true;
@@ -229,7 +238,8 @@ class FootballOptics {
     this._corner = new FT.Vector3();
     this.uniforms = {
       tScene:{value:null}, tDepth:{value:null}, uCopyDepth:{value:0}, uResolution:{value:new FT.Vector2(1, 1)},
-      uViewport:{value:new FT.Vector4(0, 0, 1, 1)}, uCentre:{value:new FT.Vector2(.5, .5)},
+      uViewport:{value:new FT.Vector4(0, 0, 1, 1)}, uSceneViewport:{value:new FT.Vector4(0, 0, 1, 1)},
+      uCentre:{value:new FT.Vector2(.5, .5)},
       uProjection:{value:new FT.Vector4(1, 1, 0, 0)}, uDepthProjection:{value:new FT.Vector2(-1, -.07)},
       uWorldHeight:{value:new FT.Vector4(0, 1, 0, 0)},
       uHUDRect:{value:new FT.Vector4(0, 0, 0, 0)}, uHUDVisible:{value:0}, uPixelScale:{value:1},
@@ -274,7 +284,8 @@ class FootballOptics {
     this.uniforms.uNoiseFrame.value = Math.floor(this.time * 24);
   }
 
-  setEffects({chromatic, noise} = {}) {
+  setEffects({chromatic, noise, vrResolution} = {}) {
+    if(Number.isFinite(vrResolution) && vrResolution > 0 && vrResolution <= 1) this.vrResolution = vrResolution;
     if(typeof chromatic === 'boolean') this.chromaticEnabled = chromatic;
     if(typeof noise === 'boolean') this.noiseEnabled = noise;
     this._effects(this.menuAmount * this.menuAmount * (3 - 2 * this.menuAmount));
@@ -364,6 +375,7 @@ class FootballOptics {
     const viewport = camera.viewport;
     if(viewport) this.uniforms.uViewport.value.copy(viewport);
     else this.uniforms.uViewport.value.set(0, 0, this.target.width, this.target.height);
+    this.uniforms.uSceneViewport.value.copy((this.eyeSize.x && this.sceneViewports.get(camera)) || this.uniforms.uViewport.value);
     const p = camera.projectionMatrix.elements;
     // The optical axis is not necessarily the centre of an XR eye's viewport.
     this.uniforms.uCentre.value.set(.5 - .5 * p[8], .5 - .5 * p[9]);
@@ -378,18 +390,19 @@ class FootballOptics {
     this.material.uniformsNeedUpdate = true;
   }
 
-  _size(destination) {
+  _size(destination, scale = 1) {
     if(destination) this.targetSize.set(destination.width, destination.height);
     else this.renderer.getDrawingBufferSize(this.targetSize);
-    const w = Math.max(1, Math.floor(this.targetSize.x));
-    const h = Math.max(1, Math.floor(this.targetSize.y));
+    const w = Math.max(1, Math.round(this.targetSize.x * scale));
+    const h = Math.max(1, Math.round(this.targetSize.y * scale));
     const copyDepth = !!(destination?.isXRRenderTarget && destination.resolveDepthBuffer);
+    // Base MSAA on the output, so lowering scene quality never increases samples.
+    const samples = this.targetSize.x * this.targetSize.y <= 7000000 ? Math.min(2, this.renderer.capabilities?.maxSamples || 0) : 0;
     if(!this.target) {
       const extensions = this.renderer.extensions;
       const halfFloat = !!(extensions?.has?.('EXT_color_buffer_float') || extensions?.has?.('EXT_color_buffer_half_float'));
       // Keep one atlas only. Very large XR buffers avoid another multisample
       // allocation; ordinary sizes retain 2x MSAA for the pitch markings.
-      const samples = w * h <= 7000000 ? Math.min(2, this.renderer.capabilities?.maxSamples || 0) : 0;
       this.target = new FT.WebGLRenderTarget(w, h, {
         type:halfFloat ? FT.HalfFloatType : FT.UnsignedByteType,
         colorSpace:FT.LinearSRGBColorSpace,
@@ -402,13 +415,42 @@ class FootballOptics {
       this.target.texture.name = 'Football optical scene';
       this.uniforms.tScene.value = this.target.texture;
     } else if(this.target.width !== w || this.target.height !== h) {
-      const samples = w * h <= 7000000 ? Math.min(2, this.renderer.capabilities?.maxSamples || 0) : 0;
       this.target.samples = samples;
       this.target.setSize(w, h);
+    } else if(this.target.samples !== samples) {
+      this.target.dispose();
+      this.target.samples = samples;
     }
     this.uniforms.tDepth.value = this.target.depthTexture;
     this.uniforms.uCopyDepth.value = copyDepth ? 1 : 0;
     this.uniforms.uResolution.value.set(w, h);
+  }
+
+  _renderScene(scene, camera, eyes) {
+    this.eyeSize.set(0, 0);
+    this.rightEyeSize.set(0, 0);
+    if(!eyes?.length) { this.renderer.render(scene, camera); return; }
+    const sx = this.target.width / this.targetSize.x, sy = this.target.height / this.targetSize.y;
+    this.outputViewports.length = 0;
+    try {
+      for(let i = 0; i < eyes.length; i++) {
+        const eye = eyes[i];
+        const full = eye.viewport;
+        let sub = this.sceneViewports.get(eye);
+        if(!sub) { sub = new FT.Vector4(); this.sceneViewports.set(eye, sub); }
+        // Round the edges, so adjacent eyes still share an exact boundary.
+        const x = Math.round(full.x * sx), y = Math.round(full.y * sy);
+        sub.set(x, y, Math.max(1, Math.round((full.x + full.z) * sx) - x),
+          Math.max(1, Math.round((full.y + full.w) * sy) - y));
+        this.outputViewports.push(full);
+        eye.viewport = sub;
+        if(i === 0) this.eyeSize.set(sub.z, sub.w);
+        if(i === 1) this.rightEyeSize.set(sub.z, sub.w);
+      }
+      this.renderer.render(scene, camera);
+    } finally {
+      for(let i = 0; i < this.outputViewports.length; i++) eyes[i].viewport = this.outputViewports[i];
+    }
   }
 
   render(scene = this.scene, camera = this.camera) {
@@ -420,12 +462,12 @@ class FootballOptics {
     const level = renderer.getActiveMipmapLevel?.() || 0;
     const autoClear = renderer.autoClear;
     try {
-      this._size(destination);
-      // XR remains enabled throughout: Three uses the identical eye cameras and
-      // viewports in both passes. No reprojection, pose copying or GL access.
+      const eyes = destination?.isXRRenderTarget ?
+        (renderer.xr.isPresenting ? renderer.xr.getCamera() : camera).cameras : null;
+      this._size(destination, eyes?.length ? this.vrResolution : 1);
       renderer.setRenderTarget(this.target);
       renderer.autoClear = true;
-      renderer.render(scene, camera);
+      this._renderScene(scene, camera, eyes);
       renderer.setRenderTarget(destination, face, level);
       renderer.render(this.outputScene, camera);
     } finally {

@@ -1,5 +1,5 @@
 import { FT } from "../vendor/three.js";
-import { FB, footballClamp, SKY_OPTIONS, THREE_TOUCH_SKIES } from "./config.js";
+import { FB, footballClamp, SKY_OPTIONS } from "./config.js";
 import { FootballField } from "./world/field.js";
 import { FootballSky } from "./world/sky.js";
 import { FootballPhysics } from "./physics/ball.js";
@@ -51,7 +51,7 @@ class FootballApp {
     this.practiceSpawn=new FT.Vector3();this.practicePlayer=new FT.Vector3();this.practiceYaw=0;
     this.freeSnapshot={mode:'freeroam',phase:'ready',score:0,lives:3,touches:3,round:0,outcome:null};
     this.modeInput={ball:this.physics.ball,previous:null,events:this.physics.events,keeper:this.goalkeeper};
-    this.observeChallengeMotion=(previous,current,radius,events)=>this.activeRules?.observeMotion(previous,current,radius,events);
+    this.observeChallengeMotion=(previous,current,radius,events,offWoodwork)=>this.activeRules?.observeMotion(previous,current,radius,events,offWoodwork);
     const creditsPage=document.querySelector('#credits-page');
     const credits={
       attribution:Array.from(creditsPage.querySelectorAll('.credits-attribution span'),line=>line.textContent),
@@ -62,6 +62,7 @@ class FootballApp {
       resume:()=>this.setMenu(false),calibrate:()=>this.beginCalibration(),exit:()=>this.exit(),
       freeroam:()=>this.selectMode('freeroam'),challenge:()=>this.selectMode('challenge'),restart:()=>this.restart(),
       settings:()=>this.setMenuPage('settings'),'settings-back':()=>this.setMenuPage('main'),
+      'settings-category':category=>this.setMenuPage('settings',false,category),
       credits:()=>this.setMenuPage('credits'),'credits-back':()=>this.setMenuPage('settings'),
       abilities:()=>this.setMenuPage('abilities'),'abilities-back':()=>this.setMenuPage('settings'),
       'ability-level':(id,level)=>this.setPracticeLevels({...this.practiceLevels,[id]:level}),
@@ -199,13 +200,12 @@ class FootballApp {
   }
   applyModeSky(reveal=false) {
     const completed=this.active?this.challenge.acceptedRewardCount:0;
-    const skyId=this.mode==='freeroam'?this.settings.stadium:THREE_TOUCH_SKIES[completed%THREE_TOUCH_SKIES.length].id;
-    const index=SKY_OPTIONS.findIndex(sky=>sky.id===skyId);
-    if(this.sky.currentIndex===index)return;
+    const index=this.mode==='freeroam'?SKY_OPTIONS.findIndex(sky=>sky.id===this.settings.stadium):completed%SKY_OPTIONS.length;
+    const changed=this.sky.currentIndex!==index;
     this.sky.set(index);
     this.field.setSkyLighting(this.sky.lighting,this.sky.horizonLight);
     this.netVisual.setSkyLighting(this.field.pitchLighting.flood.value);
-    if(reveal)this.optics.revealSky();
+    if(reveal&&changed)this.optics.revealSky();
   }
   cycleStadium(direction) {
     if(this.mode!=='freeroam')return;
@@ -213,12 +213,12 @@ class FootballApp {
     const index=(current+direction+SKY_OPTIONS.length)%SKY_OPTIONS.length;
     this.changeSettings({stadium:SKY_OPTIONS[index].id});
   }
-  setMenuPage(page,focus=true) {
+  setMenuPage(page,focus=true,category) {
     if(page==='abilities'&&this.mode!=='freeroam')return;
     if(page!=='main'&&this.pending)return;
     if(page!=='main'&&this.active&&!this.menu&&!this.contextLost)this.setMenu(true);
-    this.interface.setPage(page);
-    this.menuPages.setPage(page,focus);
+    this.menuPages.setPage(page,focus,category);
+    this.interface.setPage(page,this.menuPages.category);
   }
   syncPage() {
     const over=this.mode==='challenge'&&this.challenge.phase==='gameover';
@@ -229,7 +229,7 @@ class FootballApp {
     this.ui.restart.hidden=!this.active||this.mode!=='challenge';
     this.ui.restart.textContent=over?'Again':'Restart';
     this.ui.hint.hidden=!(this.active&&this.controls.desktop&&!this.menu&&!this.rewardActive);
-    this.ui.pauseLabel.textContent=over?'RUN OVER':'SLOW MOTION';
+    this.ui.pauseLabel.textContent=over?'RUN OVER':'';
     this.ui.pauseScore.textContent=this.mode==='challenge'?String(this.snapshot.score)+' GOALS':'';
     this.ui.launcher.dataset.active=String(this.active);this.ui.launcher.dataset.mode=this.mode;
     this.ui.launcher.dataset.input=this.active&&this.controls.desktop?'desktop':'vr';
@@ -284,7 +284,8 @@ class FootballApp {
       this.session=session;session.addEventListener('end',this.onSessionEnd);session.addEventListener('visibilitychange',this.onXRVisibility);
       const nativeScale=await nativeXRScale(session,this.renderer.getContext());
       if(this.disposed||this.session!==session)return;
-      this.renderer.xr.setFramebufferScaleFactor(nativeScale*this.settings.vrResolution);
+      // XR fixes the output size at entry. Optics scales the game scene live inside it.
+      this.renderer.xr.setFramebufferScaleFactor(nativeScale);
       await this.renderer.xr.setSession(session);
       if(this.disposed||this.session!==session)return;
       this.reference=this.renderer.xr.getReferenceSpace();this.reference?.addEventListener('reset',this.onReferenceReset);
@@ -308,6 +309,7 @@ class FootballApp {
     this.reference?.removeEventListener('reset',this.onReferenceReset);
     this.session?.removeEventListener('end',this.onSessionEnd);this.session?.removeEventListener('visibilitychange',this.onXRVisibility);
     this.session=null;this.reference=null;this.active=false;this.menu=false;this.paused=false;this.pendingInitialPlacement=false;this.pendingStartWhistle=false;
+    this.interface.setRenderSize(0,0);
     this.setMenuPage('main',false);
     this.calibrationFromGameover=false;
     this.pendingChance=null;this.challenge.stop();this.practice.stop();this.hud.hide();this.motion.reset();this.clearChallengePresentation();
@@ -477,6 +479,7 @@ class FootballApp {
       // Fewer simulation steps must not turn one controller swing into a 4x hit.
       foot.velocity.multiplyScalar(rate);foot.driveVelocity.multiplyScalar(rate);
       foot.ankleVelocity.multiplyScalar(rate);foot.locomotionVelocity.multiplyScalar(rate);
+      foot.runBonusVelocity.multiplyScalar(rate);
       foot.angularVelocity.multiplyScalar(rate);foot.shinAngularVelocity.multiplyScalar(rate);
       foot.controlAngularVelocity.multiplyScalar(rate);
     }
@@ -598,6 +601,10 @@ class FootballApp {
     this.motion.update(dt,this.physics.ball,this.active&&audioActive&&!this.menu&&!this.rewardActive&&!this.paused);
     this.optics.setHUD(this.rewardPicker.root.visible?this.rewardPicker.root:this.hud.mesh);
     this.optics.render();
+    if(this.renderer.xr.isPresenting&&this.menu&&this.menuPages.page==='settings'&&this.menuPages.category==='graphics'){
+      const {eyeSize,rightEyeSize}=this.optics;
+      this.interface.setRenderSize(eyeSize.x,eyeSize.y,rightEyeSize.x,rightEyeSize.y);
+    }
   };
   dispose(){
     if(this.disposed)return;this.disposed=true;this.pendingStartWhistle=false;this.renderer.setAnimationLoop(null);

@@ -165,7 +165,7 @@ class FootballChallenge {
     this.goalValue=0;
     this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
     this._physicalTouches=0;this._woodworkUsed=false;this._lastTouchOutsideBox=false;this._shotDistance=0;
-    this._woodworkOutEligible=false;this._directOutsideShot=false;
+    this._lastFrameEnd=0;this._directOutsideShot=false;
     this._firstTimeQualified=false;this._firstTimeRescueUsed=false;this._firstTimeParryUntil=-Infinity;
     this._recoveryUntil=-Infinity;this._recoveryTouchUsed=false;this._lastTrapUsed=false;
     this._lastPhysicalTouchTime=-Infinity;this._motion=null;this._motionObserved=false;
@@ -175,7 +175,7 @@ class FootballChallenge {
     return from<plane&&to>=plane?(plane-from)/(to-from):Infinity;
   }
 
-  observeMotion(previous,current,radius=FB.ballRadius,events=null) {
+  observeMotion(previous,current,radius=FB.ballRadius,events=null,offWoodwork) {
     if(!this.active||(this.phase!=='ready'&&this.phase!=='live')||!previous||!current)return;
     this._motionObserved=true;
     if(this._motion||!Number.isFinite(previous.x+previous.y+previous.z+current.x+current.y+current.z))return;
@@ -193,7 +193,7 @@ class FootballChallenge {
     const left=this._crossing(-previous.x,-current.x,FB.halfWidth+r);
     const outside=Math.min(far,right,left);
     if(outside<first){first=outside;kind='out';}
-    if(kind)this._motion={kind,eventCount:events?events.length:Infinity};
+    if(kind)this._motion={kind,eventCount:events?events.length:Infinity,offWoodwork};
   }
 
   _touch(event) {
@@ -215,7 +215,7 @@ class FootballChallenge {
     this._lastTouchOutsideBox=outsidePenaltyArea(point);
     this._shotDistance=this._lastTouchOutsideBox?Math.hypot(point.x,point.z+FB.halfLength):0;
     this._directOutsideShot=this._lastTouchOutsideBox&&!!event.shot;
-    this._woodworkOutEligible=false;
+    this._lastFrameEnd=0;
     const gentle=!event.shot&&(event.control??(Number.isFinite(event.speed)&&event.speed<=2.2));
     const cooldown=this.effects.touchCooldown+(gentle?this.effects.gentleTouchCooldown:0);
     if(gap<cooldown-1e-9)return false;
@@ -234,9 +234,9 @@ class FootballChallenge {
     return false;
   }
 
-  _frameHit() {
+  _frameHit(event) {
     if(this.phase!=='live')return;
-    this._woodworkOutEligible=true;
+    this._lastFrameEnd=event.position?.z>0?1:-1;
     this._directOutsideShot=false;
     this._recoveryUntil=this.time+RECOVERY_SECONDS;
     if(this.effects.woodworkCredit&&!this._woodworkUsed){
@@ -247,7 +247,7 @@ class FootballChallenge {
 
   _keeperSave(event) {
     this.savePending=!event.forcedParry;
-    this._woodworkOutEligible=false;
+    this._lastFrameEnd=0;
     this._directOutsideShot=false;
     this._firstTimeParryUntil=-Infinity;
     if(!event.parry||this.phase!=='live')return;
@@ -257,12 +257,13 @@ class FootballChallenge {
     }
   }
 
-  _resolve(outcome) {
+  _resolve(outcome,offWoodwork=false) {
     if(this.phase!=='ready'&&this.phase!=='live')return null;
     if(outcome==='goal'){
       const firstTime=this.effects.firstTimeFinish&&this._firstTimeQualified;
       const distance=this.effects.doubleFromDistance&&this._lastTouchOutsideBox;
-      this.goalValue=1+Number(!!firstTime)+Number(!!distance);
+      const woodwork=this.effects.woodworkGoal&&offWoodwork;
+      this.goalValue=1+Number(!!firstTime)+Number(!!distance)+Number(!!woodwork);
       this.score+=this.goalValue;
       this.lives=Math.min(this.maxLives,this.lives+1);
       this._nextLongRangeTouches=this._lastTouchOutsideBox?this.effects.longRangeBonus:0;
@@ -272,7 +273,7 @@ class FootballChallenge {
     }else if(this.lives===1&&this._lastChanceRetries<this.effects.lastChance){
       this._lastChanceRetries++;outcome='retry';
     }else{
-      if(outcome==='out'&&this._woodworkOutEligible)this._nextWoodworkTouches=this.effects.woodworkCarry;
+      if(outcome==='out'&&this._lastFrameEnd)this._nextWoodworkTouches=this.effects.woodworkCarry;
       this.lives=Math.max(0,this.lives-1);
     }
     this.outcome=outcome;this.resultAge=0;
@@ -289,7 +290,7 @@ class FootballChallenge {
     if(!ball?.position||!ball.velocity)return null;
     const p=ball.position,v=ball.velocity,r=ball.radius??FB.ballRadius;
     if(!Number.isFinite(p.x+p.y+p.z+v.x+v.y+v.z))return this._resolve('miss');
-    if(!this._motionObserved&&previous)this.observeMotion(previous,p,r,events);
+    if(!this._motionObserved&&previous)this.observeMotion(previous,p,r,events,ball.offWoodwork);
     const motion=this._motion;
     const count=Math.min(events.length,motion?.eventCount??events.length);
     for(let i=0;i<count;i++){
@@ -298,12 +299,12 @@ class FootballChallenge {
         if(this._touch(event))return this._resolve('touches');
       }
       else if(event.type==='save')this._keeperSave(event);
-      else if(event.type==='frame')this._frameHit();
+      else if(event.type==='frame')this._frameHit(event);
       else if(event.type==='bounce')this._firstTimeParryUntil=-Infinity;
     }
     this._motion=null;this._motionObserved=false;
     if(motion){
-      if(motion.kind!=='goal'||this.phase==='live')return this._resolve(motion.kind);
+      if(motion.kind!=='goal'||this.phase==='live')return this._resolve(motion.kind,motion.offWoodwork??(this._lastFrameEnd===-1));
     }
     // Also handle a boundary state after a pause/relocalization without assuming
     // that a ball placed behind the goal entered through the mouth.

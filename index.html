@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080d1d">
 <link rel="icon" href="data:,">
 <title>First Touch · VR Football</title>
-<link rel="stylesheet" href="./styles/main.css?v=28d5b1227f5c">
+<link rel="stylesheet" href="./styles/main.css?v=aaf8b31cb8b3">
 </head>
 <body>
 <svg class="symbols" aria-hidden="true"><defs>
@@ -18,7 +18,7 @@
 <section class="card" aria-label="First Touch">
 <header class="brand"><h1><span>FIRST</span>TOUCH</h1><div class="ball-mark" aria-hidden="true"><svg><use href="#icon-ball"/></svg></div></header>
 <div id="menu-main">
-<div class="pause-title"><span id="pause-label">SLOW MOTION</span><strong id="pause-score"></strong></div>
+<div class="pause-title"><span id="pause-label"></span><strong id="pause-score"></strong></div>
 <div id="mode-select" class="mode-select" role="group" aria-label="Game mode">
 <button id="mode-freeroam" class="mode" type="button" aria-pressed="true"><span class="mode-title">Freeroam<i class="selected-dot" aria-hidden="true"></i></span><svg class="pitch-icon" aria-hidden="true"><use href="#icon-pitch"/></svg></button>
 <button id="mode-challenge" class="mode challenge" type="button" aria-pressed="false" aria-label="3 Touch: three touches, three lives"><span class="mode-title">3 TOUCH<i class="selected-dot" aria-hidden="true"></i></span><span class="mode-pips" aria-hidden="true"><span class="touch-pips"><svg><use href="#icon-ball"/></svg><svg><use href="#icon-ball"/></svg><svg><use href="#icon-ball"/></svg></span><span class="life-pips"><svg><use href="#icon-heart"/></svg><svg><use href="#icon-heart"/></svg><svg><use href="#icon-heart"/></svg></span></span></button>
@@ -28,18 +28,27 @@
 </div>
 <section id="settings-page" class="settings-page" hidden aria-labelledby="settings-title">
 <h2 id="settings-title">Settings</h2>
-<div class="turn-setting"><label class="setting-row" for="turn-speed"><span>Turn speed</span><output id="turn-speed-value" for="turn-speed">1×</output></label><input id="turn-speed" type="range" min="0.25" max="4" step="0.25" value="1" aria-valuetext="1 times"></div>
-<div class="setting-row"><div><label for="vr-resolution">VR resolution</label><small class="setting-description" id="vr-resolution-help">Applies the next time you enter VR.</small></div><select id="vr-resolution" class="setting-select" aria-describedby="vr-resolution-help"></select></div>
+<div class="settings-tabs" role="tablist" aria-label="Settings categories">
+  <button id="settings-graphics" type="button" role="tab" aria-controls="graphics-panel" aria-selected="true" data-settings-category="graphics">Graphics</button>
+  <button id="settings-gameplay" type="button" role="tab" aria-controls="gameplay-panel" aria-selected="false" tabindex="-1" data-settings-category="gameplay">Gameplay</button>
+  <button id="settings-other" type="button" role="tab" aria-controls="other-panel" aria-selected="false" tabindex="-1" data-settings-category="other">Other</button>
+</div>
+<div id="graphics-panel" role="tabpanel" aria-labelledby="settings-graphics">
+<div class="setting-row"><div><label for="vr-resolution">VR resolution</label><small class="setting-description" id="vr-resolution-help">Applies immediately in VR.</small></div><select id="vr-resolution" class="setting-select" aria-describedby="vr-resolution-help"></select></div>
 <div class="setting-row"><span id="chromatic-label">Chromatic aberration</span><button id="toggle-chromatic" class="setting-toggle" type="button" role="switch" aria-checked="true" aria-labelledby="chromatic-label">On</button></div>
 <div class="setting-row"><span id="noise-label">Noise</span><button id="toggle-noise" class="setting-toggle" type="button" role="switch" aria-checked="true" aria-labelledby="noise-label">On</button></div>
-<div class="setting-row"><div><span id="shot-trace-label">Shot Trace</span><small class="setting-description" id="shot-trace-help">Shows each shot’s path for 2.5 seconds.</small></div><button id="toggle-shot-trace" class="setting-toggle" type="button" role="switch" aria-checked="false" aria-labelledby="shot-trace-label" aria-describedby="shot-trace-help">Off</button></div>
-<div class="setting-row"><span id="wind-label">Wind</span><button id="toggle-wind" class="setting-toggle wind-choice" type="button" data-wind="normal" aria-label="Wind: Normal. Switch to Heavy">Normal</button></div>
 <div class="setting-row" id="freeroam-stadium-row" hidden><label for="stadium">Stadium</label><select id="stadium" class="setting-select"></select></div>
-<div class="settings-actions">
-  <button id="settings-back" class="secondary" type="button">Back</button>
-  <button id="credits" class="secondary" type="button" aria-controls="credits-page" aria-expanded="false">Credits</button>
-  <button id="abilities" class="secondary" type="button" aria-controls="abilities-page" aria-expanded="false" disabled>Abilities</button>
 </div>
+<div id="gameplay-panel" role="tabpanel" aria-labelledby="settings-gameplay" hidden>
+<div class="turn-setting"><label class="setting-row" for="turn-speed"><span>Turn speed</span><output id="turn-speed-value" for="turn-speed">1×</output></label><input id="turn-speed" type="range" min="0.25" max="4" step="0.25" value="1" aria-valuetext="1 times"></div>
+<div class="setting-row"><div><span id="shot-trace-label">Shot Trace</span><small class="setting-description" id="shot-trace-help">Shows each shot’s path for 2.5 seconds.</small></div><button id="toggle-shot-trace" class="setting-toggle" type="button" role="switch" aria-checked="false" aria-labelledby="shot-trace-label" aria-describedby="shot-trace-help">Off</button></div>
+<button id="abilities" class="secondary settings-link" type="button" aria-controls="abilities-page" aria-expanded="false" disabled>Abilities <span aria-hidden="true">›</span></button>
+</div>
+<div id="other-panel" role="tabpanel" aria-labelledby="settings-other" hidden>
+<div class="setting-row"><span id="wind-label">Wind</span><button id="toggle-wind" class="setting-toggle wind-choice" type="button" data-wind="normal" aria-label="Wind: Normal. Switch to Heavy">Normal</button></div>
+<button id="credits" class="secondary settings-link" type="button" aria-controls="credits-page" aria-expanded="false">Credits <span aria-hidden="true">›</span></button>
+</div>
+<button id="settings-back" class="secondary" type="button">Back</button>
 </section>
 <section id="credits-page" class="settings-page credits-page" hidden aria-labelledby="credits-title">
 <h2 id="credits-title" tabindex="-1">Credits</h2>
@@ -48,6 +57,7 @@
 <ul>
   <li><strong>Ludi</strong>, for help with nailing the physics system</li>
   <li><strong>Jensen</strong>, for guidance in general game design</li>
+  <li><strong>Lyndon</strong>, for being the game's first fan and his creative input on game design and the direction for the game.</li>
 </ul>
 <button id="credits-back" class="secondary" type="button">Back</button>
 </section>
@@ -88,46 +98,46 @@
 <script type="importmap">
 {
   "imports": {
-    "./src/app.js": "./src/app.js?v=28d5b1227f5c",
-    "./src/assets.js": "./src/assets.js?v=28d5b1227f5c",
-    "./src/audio.js": "./src/audio.js?v=28d5b1227f5c",
-    "./src/config.js": "./src/config.js?v=28d5b1227f5c",
-    "./src/game/abilities.js": "./src/game/abilities.js?v=28d5b1227f5c",
-    "./src/game/ability-draft.js": "./src/game/ability-draft.js?v=28d5b1227f5c",
-    "./src/game/challenge.js": "./src/game/challenge.js?v=28d5b1227f5c",
-    "./src/keeper/keeper.js": "./src/keeper/keeper.js?v=28d5b1227f5c",
-    "./src/keeper/meshes.js": "./src/keeper/meshes.js?v=28d5b1227f5c",
-    "./src/keeper/player-contact.js": "./src/keeper/player-contact.js?v=28d5b1227f5c",
-    "./src/keeper/ragdoll.js": "./src/keeper/ragdoll.js?v=28d5b1227f5c",
-    "./src/keeper/visuals.js": "./src/keeper/visuals.js?v=28d5b1227f5c",
-    "./src/main.js": "./src/main.js?v=28d5b1227f5c",
-    "./src/physics/ball.js": "./src/physics/ball.js?v=28d5b1227f5c",
-    "./src/physics/nets.js": "./src/physics/nets.js?v=28d5b1227f5c",
-    "./src/physics/shot-surface.js": "./src/physics/shot-surface.js?v=28d5b1227f5c",
-    "./src/player/boots.js": "./src/player/boots.js?v=28d5b1227f5c",
-    "./src/player/controls.js": "./src/player/controls.js?v=28d5b1227f5c",
-    "./src/player/visuals.js": "./src/player/visuals.js?v=28d5b1227f5c",
-    "./src/render/markings.js": "./src/render/markings.js?v=28d5b1227f5c",
-    "./src/render/motion.js": "./src/render/motion.js?v=28d5b1227f5c",
-    "./src/render/net.js": "./src/render/net.js?v=28d5b1227f5c",
-    "./src/render/optics.js": "./src/render/optics.js?v=28d5b1227f5c",
-    "./src/render/shot-trail.js": "./src/render/shot-trail.js?v=28d5b1227f5c",
-    "./src/render/xr-resolution.js": "./src/render/xr-resolution.js?v=28d5b1227f5c",
-    "./src/settings.js": "./src/settings.js?v=28d5b1227f5c",
-    "./src/ui/ability-switcher.js": "./src/ui/ability-switcher.js?v=28d5b1227f5c",
-    "./src/ui/calibration.js": "./src/ui/calibration.js?v=28d5b1227f5c",
-    "./src/ui/hud.js": "./src/ui/hud.js?v=28d5b1227f5c",
-    "./src/ui/menu-pages.js": "./src/ui/menu-pages.js?v=28d5b1227f5c",
-    "./src/ui/menu.js": "./src/ui/menu.js?v=28d5b1227f5c",
-    "./src/ui/rewards.js": "./src/ui/rewards.js?v=28d5b1227f5c",
-    "./src/ui/theme.js": "./src/ui/theme.js?v=28d5b1227f5c",
-    "./src/world/field.js": "./src/world/field.js?v=28d5b1227f5c",
-    "./src/world/sky.js": "./src/world/sky.js?v=28d5b1227f5c",
-    "./src/world/stand.js": "./src/world/stand.js?v=28d5b1227f5c",
-    "./vendor/three.js": "./vendor/three.js?v=28d5b1227f5c"
+    "./src/app.js": "./src/app.js?v=aaf8b31cb8b3",
+    "./src/assets.js": "./src/assets.js?v=aaf8b31cb8b3",
+    "./src/audio.js": "./src/audio.js?v=aaf8b31cb8b3",
+    "./src/config.js": "./src/config.js?v=aaf8b31cb8b3",
+    "./src/game/abilities.js": "./src/game/abilities.js?v=aaf8b31cb8b3",
+    "./src/game/ability-draft.js": "./src/game/ability-draft.js?v=aaf8b31cb8b3",
+    "./src/game/challenge.js": "./src/game/challenge.js?v=aaf8b31cb8b3",
+    "./src/keeper/keeper.js": "./src/keeper/keeper.js?v=aaf8b31cb8b3",
+    "./src/keeper/meshes.js": "./src/keeper/meshes.js?v=aaf8b31cb8b3",
+    "./src/keeper/player-contact.js": "./src/keeper/player-contact.js?v=aaf8b31cb8b3",
+    "./src/keeper/ragdoll.js": "./src/keeper/ragdoll.js?v=aaf8b31cb8b3",
+    "./src/keeper/visuals.js": "./src/keeper/visuals.js?v=aaf8b31cb8b3",
+    "./src/main.js": "./src/main.js?v=aaf8b31cb8b3",
+    "./src/physics/ball.js": "./src/physics/ball.js?v=aaf8b31cb8b3",
+    "./src/physics/nets.js": "./src/physics/nets.js?v=aaf8b31cb8b3",
+    "./src/physics/shot-surface.js": "./src/physics/shot-surface.js?v=aaf8b31cb8b3",
+    "./src/player/boots.js": "./src/player/boots.js?v=aaf8b31cb8b3",
+    "./src/player/controls.js": "./src/player/controls.js?v=aaf8b31cb8b3",
+    "./src/player/visuals.js": "./src/player/visuals.js?v=aaf8b31cb8b3",
+    "./src/render/markings.js": "./src/render/markings.js?v=aaf8b31cb8b3",
+    "./src/render/motion.js": "./src/render/motion.js?v=aaf8b31cb8b3",
+    "./src/render/net.js": "./src/render/net.js?v=aaf8b31cb8b3",
+    "./src/render/optics.js": "./src/render/optics.js?v=aaf8b31cb8b3",
+    "./src/render/shot-trail.js": "./src/render/shot-trail.js?v=aaf8b31cb8b3",
+    "./src/render/xr-resolution.js": "./src/render/xr-resolution.js?v=aaf8b31cb8b3",
+    "./src/settings.js": "./src/settings.js?v=aaf8b31cb8b3",
+    "./src/ui/ability-switcher.js": "./src/ui/ability-switcher.js?v=aaf8b31cb8b3",
+    "./src/ui/calibration.js": "./src/ui/calibration.js?v=aaf8b31cb8b3",
+    "./src/ui/hud.js": "./src/ui/hud.js?v=aaf8b31cb8b3",
+    "./src/ui/menu-pages.js": "./src/ui/menu-pages.js?v=aaf8b31cb8b3",
+    "./src/ui/menu.js": "./src/ui/menu.js?v=aaf8b31cb8b3",
+    "./src/ui/rewards.js": "./src/ui/rewards.js?v=aaf8b31cb8b3",
+    "./src/ui/theme.js": "./src/ui/theme.js?v=aaf8b31cb8b3",
+    "./src/world/field.js": "./src/world/field.js?v=aaf8b31cb8b3",
+    "./src/world/sky.js": "./src/world/sky.js?v=aaf8b31cb8b3",
+    "./src/world/stand.js": "./src/world/stand.js?v=aaf8b31cb8b3",
+    "./vendor/three.js": "./vendor/three.js?v=aaf8b31cb8b3"
   }
 }
 </script>
-<script type="module" src="./src/main.js?v=28d5b1227f5c"></script>
+<script type="module" src="./src/main.js?v=aaf8b31cb8b3"></script>
 </body>
 </html>
