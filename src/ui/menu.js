@@ -2,10 +2,12 @@ import { FT } from "../../vendor/three.js";
 import {SKY_OPTIONS} from '../config.js';
 import {UI,panel,label,tracked,brand,heart,touch,pitch,button,shape} from './theme.js';
 import {createOpticalMaterial} from '../render/optics.js';
+import {drawAbilitySwitcher,VR_PAGES} from './ability-switcher.js';
 class FootballInterface {
  constructor(scene,callbacks,credits={attribution:[],thanksTitle:'',thanks:[]}){
   this.callbacks=callbacks;this.credits=credits;this.hover=null;this.visible=false;this.snapshot={mode:'freeroam',phase:'ready',score:0};this.stateKey='';
   this.page='main';this.settings={turnSpeed:1,chromatic:true,noise:true,wind:'normal',stadium:SKY_OPTIONS[0].id};this.settingsKey='';
+  this.abilityLevels={};this.abilityPage=0;
   this.canvas=document.createElement('canvas');this.canvas.width=960;this.canvas.height=660;this.ctx=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);
   this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;this.width=1.32;this.height=.9075;
   this.root=new FT.Mesh(new FT.PlaneGeometry(this.width,this.height),createOpticalMaterial(this.texture,{strength:.5}));this.root.visible=false;this.root.frustumCulled=false;this.root.renderOrder=90;scene.add(this.root);
@@ -25,9 +27,11 @@ class FootballInterface {
   if(this.visible&&this.page==='settings')this.drawMenu();
  }
  setPage(page){
-  const next=page==='settings'||page==='credits'?page:'main';if(next===this.page)return;this.page=next;this.hover=null;this.reticle.visible=false;this.reticleCore.visible=false;
+  const next=['settings','credits','abilities'].includes(page)?page:'main';if(next===this.page)return;this.page=next;this.hover=null;this.reticle.visible=false;this.reticleCore.visible=false;
+  if(next==='abilities')this.abilityPage=0;
   if(this.visible)this.drawMenu();
  }
+ setAbilityLevels(levels){this.abilityLevels=levels;if(this.visible&&this.page==='abilities')this.drawMenu();}
  drawSettings(){
   const c=this.ctx,s=this.settings;panel(c,960,660);brand(c,48,58);tracked(c,'SETTINGS',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
   const freeroam=this.snapshot.mode==='freeroam',h=freeroam?62:72,gap=freeroam?76:96;
@@ -44,7 +48,9 @@ class FootballInterface {
    label(c,'Stadium',48,y+h/2,28);label(c,stadium.name,691,y+h/2,25,UI.mint,'center',750);
    this.buttons.push({id:'stadium-prev',label:'‹',x:470,y,w:78,h},{id:'stadium-next',label:'›',x:834,y,w:78,h});
   }
-  this.buttons.push({id:'settings-back',label:'Back',x:48,y:520,w:420,h:66},
+  if(freeroam)this.buttons.push({id:'settings-back',label:'Back',x:48,y:520,w:276,h:66},
+   {id:'credits',label:'Credits',x:342,y:520,w:276,h:66},{id:'abilities',label:'Abilities',x:636,y:520,w:276,h:66});
+  else this.buttons.push({id:'settings-back',label:'Back',x:48,y:520,w:420,h:66},
    {id:'credits',label:'Credits',x:492,y:520,w:420,h:66});
   for(const b of this.buttons){c.save();if(b.disabled)c.globalAlpha=.32;button(c,b,{primary:b.on||b.id==='settings-back',hover:!b.disabled&&this.hover===b.id});c.restore();}
   label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
@@ -65,6 +71,10 @@ class FootballInterface {
  drawMenu(){
   if(this.page==='settings'){this.drawSettings();return;}
   if(this.page==='credits'){this.drawCredits();return;}
+  if(this.page==='abilities'){
+   this.buttons=drawAbilitySwitcher(this.ctx,this.abilityPage,this.abilityLevels,this.hover);
+   this.texture.needsUpdate=true;return;
+  }
   const c=this.ctx,s=this.snapshot,over=s.mode==='challenge'&&s.phase==='gameover';panel(c,960,660);brand(c,48,58);tracked(c,s.mode==='challenge'?'3 TOUCH':'FREEROAM',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
   tracked(c,over?'RUN OVER':'SLOW MOTION',48,153,21,over?UI.lilac:UI.muted,3);
   if(s.mode==='challenge'){label(c,String(s.score||0),912,149,54,UI.white,'right',800);label(c,'GOALS',822,151,18,UI.muted,'right');}
@@ -79,7 +89,16 @@ class FootballInterface {
   this.buttons.push(...utility);for(const b of utility)button(c,b,{hover:b.id===this.hover});label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
  }
  show(show,controls){this.visible=show;this.root.visible=show;this.reticle.visible=false;this.reticleCore.visible=false;this.hover=null;if(!show){for(const hand of controls?.hands||[])if(hand.ray)hand.ray.visible=false;}if(show){controls.refreshHead();this.root.position.copy(controls.headWorld).addScaledVector(controls.forward,1.65);this.root.position.y=controls.headWorld.y-.04;this.root.rotation.set(0,Math.atan2(-controls.forward.x,-controls.forward.z),0);this.root.updateMatrixWorld(true);this.drawMenu();}}
- select(id){if(this.buttons.some(b=>b.id===id&&b.disabled))return;this.callbacks[id]?.();}
+ select(id){
+  const target=this.buttons.find(button=>button.id===id);
+  if(target?.disabled)return;
+  if(target?.abilityId){this.callbacks['ability-level']?.(target.abilityId,target.level);return;}
+  if(id==='ability-page-prev'||id==='ability-page-next'){
+   this.abilityPage=Math.max(0,Math.min(VR_PAGES-1,this.abilityPage+(id==='ability-page-next'?1:-1)));
+   this.drawMenu();return;
+  }
+  this.callbacks[id]?.();
+ }
  point(controls){
   if(!this.visible)return;const page=this.page;let hover=null;this.reticle.visible=false;this.reticleCore.visible=false;this.inverseQ.copy(this.root.quaternion).invert();
   for(const hand of controls.hands){

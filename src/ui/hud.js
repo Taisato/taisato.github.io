@@ -23,13 +23,13 @@ function drawCapacity(c,count,capacity,x,isLife){
 }
 function drawHUD(c,s,width=900,height=250,textRegions=null){
  if(textRegions)for(const region of textRegions)region.set(2,2,-1,-1);
- c.clearRect(0,0,width,height);if(s.mode!=='challenge')return;shape(c,6,6,888,132,18);c.fillStyle='rgba(8,13,29,.94)';c.fill();c.strokeStyle=UI.line;c.lineWidth=2;c.stroke();c.fillStyle=UI.mint;c.fillRect(34,6,70,3);tracked(c,'TOUCHES',42,41,17,UI.muted,2);textRegion(c,textRegions,0,'TOUCHES',42,41,17,2,width,height);
+ c.clearRect(0,0,width,height);if(s.mode!=='challenge'&&!s.practice)return;shape(c,6,6,888,132,18);c.fillStyle='rgba(8,13,29,.94)';c.fill();c.strokeStyle=UI.line;c.lineWidth=2;c.stroke();c.fillStyle=UI.mint;c.fillRect(34,6,70,3);tracked(c,'TOUCHES',42,41,17,UI.muted,2);textRegion(c,textRegions,0,'TOUCHES',42,41,17,2,width,height);
  const maxTouches=s.maxTouches??3,maxLives=s.maxLives??3;
  const touches=Math.max(0,Math.min(maxTouches,s.touches??s.touchesLeft??3)),lives=Math.max(0,Math.min(maxLives,s.lives??3));
  drawCapacity(c,touches,maxTouches,42,false);
  c.fillStyle=UI.line;c.fillRect(296,30,1,84);tracked(c,'GOALS',338,42,17,UI.muted,2);textRegion(c,textRegions,1,'GOALS',338,42,17,2,width,height);label(c,String(s.score||0),338,94,54,UI.white,'left',800);textRegion(c,textRegions,2,String(s.score||0),338,94,54,0,width,height);c.fillStyle=UI.line;c.fillRect(592,30,1,84);tracked(c,'LIVES',634,42,17,UI.muted,2);textRegion(c,textRegions,3,'LIVES',634,42,17,2,width,height);
  drawCapacity(c,lives,maxLives,634,true);
- const over=s.phase==='gameover',result=s.phase==='result',word=over?'RUN OVER':result?({goal:'GOAL',out:'OUT',saved:'SAVED',touches:'NO TOUCHES',miss:'MISS',retry:'RETRY'}[s.outcome]||'NEXT'):'';
+ const over=s.phase==='gameover',result=s.phase==='result',word=over?(s.practice?'NEW BALL':'RUN OVER'):result?({goal:s.goalValue>1?'GOAL +'+s.goalValue:'GOAL',out:'OUT',saved:'SAVED',touches:'NO TOUCHES',miss:'MISS',retry:'RETRY'}[s.outcome]||'NEXT'):'';
  if(word){shape(c,250,158,400,78,13);c.fillStyle=s.outcome==='goal'&&!over?UI.mint:over||s.outcome==='retry'?UI.lilac:UI.white;c.fill();label(c,word,450,197,35,UI.ink,'center',900);textRegion(c,textRegions,4,word,450,197,35,0,width,height);}
 }
 class FootballHUD{
@@ -55,10 +55,10 @@ class FootballHUD{
   this.mesh.position.y=Math.min(target,ceiling)-.264;
  }
  update(snapshot={},visible=true,desktop=false,viewCamera=this.camera){
-  const show=!!visible&&snapshot.mode==='challenge';this.mesh.visible=show&&!desktop;if(this.desktopCanvas)this.desktopCanvas.hidden=!(show&&desktop);if(!show)return;
+  const show=!!visible&&(snapshot.mode==='challenge'||snapshot.practice);this.mesh.visible=show&&!desktop;if(this.desktopCanvas)this.desktopCanvas.hidden=!(show&&desktop);if(!show)return;
   if(!desktop)this.fitToCamera(viewCamera);
   const touches=snapshot.touches??snapshot.touchesLeft??3,maxTouches=snapshot.maxTouches??3,lives=snapshot.lives??3,maxLives=snapshot.maxLives??3;
-  const key=[snapshot.mode,snapshot.phase,snapshot.score,lives,maxLives,touches,maxTouches,snapshot.outcome,desktop].join('|');if(key===this.key)return;this.key=key;drawHUD(this.context,snapshot,900,250,this.textRegions);this.texture.needsUpdate=true;
+  const key=[snapshot.mode,snapshot.phase,snapshot.score,lives,maxLives,touches,maxTouches,snapshot.outcome,snapshot.goalValue,desktop].join('|');if(key===this.key)return;this.key=key;drawHUD(this.context,snapshot,900,250,this.textRegions);this.texture.needsUpdate=true;
   if(this.desktopContext){this.desktopContext.clearRect(0,0,900,250);this.desktopContext.drawImage(this.canvas,0,0);}if(this.desktopCanvas)this.desktopCanvas.setAttribute?.('aria-label',`${snapshot.score||0} goals, ${touches} of ${maxTouches} touches, ${lives} of ${maxLives} lives`);
  }
  hide(){this.mesh.visible=false;if(this.desktopCanvas)this.desktopCanvas.hidden=true;}

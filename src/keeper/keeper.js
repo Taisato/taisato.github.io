@@ -6,6 +6,7 @@ import { FootballKeeperRagdoll } from "./ragdoll.js";
 import { FootballKeeperPlayerContact } from "./player-contact.js";
 
 const BALL_IMPACT = {strength: .40};
+const FREEROAM_DIFFICULTY_EQUIVALENT = 10;
 
 const FREEROAM_KEEPER = Object.freeze({
   reaction: .115, predictionInterval: .045,
@@ -57,15 +58,17 @@ class FootballGoalkeeper {
     this._impactPoint = new V(); this._impactVelocity = new V();
     this._predictPrevious = new V();
     this._fixedDt = FB.fixedStep;
+    this.setPlayerAbilities(null);
     this.setDifficulty(null);
     this.reset();
   }
 
   setDifficulty(level = null) {
     this.difficultyLevel = level == null ? null : Math.max(0, Math.floor(Number.isFinite(level) ? level : 0));
-    if (this.difficultyLevel === null) this._tuning = FREEROAM_KEEPER;
+    const effective = this.difficultyLevel ?? (this.keeperLevelOffset > 0 ? Math.max(0, FREEROAM_DIFFICULTY_EQUIVALENT - this.keeperLevelOffset) : null);
+    if (effective === null) this._tuning = FREEROAM_KEEPER;
     else {
-      const t = 1 - Math.exp(-this.difficultyLevel / 6.5);
+      const t = 1 - Math.exp(-effective / 6.5);
       // Only decisions and visible movement improve. Collision geometry and
       // rebound response stay the same; no difficulty level can force a save.
       this._tuning = Object.freeze({
@@ -78,6 +81,19 @@ class FootballGoalkeeper {
       });
     }
     return this;
+  }
+
+  setPlayerAbilities(effects) {
+    this.keeperLevelOffset = Number.isFinite(effects?.keeperLevelOffset) ? Math.max(0, effects.keeperLevelOffset) : 0;
+    this.keeperReverseDelay = Number.isFinite(effects?.keeperReverseDelay) ? Math.max(0, effects.keeperReverseDelay) : 0;
+    this.keeperWrongFootParry = effects?.keeperWrongFootParry > 0;
+    if (this.difficultyLevel === null) this.setDifficulty(null);
+  }
+
+  resetAbilityChance() {
+    this._wrongFooted = false;
+    this._reverseDelayArmed = false;
+    this._wrongFootParryUsed = false;
   }
 
   get tuning() { return this._tuning; }
@@ -96,6 +112,7 @@ class FootballGoalkeeper {
   }
 
   reset() {
+    this.resetAbilityChance();
     this.ragdoll.reset(); this._ragdollHandoff = false; this._lastRagdollImpact = -Infinity;
     this.position.set(0, 0, this.homeZ); this.velocity.set(0, 0, 0);
     this.state.phase = 'ready'; this.state.phaseProgress = 0;
@@ -145,15 +162,13 @@ class FootballGoalkeeper {
       ball.velocity.z * end < 1.25 || ball.position.z * end < FB.halfLength - 30 ||
       ball.position.z * end > this.homeZ * end + .5) return;
     const simulator = this._prediction, predicted = simulator.ball;
-    predicted.position.copy(ball.position); predicted.velocity.copy(ball.velocity); predicted.spin.copy(ball.spin);
-    predicted.curveMultiplier = ball.curveMultiplier ?? 1;
-    predicted.shotSurface.copy(ball.shotSurface);
+    simulator.copyFlight(ball);
     const plane = this.homeZ - end * .36, h = 1 / 90;
     // Reuse the released ball integrator: drag, Magnus and the actual turf
     // friction/bounce all participate. There is no invisible save target force.
     for (let step = 0; step < 198; step++) {
       this._predictPrevious.copy(predicted.position);
-      simulator.integrate(h); simulator.collideGround(h);
+      simulator.integrate(h); simulator.collideGround(h, false);
       if (predicted.position.z * end >= plane * end) {
         const dz = predicted.position.z - this._predictPrevious.z;
         const part = dz === 0 ? 1 : footballClamp((plane - this._predictPrevious.z) / dz, 0, 1);
@@ -171,6 +186,7 @@ class FootballGoalkeeper {
 
   _beginSave() {
     const s = this.state, t = this.threat, dx = t.x - this.position.x;
+    this._reverseDelayArmed = false;
     s.takeoffSpeed = s.lateralSpeed;
     s.side = dx < 0 ? -1 : 1;
     s.targetHeight = footballClamp(t.y, .16, 2.75);
@@ -245,6 +261,9 @@ class FootballGoalkeeper {
     else this.threat.time = Math.max(0, this.threat.time - dt);
     this._threatAge = this.threat.valid ? this._threatAge + dt : 0;
     const s = this.state;
+    this._wrongFooted = s.phase !== 'ready' && this.threat.valid &&
+      (this.threat.x - this._diveStart.x) * s.side < -.35;
+    if (this._wrongFooted) this._reverseDelayArmed = true;
     if (s.phase === 'ready') {
       const yawDelta = Math.atan2(Math.sin(this.homeYaw - s.yaw), Math.cos(this.homeYaw - s.yaw));
       s.yaw += Math.abs(yawDelta) < .001 ? yawDelta : yawDelta * (1 - Math.exp(-7 * dt));
@@ -292,7 +311,8 @@ class FootballGoalkeeper {
         if (this._phaseTime >= tuning.landDuration) this._phase('recover');
       } else if (s.phase === 'recover') {
         s.phaseProgress = footballClamp(this._phaseTime / tuning.recoveryDuration, 0, 1); s.lateralSpeed = 0;
-        if (this._phaseTime >= tuning.recoveryDuration) {this._phase('ready'); this._threatAge = 0;}
+        const reverseDelay = this._reverseDelayArmed ? this.keeperReverseDelay : 0;
+        if (this._phaseTime >= tuning.recoveryDuration + reverseDelay) {this._phase('ready'); this._threatAge = 0;}
       }
     }
     this.visual.updatePose(s);
@@ -352,7 +372,7 @@ class FootballGoalkeeper {
       ball.position.addScaledVector(this._normal, sum - distance + .00015);
       const incoming = -this._relative.copy(ball.velocity).sub(this._surface).dot(this._normal);
       if (incoming <= 0) continue;
-      ball.shotSurface?.redirect();
+      physics.redirectPlayerShot('keeper');
       const centerHit = capsule.aName === 'pelvis' || capsule.aName === 'head';
       if ((this.ragdoll.active && incoming > 5.5) || (!this.ragdoll.active && centerHit && incoming > 24)) {
         this._impactPoint.copy(this._point).addScaledVector(this._normal, capsule.radius);
@@ -363,7 +383,18 @@ class FootballGoalkeeper {
       ball.velocity.addScaledVector(this._normal, incoming * (1 + restitution));
       physics.surfaceFriction(this._normal, this._surface, incoming * .28);
       if (incoming > .4 && physics.time - this._lastImpact > .09) {
-        physics.events.push({type: 'save', time: physics.time, speed: incoming, position: ball.position.clone(), surface: capsule.kind});
+        const canGather = capsule.kind === 'glove' && ball.velocity.lengthSq() < 3.2 ** 2;
+        const forcedParry = canGather && this._wrongFooted && this.keeperWrongFootParry && !this._wrongFootParryUsed;
+        if (forcedParry) {
+          const away = Math.sign(ball.position.x - this.position.x) || -this.state.side;
+          ball.velocity.x = away * Math.max(1.48, Math.abs(ball.velocity.x));
+          ball.velocity.y = Math.max(.85, ball.velocity.y);
+          ball.velocity.z = -this.goalEnd * Math.max(2.4, Math.abs(ball.velocity.z));
+          this._wrongFootParryUsed = true;
+        }
+        const parry = forcedParry || ball.velocity.lengthSq() >= 3.2 ** 2;
+        physics.events.push({type: 'save', time: physics.time, speed: incoming, position: ball.position.clone(),
+          surface: capsule.kind, parry, forcedParry});
         this._lastImpact = physics.time; this.saves++;
       }
     }

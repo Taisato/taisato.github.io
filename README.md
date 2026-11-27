@@ -64,27 +64,34 @@ Use the menu to switch modes, restart or recalibrate. Recalibration preserves th
 
 ### Abilities
 
-When your score reaches or passes each ten-goal milestone, the world slows to quarter speed and three reels cycle through the eligible ability pool. Each reel stops on a different random ability. To choose one in VR, aim at its box and hold the trigger until the box fills. On desktop, hold the box or its number key (**1**, **2** or **3**). Your choice takes effect on the next chance. Repeatable abilities stack within the run and reset when you start a new one. Double From Distance and Last Chance can each be picked once per run.
+At each five-goal milestone, time slows to quarter speed. Aim at an available card and hold the trigger until it fills. On desktop, hold the card or its number key (1–3). A goal that takes the score past a milestone still earns its draft.
 
-Confirming the ability brings in the next sky. A run starts under Black, then cycles through Blue, Amber and Violet before returning to Black. Each coloured sky casts a soft tint on the pitch and equipment. Look around to find its planet.
+Picking Phase I pins that tree in the same slot. Its next phase stays available until you take it. Phase III completes the tree and closes the slot. When all three trees are complete, the run continues with the finished build. A new run resets the slots and effects.
 
-| Ability | Effect per pick |
-| --- | --- |
-| Power Strike | +10% strength on shots. |
-| Bend It | +10% sideways curve on shots with spin. |
-| 1 Life Slot | Adds one life slot and restores one life immediately. |
-| Extra Touch | Adds one touch per chance. |
-| Volley Boost | +25% strength when you strike an airborne ball. |
-| Quick Feet | +10% walk and sprint speed. |
-| Keeper Setback | Sets the keeper back five goals in difficulty, down to a minimum of zero. |
-| Touch Window | Adds 0.5 seconds to the gap needed to count a new touch. |
-| Shot Trace | Shows the flight path behind your shot. Each pick adds 2.5 seconds of visibility. |
-| Woodwork Credit | Your first post or crossbar hit each chance refunds one used touch per pick. |
-| Double From Distance | A goal from outside the penalty area counts as two. |
-| First-Time Finish | Scoring with one counted touch restores an extra life per pick, up to your life limit. |
-| Last Chance | One failed chance on your final life gives you a retry with the same starting positions. |
-| Grass Cutter | Firm, low shots lose less speed as they roll on the turf. |
-| Long-Range Bonus | If you score from a last touch outside the penalty area, the next chance starts with one extra touch per pick. |
+Each draft with an open slot has a 20% chance to offer one rare upgrade. **1 Life Slot** adds a slot and restores one life, **Extra Touch** adds a touch per chance, and **Power Strike** adds 10% shot strength. Picking a rare leaves its slot open, and repeat picks stack.
+
+First-Time Finish and Double From Distance each add one goal. A first-strike finish from outside the box scores three and restores the normal one life. Each confirmed draft choice advances the sky through Black, Blue, Amber and Violet.
+
+| Tree | Phase I | Phase II | Phase III |
+| --- | --- | --- | --- |
+| First-Time Finish | Score with a genuine strike on first contact to add one goal. | Your opening strike gains 10% forward pace. | Keep the bonus with an immediate airborne finish after a keeper parry. |
+| Double From Distance | Score from outside the penalty area to add one goal. | Outside shots lose 15% less horizontal speed in flight. | Score from 23 m or farther to bank a same-spot retry for an outside shot that goes straight out. |
+| Bend It | Add 10% sideways curve to spinning shots. | Increase the curve bonus to 20%. | Low curlers retain their sidespin on the first bounce. |
+| Grass Cutter | Firm ground shots have up to 40% less rolling resistance. | Increase the rolling resistance reduction to 55%. | Drive a knee-high ball downward to activate the bonus on landing. |
+| Volley Boost | Airborne strikes gain 25% shot strength. | Keep the volley bonus for 0.25 s after a bounce. | Downward volleys retain more forward pace. |
+| Woodwork Credit | The first post or bar hit each chance refunds one touch. | A shot out directly off the frame costs a life but carries one touch to the next chance. | Your first strike directly off a live frame rebound gains 25% forward pace. |
+| Quick Feet | Move 10% faster. | Move 25% faster for 2 s after a frame hit or keeper parry. | Your first recovery touch is free once per chance. |
+| Touch Window | Add 0.5 s to the gap needed to count a new touch. | Gentle control uses a 1.25 s touch window. | Once per chance, a soft trap that would use your last touch is free. |
+| Long-Range Bonus | A goal from outside the box adds one touch to your next chance. | Keep that extra touch in reserve until you spend it. | Bank up to two extra touches and spend both in one chance. |
+| Keeper Setback | Lower the keeper difficulty by five goal levels. | The keeper takes 0.12 s longer to reverse after committing. | Once per chance, a wrong-footed keeper parries a ball they would have caught. |
+| Last Chance | Once per run, a miss on your last life gives a same-spot retry. | Start a chance or retry on your last life with one extra touch. | Your run can use two retries in total. |
+| Shot Trace | See each actual shot trail for 2.5 s. | Mark the first bounce or keeper deflection and retain the trail on a retry until kicking. | See an airborne ball’s predicted landing point up to one second ahead. |
+
+### Freeroam ability switcher
+
+Open **Settings → Abilities** in Freeroam. Select I, II or III to equip a tree through that phase, combine any trees and adjust rare counts with the minus and plus buttons. Select **Off** to remove one tree or **Clear** to empty the loadout. Your Freeroam choices are saved in this browser.
+
+With abilities equipped, the HUD shows practice goals, touches and lives for shots at the guarded goal. Press **B** on desktop or **A** on the right controller for the next ball. Starting-touch bonuses apply when you spawn the next ball. A protected retry returns to the original spot. A new ball after the last life starts fresh practice counters.
 
 ## Net damage
 

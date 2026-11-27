@@ -8,6 +8,7 @@ const FADE_SECONDS = .65;
 const WIDTH = .013;
 const TRIANGLE_HEIGHT = Math.sqrt(3) / 2;
 const INDICES_PER_SEGMENT = 18;
+const PREDICTION_INTERVAL = 1 / 15;
 
 class FootballShotTrail {
   constructor(scene) {
@@ -30,8 +31,25 @@ class FootballShotTrail {
     this.line = new FT.Mesh(this.geometry, this.material);
     this.line.name = 'Player shot path';
     this.line.frustumCulled = false;
-    scene.add(this.line);
+    this.markGeometry = new FT.SphereGeometry(1, 12, 8);
+    this.impact = new FT.Mesh(this.markGeometry, new FT.MeshBasicMaterial({color:UI.mint, transparent:true, opacity:.90, depthWrite:false, toneMapped:false}));
+    this.impact.name = 'Shot trace first impact';
+    this.impact.scale.setScalar(.073);
+    this.landing = new FT.Mesh(this.markGeometry, new FT.MeshBasicMaterial({color:UI.lilac, transparent:true, opacity:.81, depthWrite:false, toneMapped:false}));
+    this.landing.name = 'Predicted ball landing';
+    this.landing.scale.set(.125,.009,.125);
+    this.landingPoint = new FT.Vector3();
+    scene.add(this.line,this.impact,this.landing);
+    this.setPlayerAbilities(null);
     this.clear();
+  }
+
+  setPlayerAbilities(effects) {
+    this.markersEnabled = effects?.shotTraceMarkers > 0;
+    this.predictionEnabled = effects?.shotTracePrediction > 0;
+    if (this.replaying && !this.markersEnabled) this.clear();
+    if (!this.markersEnabled) this.impact.visible = false;
+    if (!this.predictionEnabled) this.landing.visible = false;
   }
 
   start(position, seconds) {
@@ -62,7 +80,7 @@ class FootballShotTrail {
   }
 
   record(position) {
-    if (this.remaining <= 0 || !Number.isFinite(position.x + position.y + position.z)) return;
+    if (this.replaying || this.remaining <= 0 || !Number.isFinite(position.x + position.y + position.z)) return;
     const last = (this.samples - 1) * 3;
     const dx = position.x - this.points[last], dy = position.y - this.points[last + 1], dz = position.z - this.points[last + 2];
     this.steps++;
@@ -81,24 +99,71 @@ class FootballShotTrail {
   }
 
   update(seconds) {
-    if (this.remaining <= 0 || !(seconds > 0) || !Number.isFinite(seconds)) return;
-    this.remaining -= seconds;
-    if (this.remaining <= 0) this.clear();
-    else this.material.opacity = .78 * Math.min(1, this.remaining / FADE_SECONDS);
+    if (this.replaying || this.remaining <= 0 || !(seconds > 0) || !Number.isFinite(seconds)) return;
+    this.remaining = Math.max(0, this.remaining - seconds);
+    if (this.remaining <= 0) this.line.visible = this.impact.visible = false;
+    const fade = Math.min(1, this.remaining / FADE_SECONDS);
+    this.material.opacity = .78 * fade;
+    this.impact.material.opacity = .90 * fade;
+  }
+
+  mark(event) {
+    if (!this.markersEnabled || !this.samples || this.marked || this.replaying ||
+        (event.type !== 'bounce' && event.type !== 'save')) return;
+    const position = event.position;
+    if (!position || !Number.isFinite(position.x + position.y + position.z)) return;
+    this.marked = true;
+    this.impact.position.copy(position);
+    this.impact.material.color.set(event.type === 'bounce' ? UI.mint : UI.white);
+    this.impact.visible = this.remaining > 0;
+  }
+
+  replay() {
+    this.replaying = this.markersEnabled && (this.geometry.drawRange.count > 0 || this.marked);
+    if (!this.replaying) {this.clear();return false;}
+    this.line.visible = this.geometry.drawRange.count > 0;
+    this.impact.visible = this.marked;
+    this.landing.visible = false;
+    this.material.opacity = .46;
+    this.impact.material.opacity = .64;
+    return true;
+  }
+
+  updateLanding(physics, seconds, live = true) {
+    const ball = physics.ball;
+    if (!live || !this.predictionEnabled || this.replaying || ball.position.y <= ball.radius + .05) {
+      this.landing.visible = false;
+      this.predictionTimer = 0;
+      return;
+    }
+    if (!(seconds > 0) || !Number.isFinite(seconds)) return;
+    this.predictionTimer -= seconds;
+    if (this.predictionTimer > 0) return;
+    this.predictionTimer = PREDICTION_INTERVAL;
+    this.landing.visible = physics.predictLanding(this.landingPoint);
+    if (this.landing.visible) this.landing.position.set(this.landingPoint.x,.016,this.landingPoint.z);
   }
 
   clear() {
     this.remaining = 0;
     this.samples = 0;
     this.steps = 0;
+    this.marked = this.replaying = false;
+    this.predictionTimer = 0;
+    this.impact.material.opacity = .90;
     this.geometry.setDrawRange(0, 0);
-    this.line.visible = false;
+    this.line.visible = this.impact.visible = this.landing.visible = false;
   }
 
   dispose() {
     this.line.removeFromParent();
+    this.impact.removeFromParent();
+    this.landing.removeFromParent();
     this.geometry.dispose();
     this.material.dispose();
+    this.markGeometry.dispose();
+    this.impact.material.dispose();
+    this.landing.material.dispose();
   }
 }
 

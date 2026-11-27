@@ -7,7 +7,12 @@ const WIDTH = 1080, HEIGHT = 430, PLANE_WIDTH = 1.76, PLANE_HEIGHT = PLANE_WIDTH
 const HOLD_SECONDS = .78;
 const CARDS = Array.from({length: 3}, (_, i) => ({x: 38 + i * 340, y: 152, w: 324, h: 200}));
 
+function cardTitle(choice) {
+  return choice.masteredName ?? choice.treeName ?? choice.name;
+}
+
 function makeReel(catalog, selected, lane) {
+  if (!selected.reel || !catalog.length) return {entries:[selected], ends:[], end:0};
   const deck = [...catalog], steps = deck.length + 3 + lane * 2;
   const entries = [], ends = [];
   for (let i = deck.length - 1; i > 0; i--) {
@@ -87,8 +92,11 @@ class FootballRewardPicker {
       const card = template.content.firstElementChild.cloneNode(true);
       const get = name => card.querySelector('.reward-' + name);
       get('key').textContent = index + 1;
+      const status = document.createElement('span');
+      status.className = 'reward-stage';
+      get('info').prepend(status);
       group.append(card);
-      return {card, reel: get('reel'), current: get('current'), next: get('next'),
+      return {card, status, reel: get('reel'), current: get('current'), next: get('next'),
         info: get('info'), name: get('name'), description: get('description')};
     });
   }
@@ -133,7 +141,7 @@ class FootballRewardPicker {
     this.score = score;
     this.scoreLabel.textContent = `${score} GOALS`;
     this.elapsed = 0;
-    this.ready = false;
+    this.ready = this.rollDuration === 0;
     this.active = true;
     this.present(controls);
   }
@@ -179,7 +187,7 @@ class FootballRewardPicker {
   }
 
   beginHold(index, type, id) {
-    if (!this.visible || !this.ready || this.hold || this.commitAt < Infinity) return;
+    if (!this.visible || !this.ready || this.hold || this.commitAt < Infinity || !this.choices[index]?.id) return;
     this.hold = {index, type, id};
   }
 
@@ -199,7 +207,8 @@ class FootballRewardPicker {
     if (x < 0 || y < 0 || x > WIDTH || y > HEIGHT) return -1;
     this.hitPoint.copy(hand.rayDirection).multiplyScalar(distance).add(hand.rayPosition);
     this.controls.showRay(hand, this.hitPoint);
-    return CARDS.findIndex(card => x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h);
+    return CARDS.findIndex((card,index) => !this.choices[index].closed &&
+      x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h);
   }
 
   point(controls) {
@@ -259,20 +268,34 @@ class FootballRewardPicker {
   }
 
   paintDesktop(states, progress) {
-    const hint = this.ready ? 'Hold a card or press and hold 1–3.' : 'Rolling abilities…';
+    const hint = this.ready ? 'Hold an available card or its number key.' : 'Rolling abilities…';
     if (this.hint.textContent !== hint) this.hint.textContent = hint;
-    this.desktopCards.forEach(({card, reel, current, next, info, name, description}, index) => {
+    this.desktopCards.forEach(({card, status, reel, current, next, info, name, description}, index) => {
       const state = states[index];
-      card.disabled = !this.ready;
+      const choice = this.choices[index];
+      card.disabled = !this.ready || choice.closed === true;
+      card.dataset.closed = String(Boolean(choice.closed));
       card.style.setProperty('--held', this.hold?.index === index ? progress : 0);
       reel.hidden = !state.next; info.hidden = !!state.next;
       if (state.next) {
-        current.textContent = state.entry.name; next.textContent = state.next.name;
+        current.textContent = cardTitle(state.entry); next.textContent = cardTitle(state.next);
         reel.style.setProperty('--reel', state.progress);
-      } else if (name.textContent !== state.entry.name) {
-        name.textContent = state.entry.name; description.textContent = state.entry.description;
+      } else {
+        const title = cardTitle(choice);
+        const detail = choice.closed ? '' : choice.description;
+        const stage = this.stageLabel(choice);
+        if (status.textContent !== stage) status.textContent = stage;
+        if (name.textContent !== title) name.textContent = title;
+        if (description.textContent !== detail) description.textContent = detail;
       }
     });
+  }
+
+  stageLabel(choice) {
+    if (choice.closed) return 'Complete';
+    if (choice.rare) return 'Rare · Slot stays open';
+    const numeral = ['I','II','III'][choice.phase - 1];
+    return 'Phase ' + numeral + (choice.pinned ? ' · Pinned' : ' · Start tree');
   }
 
   paintWorld(states, progress) {
@@ -283,7 +306,8 @@ class FootballRewardPicker {
     label(c, 'Choose an ability', 38, 102, 46, UI.white, 'left', 850);
     states.forEach((state, i) => {
       const {x, y, w, h} = CARDS[i], cx = x + w / 2;
-      const hot = this.ready && this.hover === i;
+      const choice = this.choices[i];
+      const hot = !choice.closed && this.ready && this.hover === i;
       shape(c, x, y, w, h, 14); c.fillStyle = hot ? '#182e38' : UI.panel; c.fill();
       c.save(); c.clip();
       if (this.hold?.index === i) {
@@ -292,13 +316,14 @@ class FootballRewardPicker {
       }
       if (state.next) {
         c.beginPath(); c.rect(x + 11, y + 62, w - 22, 76); c.clip();
-        label(c, state.entry.name, cx, y + 100 - 66 * state.progress, 27, UI.white, 'center', 780);
-        label(c, state.next.name, cx, y + 166 - 66 * state.progress, 27, UI.lilac, 'center', 780);
+        label(c, cardTitle(state.entry), cx, y + 100 - 66 * state.progress, 24, UI.white, 'center', 780);
+        label(c, cardTitle(state.next), cx, y + 166 - 66 * state.progress, 24, UI.lilac, 'center', 780);
       } else {
-        label(c, state.entry.name, cx, y + 64, 31, hot ? UI.mint : UI.white, 'center', 800);
-        c.font = '500 24px Arial, "Liberation Sans", sans-serif';
-        const lines = linesFor(c, state.entry.description, w - 42);
-        lines.forEach((line, row) => label(c, line, cx, y + 115 + row * 28, 24, UI.muted, 'center', 500));
+        label(c, this.stageLabel(choice), cx, y + 26, 18, choice.rare ? UI.lilac : UI.mint, 'center', 700);
+        label(c, cardTitle(choice), cx, y + 65, 24, choice.closed ? UI.muted : UI.white, 'center', 800);
+        c.font = '500 21px Arial, "Liberation Sans", sans-serif';
+        const lines = linesFor(c, choice.description, w - 30);
+        lines.forEach((line, row) => label(c, line, cx, y + 105 + row * 23, 21, UI.muted, 'center', 500));
       }
       c.restore();
       c.strokeStyle = hot ? UI.mint : state.next ? UI.line : '#566483'; c.lineWidth = hot ? 2.5 : 1.5;

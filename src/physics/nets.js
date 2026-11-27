@@ -312,6 +312,7 @@ class FootballGoalNets {
       if(offset>.2){const scale=.2/offset;net.damageRest[j]=rest[j]+rx*scale;net.damageRest[j+1]=rest[j+1]+ry*scale;net.damageRest[j+2]=rest[j+2]+rz*scale;}
     }
     // Breaking cords costs energy; it never boosts or redirects the shot.
+    physics.redirectPlayerShot('net');
     physics.ball.velocity.multiplyScalar(.87);physics.ball.spin.multiplyScalar(.94);
     const tear={panelIndex,position:point,restPosition:material,normal,radius,speed,time:this.time,firstTriangle:triangle/3};
     if(net.tears.length===16)net.tears.shift();net.tears.push(tear);this.stats.tears++;
@@ -407,6 +408,7 @@ class FootballGoalNets {
         for(let k=0;k<3;k++){const id=ids[k],j=id*3,d=-correction*weights[k]*w[id];p[j]+=n.x*d;p[j+1]+=n.y*d;p[j+2]+=n.z*d;}
         if(incoming>0){
           if(incoming>.2)net.energyContact=true;
+          physics.redirectPlayerShot('net');
           // The tensioned neighboring knots share the collision impulse. This
           // is a real distributed cloth mass, not an oversized ball collider.
           const impulse=incoming*1.04/(ballW+patchInverse);
@@ -453,6 +455,7 @@ class FootballGoalNets {
       if(incoming>=this.tearSpeed&&ball.velocity.lengthSq()>=this.tearSpeed*this.tearSpeed&&this._tear(net,physics,seams[k+4],ta,incoming)){net.ballInside=false;net.exteriorMask=1<<seams[k+4];return;}
       bp.addScaledVector(n,correction);
       if(incoming>0){
+        physics.redirectPlayerShot('net');
         const invPatch=this._contactPatch(net,idx[ta],idx[ta+1],idx[ta+2],wa,wb,wc),impulse=incoming*1.04/(ballW+invPatch);
         ball.velocity.addScaledVector(n,impulse*ballW);
         for(let j=0;j<this._patchCount;j++){const id=this._patchIds[j],offset=id*3,d=-impulse*this._patchWeights[j]*net.inverseMass[id];net.velocity[offset]+=n.x*d;net.velocity[offset+1]+=n.y*d;net.velocity[offset+2]+=n.z*d;}

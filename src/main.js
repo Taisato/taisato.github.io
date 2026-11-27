@@ -7,7 +7,7 @@ const pages=new FootballMenuPages(page=>{
 });
 window.addEventListener('keydown',event=>{
   if(footballApp||event.code!=='Escape'||pages.page==='main')return;
-  pages.setPage(pages.page==='credits'?'settings':'main');
+  pages.setPage(pages.backPage);
   event.preventDefault();
 });
 
