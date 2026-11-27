@@ -103,11 +103,13 @@ class FootballField {
 
   _makeGoals() {
     const frameMaterial = this.material(new FT.MeshStandardMaterial({color: 0xf0f1e8, roughness: .8, metalness: .05}));
-    const frameGeometry = this.geometry(new FT.CylinderGeometry(1, 1, 1, 12));
+    const frameGeometry = this.geometry(new FT.CylinderGeometry(1, 1, 1, 24));
     const frames = new FT.InstancedMesh(frameGeometry, frameMaterial, 6);
+    const jointGeometry = this.geometry(new FT.SphereGeometry(1, 24, 12));
+    const joints = new FT.InstancedMesh(jointGeometry, frameMaterial, 4);
     const half = FB.goalWidth * .5 + FB.postRadius;
     const top = FB.goalHeight + FB.postRadius;
-    let index = 0;
+    let index = 0, jointIndex = 0;
     for (const end of [-1, 1]) {
       const z = end * FB.halfLength;
       for (const side of [-1, 1]) {
@@ -116,6 +118,12 @@ class FootballField {
         this.scale.set(FB.postRadius, top, FB.postRadius);
         this.matrix.compose(this.translation, this.quaternion, this.scale);
         frames.setMatrixAt(index++, this.matrix);
+        // The capsule collision frame already has rounded endpoints. Fill
+        // the missing outer corner where the two flat-ended tubes meet.
+        this.translation.set(side * half, top, z);
+        this.scale.setScalar(FB.postRadius);
+        this.matrix.compose(this.translation, this.quaternion, this.scale);
+        joints.setMatrixAt(jointIndex++, this.matrix);
       }
       this.translation.set(0, top, z);
       this.quaternion.setFromAxisAngle(new FT.Vector3(0, 0, 1), Math.PI / 2);
@@ -124,8 +132,10 @@ class FootballField {
       frames.setMatrixAt(index++, this.matrix);
     }
     frames.instanceMatrix.needsUpdate = true;
-    this.root.add(frames);
+    joints.instanceMatrix.needsUpdate = true;
+    this.root.add(frames, joints);
     this.goalFrames = frames;
+    this.goalJoints = joints;
 
     this.goalBounds = {innerWidth: FB.goalWidth, innerHeight: FB.goalHeight, depth: FB.goalDepth,
       postX: half, crossbarY: top, lineZ: FB.halfLength};

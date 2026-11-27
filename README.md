@@ -1,6 +1,6 @@
 # First Touch — VR football
 
-**Build V42:** Previous shot tuning restored, targeted follow-through correction, stronger net seams, rarer tears and damage that lasts for the whole 3 TOUCH run.
+**Build V43:** Filled, smoothly rounded joints where the crossbar meets each post on both goals.
 
 ## Play
 
@@ -75,6 +75,8 @@ Genuinely separate kicks remain available. Ordinary controlled touches, rising k
 
 ## Interface and rendering
 
+Both goal frames now have rounded post/crossbar joints that match the existing frame radius. The corner and tube geometry share aligned circular segments and the same material, removing the missing outer corner and exposed flat tube ends. The four joints are static instances.
+
 The navy, mint and lilac interface retains the lower 3 TOUCH HUD, visible menu cursor and compact result labels. HUD text retains its 25% reduction in local chromatic separation. Pitch markings remain filtered into the turf so distant lines and intersections stay continuous.
 
 The optical effect still uses one reusable scene target and one composite pass, with each VR eye sampled separately. Settings update existing uniforms. Menu and HUD textures redraw only when their displayed state changes. The wind recordings add no textures or rendering passes.
@@ -97,11 +99,15 @@ The optical effect still uses one reusable scene target and one composite pass, 
 
 ## Verification
 
+V43 was inspected using front and oblique close-up CPU projections of the actual production geometry. All four joints align with the existing frame endpoints and 6 cm radius. The complete geometry loads and disposes through the existing field lifecycle. All game files except this README and `src/world/field.js` are byte-identical to V42.
+
+The physics and gameplay results below belong to the unchanged V42 modules.
+
 Verification uses the actual production physics, calibrated controller motion and convex boot geometry. Matched replays separate the first impact from subsequent follow-through impulses and position corrections. Additional checks cover curved shots, deliberate loft, separate follow-up kicks, close control, receiving and unchanged free flight.
 
 Net tests cover both goals, side/back seams, other joined edges, intact catches below the rupture threshold, exceptional hard impacts, finite open-mouth boundaries and existing holes. Application checks exercise scoring, lost lives, life recovery, complete run loss, the game-over screen and restart, with real damaged topology retained until the new run begins.
 
-All **72 checks** passed on the final source: 11 focused follow-through checks, 12 net checks, 16 independent physics/integration checks, 23 full-application checks and 10 net-lifetime checks. The follow-through suite includes 14 strong steady strokes and 18 accelerating variants. The first-impact position, velocity and spin match the restored V40 response in the compared traces.
+The V42 release passed **72 checks**: 11 focused follow-through checks, 12 net checks, 16 independent physics/integration checks, 23 full-application checks and 10 net-lifetime checks. The follow-through suite includes 14 strong steady strokes and 18 accelerating variants. The first-impact position, velocity and spin match the restored V40 response in the compared traces.
 
 | Matched contact replay | V40 maximum upward speed | V42 maximum upward speed |
 | --- | --- | --- |
