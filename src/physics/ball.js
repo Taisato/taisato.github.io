@@ -24,6 +24,7 @@ class FootballPhysics {
       slowRollingResistance: .08,
       controlRollingResistance: .18,
       puntRollingResistance: .6,
+      dribbleRollingResistance: .28,
       groundFriction: .53, footRadius: .075, footHalfLength: .095,
       footRestitution: .6, footFriction: .4, contactSkin: .002,
       footSoftImpactSpeed: .25, footFirmImpactSpeed: 4.5,
@@ -93,6 +94,7 @@ class FootballPhysics {
   resetShotHistory() {
     this._curlBoot = null;
     this.ball.curvePace = 1;
+    this.ball.fromPlayerShot = false;
     this._openingStrike = true;
     this.ball.offWoodwork = false;
     this._sawFlight = false;
@@ -341,6 +343,7 @@ class FootballPhysics {
     b.spin.copy(source.spin);
     b.curveMultiplier = source.curveMultiplier ?? 1;
     b.curvePace = source.curvePace ?? 1;
+    b.fromPlayerShot = source.fromPlayerShot === true;
     b.shotSurface.copy(source.shotSurface);
   }
 
@@ -699,6 +702,9 @@ class FootballPhysics {
       }
     }
     const speedSq=b.velocity.lengthSq();
+    // A follow-through, a bounce or a save can slow the same shot into the
+    // dribbling range. Only a distinct player touch starts a new roll.
+    if (event && !continuing) b.fromPlayerShot = event.shot === true;
     if (event && !event.shot) event.control = speedSq <= 3.2 ** 2 || drive <= 2.2 || controlPunt > .60;
     if(!continuing&&f.contactPart==='boot'&&approach>cfg.footFirmImpactSpeed&&
       drive>cfg.footStrikeBlendEnd&&drive>surfaceSpeed*.5&&drive/approach>.65&&
@@ -771,8 +777,13 @@ class FootballPhysics {
         this.smoothContactBlend((3-planarSpeed)/1.5);
       const puntBand=this.smoothContactBlend((planarSpeed-1.5)/1.5)*
         (1-this.smoothContactBlend((planarSpeed-6)/3));
+      // A tap can shed speed as its first skid turns into a roll. Ease into
+      // the extra drag just below walking pace, then fade out above a sprint.
+      const dribbleBand=b.fromPlayerShot?0:this.smoothContactBlend((planarSpeed-2.25)/1.5)*
+        this.smoothContactBlend((8-planarSpeed)/(8-FB.sprintSpeed));
       const resistance=this.config.rollingResistance+this.config.slowRollingResistance*slowBand+
-        this.config.controlRollingResistance*controlBand+this.config.puntRollingResistance*puntBand;
+        this.config.controlRollingResistance*controlBand+this.config.puntRollingResistance*puntBand+
+        this.config.dribbleRollingResistance*dribbleBand;
       const factor = Math.max(0, 1 - resistance * b.shotSurface.rollingFactor(planarSpeed) * (dt * pace) / planarSpeed);
       b.velocity.x *= factor; b.velocity.z *= factor;
       // Rolling resistance removes both translational and rolling energy.

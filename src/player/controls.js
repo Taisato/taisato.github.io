@@ -1,5 +1,6 @@
 import { FT } from "../../vendor/three.js";
 import { FB, footballClamp } from "../config.js";
+import { calibrationProfile, readCalibration, saveCalibration } from "./calibration-storage.js";
 
 class FootballControls {
   constructor(scene,rig,camera,field) {
@@ -17,7 +18,7 @@ class FootballControls {
     this.floorPenetration=.20;
     this.footAxis=new FT.Vector3();this.contactOffset=new FT.Vector3();
     this.calibration={stage:'floor',progress:0,stable:false,reason:'Touch both controllers to the floor.',floorY:0,revision:0,awaitRelease:true};
-    this.calibrationRecord=null;this.calibrationPaused=false;this._captureArmed=false;this._floorHeadHeight=0;
+    this.calibrationRecord=null;this.calibrationInMemoryOnly=false;this.calibrationPaused=false;this._captureArmed=false;this._floorHeadHeight=0;
     this._calibrationSqueezed=[false,false];
     this._calibrationTime=0;this._calibrationCount=0;
     this._calibrationAnchor=[new FT.Vector3(),new FT.Vector3(),new FT.Vector3()];
@@ -102,8 +103,14 @@ class FootballControls {
     return{radius,halfLength,offset:Object.freeze(new FT.Vector3((minX+maxX)*.5,minY+radius,(minZ+maxZ)*.5))};
   }
   setDesktop(enabled) {
-    this.desktop=enabled;this.poseValid=false;this.keys.clear();this.velocity.set(0,0,0);this.invalidate();
+    this.desktop=enabled;this.poseValid=false;this.keys.clear();this.velocity.set(0,0,0);
     if(enabled)this._setXRMenuSession(null);
+    else{
+      const record=(this.calibrationInMemoryOnly?null:readCalibration())??this.calibrationRecord;
+      if(record)this.applyCalibration(record);
+      else if(this.calibration.stage==='stance')this.beginCalibration();
+    }
+    this.invalidate();
     this.rig.position.y=-this.floorY;this.resetCalibrationWindow();
     if(enabled){this.headLocal.set(0,1.7,0);this.headOrientation.setFromAxisAngle(new FT.Vector3(1,0,0),this.desktopPitch);}
   }
@@ -355,21 +362,26 @@ class FootballControls {
         const inverse=this._calibrationMeanQ[index].clone().invert();
         const offset=new FT.Vector3(0,-length,0).applyQuaternion(inverse);
         const correction=inverse.clone().multiply(neutralFoot);
-        const profile=Object.freeze({length,offset:Object.freeze(offset),correction:Object.freeze(correction)});
-        profiles.push(profile);
+        profiles.push(calibrationProfile(length,offset,correction));
       }
-      calibration.revision++;calibration.stage='ready';calibration.progress=1;calibration.stable=true;
-      this.calibrationRecord=Object.freeze({floorY:calibration.floorY,headHeight:this._calibrationMean[2].y-calibration.floorY,revision:calibration.revision,profiles:Object.freeze(profiles)});
-      for(let index=0;index<2;index++){
-        const hand=this.hands[index];hand.profile=profiles[index];hand.length=profiles[index].length;hand.calibrated=true;
-        // Confirmation triggers are not a kick and must not retain an old toe tilt.
-        hand.instepInput=0;hand.instepAmount=0;hand.foot.instep=false;hand.foot.instepAmount=0;
-        hand.visual.setLength(hand.length);hand.visualProfile=hand.profile;
-      }
-      this.rig.position.y=-calibration.floorY;calibration.reason='Release both triggers.';
+      calibration.revision++;
+      this.applyCalibration({floorY:calibration.floorY,headHeight:this._calibrationMean[2].y-calibration.floorY,profiles});
+      this.calibrationInMemoryOnly=!saveCalibration(this.calibrationRecord);
     }
     calibration.awaitRelease=true;this._captureArmed=false;this.resetCalibrationWindow();this.invalidate();
     return {ok:true,stage:calibration.stage,reason:calibration.reason};
+  }
+  applyCalibration({floorY,headHeight,profiles}) {
+    const cal=this.calibration;
+    this.calibrationRecord=Object.freeze({floorY,headHeight,revision:cal.revision,profiles:Object.freeze(profiles)});
+    cal.stage='ready';cal.floorY=floorY;cal.stable=true;cal.progress=1;
+    cal.awaitRelease=true;cal.reason='Release both triggers.';
+    this.rig.position.y=-floorY;
+    for(const hand of this.hands){
+      hand.profile=profiles[hand.index];hand.length=hand.profile.length;hand.calibrated=true;
+      hand.instepInput=0;hand.instepAmount=0;hand.foot.instep=false;hand.foot.instepAmount=0;
+      hand.visual.setLength(hand.length);hand.visualProfile=hand.profile;
+    }
   }
   sampleDesktop(dt) {
     this.poseValid=true;const key=k=>this.keys.has(k);

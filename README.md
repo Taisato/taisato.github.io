@@ -4,7 +4,7 @@
 
 For GitHub Pages, extract the ZIP directly into the repository's existing publishing folder. Overwrite the matching files. Keep **`index.html`**, **`src/`**, **`styles/`**, **`vendor/`** and **`assets/`** together at that level. Open the published HTTPS URL to play, including on a headset.
 
-Choose **Freeroam** or **3 TOUCH**, then **Enter VR** or **Play on screen**. VR uses the existing floor/playing-position calibration. Controls are available in the collapsed help section.
+Choose **Freeroam** or **3 TOUCH**, then **Enter VR** or **Play on screen**. Complete the floor and playing-position calibration once in VR. The game remembers it for both modes in the same browser. Press **X** on the left controller to recalibrate. Controls are available in the collapsed help section.
 
 For a local desktop preview, run `python3 -m http.server 8000` in the extracted folder and open `http://localhost:8000/`.
 
