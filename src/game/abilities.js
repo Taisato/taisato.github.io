@@ -74,7 +74,7 @@ const THREE_TOUCH_TREES = Object.freeze([
   ['second-ball', 'Second Ball', [
     ['Your first shot within 2 s of a keeper parry or a live frame rebound gains 15% forward pace.', {reboundPace: .15}],
     ['You have 4 s to reach the rebound and take that shot.', {reboundWindow: 2}],
-    ['Score with the rebound shot to restore one extra life.', {reboundHeal: 1}]
+    ['Score with that follow-up to add one goal.', {reboundGoal: 1}]
   ], 50],
   ['far-post', 'Far Post', [
     ['Shoot across goal from at least 4 m off centre to gain 10% sideways curve.', {farCurve: .10}],
@@ -119,8 +119,12 @@ const THREE_TOUCH_TREES = Object.freeze([
 const THREE_TOUCH_RARES = Object.freeze([
   ['life-slot', '1 Life Slot', 'Add one life slot and refill one life.', {maxLives: 1}],
   ['extra-touch', 'Extra Touch', 'Add one touch to each chance.', {maxTouches: 1}],
-  ['power-strike', 'Power Strike', 'Add 10% shot strength.', {shotStrength: .10}]
-].map(([id, name, description, effects]) => Object.freeze({id, name, description, rare: true, effects: Object.freeze(effects)})));
+  ['power-strike', 'Power Strike', 'Add 10% shot strength.', {shotStrength: .10}],
+  ['extra-reroll', 'Extra Reroll', 'Reroll open cards once per future 3 Touch draft. Pinned trees stay in place.', {extraReroll: 1}, 25, 1],
+  ['bonus-goal', 'Bonus Goal', 'Every finish earns one extra goal per copy.', {bonusGoal: 1}, 50],
+  ['double-goals', 'Double Goals', 'Double the full value of each goal, including all bonuses.', {doubleGoals: 1}, 75, 1]
+].map(([id, name, description, effects, unlockAt=0, maxStacks=Number.MAX_SAFE_INTEGER]) =>
+  Object.freeze({id, name, description, rare: true, unlockAt, maxStacks, effects: Object.freeze(effects)})));
 
 const THREE_TOUCH_ABILITIES = Object.freeze([...THREE_TOUCH_TREES, ...THREE_TOUCH_RARES]);
 
@@ -136,9 +140,10 @@ const THREE_TOUCH_BASE_EFFECTS = Object.freeze({
   keeperReverseDelay: 0, keeperWrongFootParry: 0, lastChance: 0, lastLifeTouch: 0,
   leftFootShotPace: 0, leftFootCurve: 0, leftFootGoalBonus: 0,
   switchPace: 0, switchCurve: 0, switchFree: 0, boxRefund: 0, boxPace: 0, boxGoal: 0,
-  reboundPace: 0, reboundWindow: 0, reboundHeal: 0, farCurve: 0, farPace: 0, farGoal: 0,
+  reboundPace: 0, reboundWindow: 0, reboundGoal: 0, farCurve: 0, farPace: 0, farGoal: 0,
   streakTouch: 0, streakHeal: 0, streakGoal: 0, halfVolleyStrength: 0, halfVolleyWindow: 0, halfVolleyFree: 0,
-  highHeal: 0, cornerTouch: 0, cornerGoal: 0, clutchHeal: 0, lastShotCarry: 0, clutchGoal: 0
+  highHeal: 0, cornerTouch: 0, cornerGoal: 0, clutchHeal: 0, lastShotCarry: 0, clutchGoal: 0,
+  extraReroll: 0, bonusGoal: 0, doubleGoals: 0
 });
 
 function continuesTouchWindow(gap, effects, gentle, previousGentle) {
@@ -151,13 +156,16 @@ function continuesTouchWindow(gap, effects, gentle, previousGentle) {
 function availableTrees(highScore) {
   return THREE_TOUCH_TREES.filter(tree=>tree.unlockAt<=highScore);
 }
+function availableRares(highScore) {
+  return THREE_TOUCH_RARES.filter(rare=>rare.unlockAt<=highScore);
+}
 
 function normalizeAbilityLevels(levels,highScore=Infinity) {
   const normalized = {};
   for (const ability of THREE_TOUCH_ABILITIES) {
     const level = levels?.[ability.id];
-    if ((ability.rare || ability.unlockAt<=highScore) && Number.isSafeInteger(level) && level > 0) {
-      normalized[ability.id] = ability.rare ? level : Math.min(ability.phases.length, level);
+    if (ability.unlockAt<=highScore && Number.isSafeInteger(level) && level > 0) {
+      normalized[ability.id] = Math.min(ability.rare ? ability.maxStacks : ability.phases.length,level);
     }
   }
   return normalized;
@@ -180,4 +188,4 @@ function buildAbilityEffects(levels) {
 }
 
 export { THREE_TOUCH_ABILITIES, THREE_TOUCH_TREES, THREE_TOUCH_RARES, THREE_TOUCH_BASE_EFFECTS,
-  availableTrees, normalizeAbilityLevels, buildAbilityEffects, addAbilityEffects, continuesTouchWindow };
+  availableTrees, availableRares, normalizeAbilityLevels, buildAbilityEffects, addAbilityEffects, continuesTouchWindow };

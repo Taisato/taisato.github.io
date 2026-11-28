@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080d1d">
 <link rel="icon" href="data:,">
 <title>First Touch · VR Football</title>
-<link rel="stylesheet" href="./styles/main.css?v=813a9c5a322e">
+<link rel="stylesheet" href="./styles/main.css?v=8f42c065d935">
 </head>
 <body>
 <svg class="symbols" aria-hidden="true"><defs>
@@ -43,11 +43,22 @@
 <div class="turn-setting"><label class="setting-row" for="turn-speed"><span>Turn speed</span><output id="turn-speed-value" for="turn-speed">1×</output></label><input id="turn-speed" type="range" min="0.25" max="4" step="0.25" value="1" aria-valuetext="1 times"></div>
 <div class="turn-setting"><div class="setting-row"><label for="hud-height">HUD height</label><output id="hud-height-value" for="hud-height">Default</output></div><small class="setting-description" id="hud-height-help">Move the score panel up or down in half-panel steps.</small><input id="hud-height" type="range" min="-2" max="2" step="0.5" value="0" aria-valuetext="Default" aria-describedby="hud-height-help"></div>
 <div class="setting-row"><div><span id="shot-trace-label">Shot Trace</span><small class="setting-description" id="shot-trace-help">Shows each shot’s path for 2.5 seconds.</small></div><button id="toggle-shot-trace" class="setting-toggle" type="button" role="switch" aria-checked="false" aria-labelledby="shot-trace-label" aria-describedby="shot-trace-help">Off</button></div>
-<button id="abilities" class="secondary settings-link" type="button" aria-controls="abilities-page" aria-expanded="false" disabled>Abilities <span class="unlock-mark" aria-label="New ability trees" role="img" hidden>?</span><span class="link-arrow" aria-hidden="true">›</span></button>
+<button id="abilities" class="secondary settings-link" type="button" aria-controls="abilities-page" aria-expanded="false" disabled>Abilities <span class="unlock-mark" aria-label="Newly unlocked abilities" role="img" hidden>?</span><span class="link-arrow" aria-hidden="true">›</span></button>
 </div>
 <div id="other-panel" role="tabpanel" aria-labelledby="settings-other" hidden>
+<div id="other-options">
 <div class="setting-row"><span id="wind-label">Wind</span><button id="toggle-wind" class="setting-toggle wind-choice" type="button" data-wind="normal" aria-label="Wind: Normal. Switch to Heavy">Normal</button></div>
 <button id="credits" class="secondary settings-link" type="button" aria-controls="credits-page" aria-expanded="false">Credits <span aria-hidden="true">›</span></button>
+<div class="progress-actions" role="group" aria-label="Progress">
+<button id="unlock-all" class="secondary" type="button" aria-controls="progress-prompt" disabled>Unlock all</button>
+<button id="reset-progress" class="secondary" type="button" aria-controls="progress-prompt" disabled>Reset progress</button>
+</div>
+</div>
+<div id="progress-prompt" class="progress-prompt" role="group" aria-labelledby="progress-title" aria-describedby="progress-description" hidden>
+<h3 id="progress-title"></h3><p id="progress-description"></p>
+<div class="progress-actions"><button id="progress-cancel" class="secondary" type="button">Cancel</button><button id="progress-confirm" class="secondary" type="button">Confirm</button></div>
+</div>
+<p id="progress-status" role="status"></p>
 </div>
 <button id="settings-back" class="secondary" type="button">Back</button>
 </section>
@@ -64,7 +75,7 @@
 </section>
 <section id="abilities-page" class="settings-page ability-page" hidden aria-labelledby="abilities-title">
   <div class="ability-header"><h2 id="abilities-title" tabindex="-1">Freeroam abilities</h2><output id="abilities-count" aria-live="polite">None equipped</output></div>
-  <p class="ability-instructions">Choose a phase to equip it and all earlier phases in that tree. Rare upgrades stack.</p>
+  <p class="ability-instructions">Choose a phase to equip it and all earlier phases in that tree. Use − and + to equip rare upgrades.</p>
   <div class="ability-catalog" aria-label="Freeroam ability catalog">
     <h3 id="ability-trees-title">Ability trees</h3>
     <div id="ability-trees" class="ability-grid" role="group" aria-labelledby="ability-trees-title"></div>
@@ -86,7 +97,10 @@
     <div class="reward-meta"><span>3 TOUCH</span><span id="reward-score"></span></div>
     <h2 id="reward-title">Choose an ability</h2>
     <div class="reward-cards"></div>
-    <p id="reward-hint" role="status">Rolling abilities…</p>
+    <div class="reward-footer">
+      <p id="reward-hint" role="status">Rolling abilities…</p>
+      <button type="button" id="reward-reroll" aria-keyshortcuts="R" hidden disabled><span></span><kbd aria-hidden="true">R</kbd></button>
+    </div>
   </div>
 </section>
 <template id="reward-card-template">
@@ -99,50 +113,50 @@
 <script type="importmap">
 {
   "imports": {
-    "./src/app.js": "./src/app.js?v=813a9c5a322e",
-    "./src/assets.js": "./src/assets.js?v=813a9c5a322e",
-    "./src/audio.js": "./src/audio.js?v=813a9c5a322e",
-    "./src/config.js": "./src/config.js?v=813a9c5a322e",
-    "./src/game/abilities.js": "./src/game/abilities.js?v=813a9c5a322e",
-    "./src/game/ability-draft.js": "./src/game/ability-draft.js?v=813a9c5a322e",
-    "./src/game/challenge.js": "./src/game/challenge.js?v=813a9c5a322e",
-    "./src/game/progression.js": "./src/game/progression.js?v=813a9c5a322e",
-    "./src/keeper/footwork.js": "./src/keeper/footwork.js?v=813a9c5a322e",
-    "./src/keeper/keeper.js": "./src/keeper/keeper.js?v=813a9c5a322e",
-    "./src/keeper/meshes.js": "./src/keeper/meshes.js?v=813a9c5a322e",
-    "./src/keeper/player-contact.js": "./src/keeper/player-contact.js?v=813a9c5a322e",
-    "./src/keeper/ragdoll.js": "./src/keeper/ragdoll.js?v=813a9c5a322e",
-    "./src/keeper/visuals.js": "./src/keeper/visuals.js?v=813a9c5a322e",
-    "./src/main.js": "./src/main.js?v=813a9c5a322e",
-    "./src/physics/ball.js": "./src/physics/ball.js?v=813a9c5a322e",
-    "./src/physics/nets.js": "./src/physics/nets.js?v=813a9c5a322e",
-    "./src/physics/shot-surface.js": "./src/physics/shot-surface.js?v=813a9c5a322e",
-    "./src/physics/shot-techniques.js": "./src/physics/shot-techniques.js?v=813a9c5a322e",
-    "./src/player/boots.js": "./src/player/boots.js?v=813a9c5a322e",
-    "./src/player/calibration-storage.js": "./src/player/calibration-storage.js?v=813a9c5a322e",
-    "./src/player/controls.js": "./src/player/controls.js?v=813a9c5a322e",
-    "./src/player/visuals.js": "./src/player/visuals.js?v=813a9c5a322e",
-    "./src/render/markings.js": "./src/render/markings.js?v=813a9c5a322e",
-    "./src/render/motion.js": "./src/render/motion.js?v=813a9c5a322e",
-    "./src/render/net.js": "./src/render/net.js?v=813a9c5a322e",
-    "./src/render/optics.js": "./src/render/optics.js?v=813a9c5a322e",
-    "./src/render/shot-trail.js": "./src/render/shot-trail.js?v=813a9c5a322e",
-    "./src/render/xr-resolution.js": "./src/render/xr-resolution.js?v=813a9c5a322e",
-    "./src/settings.js": "./src/settings.js?v=813a9c5a322e",
-    "./src/ui/ability-switcher.js": "./src/ui/ability-switcher.js?v=813a9c5a322e",
-    "./src/ui/calibration.js": "./src/ui/calibration.js?v=813a9c5a322e",
-    "./src/ui/hud.js": "./src/ui/hud.js?v=813a9c5a322e",
-    "./src/ui/menu-pages.js": "./src/ui/menu-pages.js?v=813a9c5a322e",
-    "./src/ui/menu.js": "./src/ui/menu.js?v=813a9c5a322e",
-    "./src/ui/rewards.js": "./src/ui/rewards.js?v=813a9c5a322e",
-    "./src/ui/theme.js": "./src/ui/theme.js?v=813a9c5a322e",
-    "./src/world/field.js": "./src/world/field.js?v=813a9c5a322e",
-    "./src/world/sky.js": "./src/world/sky.js?v=813a9c5a322e",
-    "./src/world/stand.js": "./src/world/stand.js?v=813a9c5a322e",
-    "./vendor/three.js": "./vendor/three.js?v=813a9c5a322e"
+    "./src/app.js": "./src/app.js?v=8f42c065d935",
+    "./src/assets.js": "./src/assets.js?v=8f42c065d935",
+    "./src/audio.js": "./src/audio.js?v=8f42c065d935",
+    "./src/config.js": "./src/config.js?v=8f42c065d935",
+    "./src/game/abilities.js": "./src/game/abilities.js?v=8f42c065d935",
+    "./src/game/ability-draft.js": "./src/game/ability-draft.js?v=8f42c065d935",
+    "./src/game/challenge.js": "./src/game/challenge.js?v=8f42c065d935",
+    "./src/game/progression.js": "./src/game/progression.js?v=8f42c065d935",
+    "./src/keeper/footwork.js": "./src/keeper/footwork.js?v=8f42c065d935",
+    "./src/keeper/keeper.js": "./src/keeper/keeper.js?v=8f42c065d935",
+    "./src/keeper/meshes.js": "./src/keeper/meshes.js?v=8f42c065d935",
+    "./src/keeper/player-contact.js": "./src/keeper/player-contact.js?v=8f42c065d935",
+    "./src/keeper/ragdoll.js": "./src/keeper/ragdoll.js?v=8f42c065d935",
+    "./src/keeper/visuals.js": "./src/keeper/visuals.js?v=8f42c065d935",
+    "./src/main.js": "./src/main.js?v=8f42c065d935",
+    "./src/physics/ball.js": "./src/physics/ball.js?v=8f42c065d935",
+    "./src/physics/nets.js": "./src/physics/nets.js?v=8f42c065d935",
+    "./src/physics/shot-surface.js": "./src/physics/shot-surface.js?v=8f42c065d935",
+    "./src/physics/shot-techniques.js": "./src/physics/shot-techniques.js?v=8f42c065d935",
+    "./src/player/boots.js": "./src/player/boots.js?v=8f42c065d935",
+    "./src/player/calibration-storage.js": "./src/player/calibration-storage.js?v=8f42c065d935",
+    "./src/player/controls.js": "./src/player/controls.js?v=8f42c065d935",
+    "./src/player/visuals.js": "./src/player/visuals.js?v=8f42c065d935",
+    "./src/render/markings.js": "./src/render/markings.js?v=8f42c065d935",
+    "./src/render/motion.js": "./src/render/motion.js?v=8f42c065d935",
+    "./src/render/net.js": "./src/render/net.js?v=8f42c065d935",
+    "./src/render/optics.js": "./src/render/optics.js?v=8f42c065d935",
+    "./src/render/shot-trail.js": "./src/render/shot-trail.js?v=8f42c065d935",
+    "./src/render/xr-resolution.js": "./src/render/xr-resolution.js?v=8f42c065d935",
+    "./src/settings.js": "./src/settings.js?v=8f42c065d935",
+    "./src/ui/ability-switcher.js": "./src/ui/ability-switcher.js?v=8f42c065d935",
+    "./src/ui/calibration.js": "./src/ui/calibration.js?v=8f42c065d935",
+    "./src/ui/hud.js": "./src/ui/hud.js?v=8f42c065d935",
+    "./src/ui/menu-pages.js": "./src/ui/menu-pages.js?v=8f42c065d935",
+    "./src/ui/menu.js": "./src/ui/menu.js?v=8f42c065d935",
+    "./src/ui/rewards.js": "./src/ui/rewards.js?v=8f42c065d935",
+    "./src/ui/theme.js": "./src/ui/theme.js?v=8f42c065d935",
+    "./src/world/field.js": "./src/world/field.js?v=8f42c065d935",
+    "./src/world/sky.js": "./src/world/sky.js?v=8f42c065d935",
+    "./src/world/stand.js": "./src/world/stand.js?v=8f42c065d935",
+    "./vendor/three.js": "./vendor/three.js?v=8f42c065d935"
   }
 }
 </script>
-<script type="module" src="./src/main.js?v=813a9c5a322e"></script>
+<script type="module" src="./src/main.js?v=8f42c065d935"></script>
 </body>
 </html>

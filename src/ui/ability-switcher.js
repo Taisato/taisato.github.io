@@ -1,14 +1,15 @@
-import {availableTrees,THREE_TOUCH_RARES} from '../game/abilities.js';
+import {availableRares,availableTrees} from '../game/abilities.js';
 import {UI,brand,button,label,panel,shape,tracked} from './theme.js';
 
 const PHASE_LABELS=['Off','I','II','III'];
 const VR_ROWS=3;
 const BASE_TREES=availableTrees(0);
+const BASE_RARES=availableRares(0);
 const UNLOCK_GOLD='#efc877';
 
 function levelOf(levels,ability) {
   const value=levels instanceof Map?levels.get(ability.id):levels?.[ability.id];
-  const maximum=ability.rare?Number.MAX_SAFE_INTEGER:ability.phases.length;
+  const maximum=ability.rare?(ability.maxStacks??Number.MAX_SAFE_INTEGER):ability.phases.length;
   return Number.isFinite(value)?Math.max(0,Math.min(maximum,Math.floor(value))):0;
 }
 
@@ -16,9 +17,9 @@ function abilityDescription(ability,level) {
   return ability.rare?ability.description:ability.phases[Math.max(0,level-1)].description;
 }
 
-function abilityPages(trees) {
+function abilityPages(trees,rares=BASE_RARES) {
   const pages=[];
-  for(const group of [trees,THREE_TOUCH_RARES]){
+  for(const group of [trees,rares]){
     for(let i=0;i<group.length;i+=VR_ROWS)pages.push(group.slice(i,i+VR_ROWS));
   }
   return pages;
@@ -32,14 +33,13 @@ class FootballAbilitySwitcher {
     this.count=section.querySelector('#abilities-count');
     this.clear=section.querySelector('#abilities-clear');
     this.catalog=section.querySelector('.ability-catalog');
-    this.levels={};this.enabled=false;this.rows=[];this.trees=[];this.unseen=new Set();
+    this.levels={};this.enabled=false;this.rows=[];this.unseen=new Set();
     this.open=false;this.highlights=new Set();this.seenFrame=0;
     this.abort=new AbortController();
     this.groups={trees:section.querySelector('#ability-trees'),rares:section.querySelector('#ability-rares')};
-    this.groups.rares.append(...THREE_TOUCH_RARES.map(ability=>this.makeRow(ability)));
     this.setProgression(BASE_TREES,[]);
     const options={signal:this.abort.signal};
-    // A desktop tree is seen only after its heading actually enters the scroll viewport.
+    // A desktop unlock is seen only when its heading enters the scroll viewport.
     this.catalog.addEventListener('scroll',()=>this.scheduleSeen(),options);
     section.closest('#launcher').addEventListener('scroll',()=>this.scheduleSeen(),options);
     window.addEventListener('resize',()=>this.scheduleSeen(),options);
@@ -101,14 +101,15 @@ class FootballAbilitySwitcher {
 
   setLevels(levels) {this.levels=levels;this.refresh();}
 
-  setProgression(trees,unseenIds) {
-    const rosterChanged=trees.length!==this.trees.length||trees.some((ability,i)=>ability!==this.trees[i]);
+  setProgression(trees,unseenIds,rares=BASE_RARES) {
+    const roster=[...trees,...rares];
+    const rosterChanged=roster.length!==this.rows.length||roster.some((ability,i)=>ability!==this.rows[i].ability);
     const unseen=new Set(unseenIds);
     if(!rosterChanged&&unseen.size===this.unseen.size&&[...unseen].every(id=>this.unseen.has(id)))return;
     if(rosterChanged){
-      this.trees=trees;
-      this.rows=this.rows.filter(record=>record.ability.rare);
+      this.rows=[];
       this.groups.trees.replaceChildren(...trees.map(ability=>this.makeRow(ability)));
+      this.groups.rares.replaceChildren(...rares.map(ability=>this.makeRow(ability)));
     }
     this.unseen=unseen;
     for(const id of this.unseen)if(this.open)this.highlights.add(id);
@@ -156,7 +157,7 @@ class FootballAbilitySwitcher {
       if(ability.rare){
         value.value=String(level);
         buttons[0].disabled=!this.enabled||level===0;
-        buttons[1].disabled=!this.enabled||level===Number.MAX_SAFE_INTEGER;
+        buttons[1].disabled=!this.enabled||level>=(ability.maxStacks??Number.MAX_SAFE_INTEGER);
         continue;
       }
       buttons.forEach((item,index)=>{
@@ -185,7 +186,7 @@ function drawAbilitySwitcher(canvas,pages,page,levels,hover,highlights) {
   canvas.fillStyle=UI.line;canvas.fillRect(48,106,864,1);
   const section=pages[page],rare=!!section[0].rare;
   label(canvas,rare?'Rare upgrades':'Ability trees',48,139,30,rare?UI.lilac:UI.white,'left',800);
-  label(canvas,rare?'Each copy adds another bonus.':'A phase includes the phases before it.',48,172,22,UI.muted);
+  label(canvas,rare?'Use − and + to equip rare upgrades.':'A phase includes the phases before it.',48,172,22,UI.muted);
   label(canvas,`${page+1} / ${pages.length}`,912,139,22,UI.mint,'right');
   const buttons=[];
   const add=(specification,selected=false,primary=false)=>{
@@ -217,7 +218,7 @@ function drawAbilitySwitcher(canvas,pages,page,levels,hover,highlights) {
       const control={y:y+18,w:80,h:56,abilityId:ability.id};
       add({...control,id:`ability-${ability.id}-minus`,label:'−',x:585,level:level-1,disabled:level===0});
       label(canvas,String(level),730,y+46,28,level?UI.lilac:UI.muted,'center',800);
-      add({...control,id:`ability-${ability.id}-plus`,label:'+',x:795,level:level+1,disabled:level===Number.MAX_SAFE_INTEGER});
+      add({...control,id:`ability-${ability.id}-plus`,label:'+',x:795,level:level+1,disabled:level>=(ability.maxStacks??Number.MAX_SAFE_INTEGER)});
     }else{
       for(let phase=0;phase<=ability.phases.length;phase++){
         add({id:`ability-${ability.id}-${phase}`,label:PHASE_LABELS[phase],x:534+phase*89,y:y+18,w:80,h:56,

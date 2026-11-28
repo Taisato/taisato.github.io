@@ -4,6 +4,7 @@ import {DEFAULT_SETTINGS,HUD_HEIGHT,VR_RESOLUTION_OPTIONS,formatHUDHeight,normal
 import {UI,panel,label,tracked,brand,heart,touch,pitch,button,shape} from './theme.js';
 import {createOpticalMaterial} from '../render/optics.js';
 import {abilityPages,BASE_TREES,drawAbilitySwitcher,drawUnlockMark,UNLOCK_GOLD} from './ability-switcher.js';
+import {PROGRESS_ACTIONS} from './menu-pages.js';
 
 function eyeDimensions(width,height,rightWidth,rightHeight){
  const left=width+' × '+height;
@@ -19,6 +20,7 @@ class FootballInterface {
   this.renderSize={};this.renderSizeLabel='';this.outputSizeLabel='';
   this.abilityLevels={};this.abilityPage=0;this.abilityPages=abilityPages(BASE_TREES);
   this.highScore=0;this.unseen=new Set();this.highlights=new Set();
+  this.pendingProgress=null;this.progressStatus='';
   this.canvas=document.createElement('canvas');this.canvas.width=960;this.canvas.height=660;this.ctx=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);
   this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;this.width=1.32;this.height=.9075;
   this.root=new FT.Mesh(new FT.PlaneGeometry(this.width,this.height),createOpticalMaterial(this.texture,{strength:.5}));this.root.visible=false;this.root.frustumCulled=false;this.root.renderOrder=90;scene.add(this.root);
@@ -59,6 +61,7 @@ class FootballInterface {
  setPage(page,category=this.category){
   const next=['settings','credits','abilities'].includes(page)?page:'main';
   if(next===this.page&&category===this.category)return;
+  this.pendingProgress=null;this.progressStatus='';
   this.page=next;this.category=category;this.hover=null;this.reticle.visible=false;this.reticleCore.visible=false;
   this.highlights.clear();
   if(next==='abilities'){
@@ -68,8 +71,8 @@ class FootballInterface {
   if(this.visible)this.drawMenu();
  }
  setAbilityLevels(levels){this.abilityLevels=levels;if(this.visible&&this.page==='abilities')this.drawMenu();}
- setProgression(highScore,trees,unseenIds){
-  this.highScore=highScore;this.abilityPages=abilityPages(trees);
+ setProgression(highScore,trees,unseenIds,rares){
+  this.highScore=highScore;this.abilityPages=abilityPages(trees,rares);
   this.abilityPage=Math.min(this.abilityPage,this.abilityPages.length-1);
   this.unseen=new Set(unseenIds);
   if(this.page==='abilities')for(const id of this.unseen)this.highlights.add(id);
@@ -108,10 +111,19 @@ class FootballInterface {
     {id:'hud-height-up',label:'Higher',x:800,y:276,w:112,h,disabled:s.hudHeight>=HUD_HEIGHT.max},
     {id:'toggle-shot-trace',label:s.shotTrace?'On':'Off',x:720,y:351,w:192,h,on:s.shotTrace});
    if(freeroam)this.buttons.push({id:'abilities',label:'Abilities',x:48,y:431,w:864,h});
+  }else if(this.pendingProgress){
+   const info=PROGRESS_ACTIONS[this.pendingProgress];
+   label(c,info.question,48,231,33,UI.white,'left',800);
+   info.lines.forEach((line,i)=>label(c,line,48,286+i*34,23,UI.muted));
+   this.buttons.push({id:'progress-cancel',label:'Cancel',x:48,y:444,w:420,h},
+    {id:'progress-confirm',label:info.confirm,x:492,y:444,w:420,h});
   }else{
    label(c,'Wind',48,241,28);
    this.buttons.push({id:'toggle-wind',label:s.wind==='heavy'?'Heavy':'Normal',x:720,y:212,w:192,h,on:true},
-    {id:'credits',label:'Credits',x:48,y:303,w:864,h});
+    {id:'credits',label:'Credits',x:48,y:289,w:864,h},
+    {id:'unlock-all',label:'Unlock all',x:48,y:364,w:420,h},
+    {id:'reset-progress',label:'Reset progress',x:492,y:364,w:420,h});
+   if(this.progressStatus)label(c,this.progressStatus,48,466,22,UI.mint);
   }
   this.buttons.push({id:'settings-back',label:'Back',x:48,y:527,w:864,h:62});
   for(const b of this.buttons){c.save();if(b.disabled)c.globalAlpha=.32;button(c,b,{selected:b.category===this.category,primary:b.on||b.id==='settings-back',hover:!b.disabled&&this.hover===b.id});c.restore();}
@@ -181,10 +193,22 @@ class FootballInterface {
   const utility=over?[{id:'calibrate',label:'Calibrate',x:48,y:490,w:276,h:76},{id:'settings',label:'Settings',x:342,y:490,w:276,h:76},{id:'exit',label:'Exit',x:636,y:490,w:276,h:76}]:[{id:'restart',label:s.mode==='challenge'?'New run':'Reset',x:48,y:490,w:204,h:76},{id:'calibrate',label:'Calibrate',x:268,y:490,w:204,h:76},{id:'settings',label:'Settings',x:488,y:490,w:204,h:76},{id:'exit',label:'Exit',x:708,y:490,w:204,h:76}];
   this.buttons.push(...utility);for(const b of utility)button(c,b,{hover:b.id===this.hover});label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
  }
- show(show,controls){this.visible=show;this.root.visible=show;this.reticle.visible=false;this.reticleCore.visible=false;this.hover=null;if(!show){for(const hand of controls?.hands||[])if(hand.ray)hand.ray.visible=false;}if(show){controls.refreshHead();this.root.position.copy(controls.headWorld).addScaledVector(controls.forward,1.65);this.root.position.y=controls.headWorld.y-.04;this.root.rotation.set(0,Math.atan2(-controls.forward.x,-controls.forward.z),0);this.root.updateMatrixWorld(true);this.drawMenu();}}
+ show(show,controls){this.visible=show;this.root.visible=show;this.reticle.visible=false;this.reticleCore.visible=false;this.hover=null;if(!show){this.pendingProgress=null;this.progressStatus='';for(const hand of controls?.hands||[])if(hand.ray)hand.ray.visible=false;}if(show){controls.refreshHead();this.root.position.copy(controls.headWorld).addScaledVector(controls.forward,1.65);this.root.position.y=controls.headWorld.y-.04;this.root.rotation.set(0,Math.atan2(-controls.forward.x,-controls.forward.z),0);this.root.updateMatrixWorld(true);this.drawMenu();}}
  select(id){
   const target=this.buttons.find(button=>button.id===id);
-  if(target?.disabled)return;
+  if(!target||target.disabled)return;
+  if(Object.hasOwn(PROGRESS_ACTIONS,id)){
+   this.pendingProgress=id;this.progressStatus='';this.drawMenu();return;
+  }
+  if(id==='progress-cancel'||id==='progress-confirm'){
+   const action=this.pendingProgress;
+   this.pendingProgress=null;
+   if(action&&id==='progress-confirm'){
+    this.callbacks['progress-action']?.(action);
+    if(this.page==='settings'&&this.category==='other')this.progressStatus=PROGRESS_ACTIONS[action].done;
+   }
+   if(this.visible)this.drawMenu();return;
+  }
   if(target?.category){this.callbacks['settings-category']?.(target.category);return;}
   if(target?.scale){this.callbacks['vr-resolution']?.(target.scale);return;}
   if(target?.abilityId){this.callbacks['ability-level']?.(target.abilityId,target.level);return;}

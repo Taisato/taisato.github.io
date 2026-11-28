@@ -8,7 +8,7 @@ class ShotTechniques {
     this.effects = effects;
     this.switchEnabled = !!(effects?.switchPace || effects?.switchCurve || effects?.switchFree);
     this.boxEnabled = !!(effects?.boxRefund || effects?.boxPace || effects?.boxGoal);
-    this.reboundEnabled = !!(effects?.reboundPace || effects?.reboundWindow || effects?.reboundHeal);
+    this.reboundEnabled = !!(effects?.reboundPace || effects?.reboundWindow || effects?.reboundGoal);
     this.farEnabled = !!(effects?.farCurve || effects?.farPace || effects?.farGoal);
     this.halfEnabled = !!(effects?.halfVolleyStrength || effects?.halfVolleyWindow || effects?.halfVolleyFree);
     this.active = this.switchEnabled || this.boxEnabled || this.reboundEnabled || this.farEnabled || this.halfEnabled;

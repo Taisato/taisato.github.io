@@ -21,7 +21,7 @@ class FootballChallenge {
     this._motion=null;this._motionObserved=false;
     this.effects={...THREE_TOUCH_BASE_EFFECTS};
     this._practiceLevels={};
-    this.rewardSlots=emptyAbilitySlots();this.rewardChoices=EMPTY_REWARDS;this._acceptedRewards=0;
+    this.rewardSlots=emptyAbilitySlots();this.rewardChoices=EMPTY_REWARDS;this._acceptedRewards=0;this.rerollsLeft=0;
     this._chanceBonusTouches=0;this._recoveryUntil=-Infinity;
     this._snapshot={mode:drafts?'challenge':'freeroam',practice:!drafts,phase:'idle',score:0,lives:3,touches:3,
       maxLives:3,maxTouches:3,round:0,outcome:null,goalValue:0};
@@ -31,7 +31,8 @@ class FootballChallenge {
   get maxTouches() {return this.effects.maxTouches+this._chanceBonusTouches;}
   get acceptedRewardCount() {return this._acceptedRewards;}
   setHighScore(score) {this.highScore=Number.isSafeInteger(score)&&score>=0?score:0;}
-  get rewardPool() {return abilityReelPool(this.rewardSlots,this.highScore);}
+  get rewardPool() {return abilityReelPool(this.rewardSlots,this.highScore,this.effects);}
+  get canReroll() {return this.phase==='reward'&&this.rerollsLeft>0&&this.rewardSlots.includes(null);}
   get movementSpeedMultiplier() {
     return this.effects.playerSpeed+(this.time<this._recoveryUntil?this.effects.recoverySpeedBonus:0);
   }
@@ -54,8 +55,16 @@ class FootballChallenge {
 
   beginReward() {
     if(!this.rewardDue)return null;
-    this.rewardChoices=draftAbilityChoices(this.rewardSlots,()=>this._random(),this.highScore);
+    this.rewardChoices=draftAbilityChoices(this.rewardSlots,()=>this._random(),this.highScore,this.effects);
+    this.rerollsLeft=this.effects.extraReroll&&this.rewardSlots.includes(null)?1:0;
     this.phase='reward';
+    return this.rewardChoices;
+  }
+
+  rerollReward() {
+    if(!this.canReroll)return null;
+    this.rewardChoices=draftAbilityChoices(this.rewardSlots,()=>this._random(),this.highScore,this.effects,this.rewardChoices);
+    this.rerollsLeft=0;
     return this.rewardChoices;
   }
 
@@ -67,14 +76,14 @@ class FootballChallenge {
     if(reward.effects.maxLives)this.lives=Math.min(this.maxLives,this.lives+reward.effects.maxLives);
     if(!reward.rare)this.rewardSlots[reward.slot]={treeId:reward.treeId,phase:reward.phase};
     this._acceptedRewards++;
-    this.rewardChoices=EMPTY_REWARDS;
+    this.rewardChoices=EMPTY_REWARDS;this.rerollsLeft=0;
     this.phase='result';
     return true;
   }
 
   start() {
     Object.assign(this.effects,this.drafts?THREE_TOUCH_BASE_EFFECTS:buildAbilityEffects(this._practiceLevels));
-    this.rewardSlots=emptyAbilitySlots();this.rewardChoices=EMPTY_REWARDS;this._acceptedRewards=0;
+    this.rewardSlots=emptyAbilitySlots();this.rewardChoices=EMPTY_REWARDS;this._acceptedRewards=0;this.rerollsLeft=0;
     this._chanceBonusTouches=0;this._nextWoodworkTouches=0;
     this._scoringStreak=0;this._goalCarry=null;
     this._lastChanceRetries=0;this._distanceProtected=false;
@@ -114,7 +123,7 @@ class FootballChallenge {
 
   stop() {
     this.active=false;this.phase='idle';this.outcome=null;this.resultAge=0;
-    this.rewardChoices=EMPTY_REWARDS;
+    this.rewardChoices=EMPTY_REWARDS;this.rerollsLeft=0;
     this._motion=null;this._motionObserved=false;this._lastPhysicalTouchTime=-Infinity;this._lastTouchGentle=false;
   }
 
@@ -282,20 +291,22 @@ class FootballChallenge {
     const lastLife=this.lives===1;
     this._scoringStreak++;
     const pair=this._scoringStreak%2===0;
-    let points=1;
+    let points=1+e.bonusGoal;
     if(e.firstTimeFinish&&this._firstTimeQualified)points++;
     if(e.doubleFromDistance&&this._lastTouchOutsideBox)points++;
     if(e.woodworkGoal&&offWoodwork)points++;
     if(e.leftFootGoalBonus&&this._lastTouchLeft)points++;
     if(e.instepVolleyGoal&&this._lastTouchInstepVolley)points++;
     if(e.boxGoal&&shot?.boxShot)points++;
+    if(e.reboundGoal&&shot?.reboundShot)points++;
     if(e.farGoal&&outer&&shot?.farSide===Math.sign(x))points++;
     if(e.streakGoal&&this._scoringStreak%3===0)points++;
     if(e.cornerGoal&&corner)points++;
     if(e.clutchGoal&&lastLife&&this._lastTouchSpentFinal)points++;
+    if(e.doubleGoals)points*=2;
     this.goalValue=points;this.score+=points;
     if(this.drafts)this.highScore=Math.max(this.highScore,this.score);
-    const healing=1+(pair?e.streakHeal:0)+(high?e.highHeal:0)+(lastLife?e.clutchHeal:0)+(shot?.reboundShot?e.reboundHeal:0);
+    const healing=1+(pair?e.streakHeal:0)+(high?e.highHeal:0)+(lastLife?e.clutchHeal:0);
     this.lives=Math.min(this.maxLives,this.lives+healing);
     this._goalCarry={streak:pair&&!!e.streakTouch,corner:corner&&!!e.cornerTouch,lastShot:this._lastTouchSpentFinal&&!!e.lastShotCarry};
     if(e.distanceProtection&&this._shotDistance>=DISTANCE_BANK_METERS)this._distanceProtected=true;

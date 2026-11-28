@@ -45,6 +45,8 @@ The two effects are independent. Disabling aberration removes world colour separ
 
 Open **Settings → Other → Credits** for the game and sound attribution and special thanks.
 
+**Settings → Other** also contains **Unlock all** and **Reset progress**. Unlock all opens the full ability pool while keeping your actual high score. Reset progress clears the high score, unlocks and Freeroam loadout, and restarts an active 3 Touch run. Both actions ask for confirmation. Your settings and calibration survive a progress reset.
+
 Normal wind plays as a continuous stereo background during gameplay. Select **Wind → Heavy** for the second recording. Switching blends between the ambiences smoothly, and the choice is remembered with the other settings. Older saved settings automatically use Normal without resetting any existing preferences.
 
 The wind follows menu slow motion along with the other sounds. Ball respawns and new chances do not restart it. Leaving the game or a true suspension stops the ambience. Normal wind plays at 40% of its previous level. The wind setting changes sound only.
@@ -82,7 +84,7 @@ Picking Phase I pins that tree in the same slot. Its next phase stays available 
 
 Lilac outlines identify pinned upgrades. Rare upgrades have a gold outline with a soft glow.
 
-Each draft with an open slot has a 20% chance to offer one rare upgrade. **1 Life Slot** adds a slot and restores one life, **Extra Touch** adds a touch per chance, and **Power Strike** adds 10% shot strength. Picking a rare leaves its slot open, and repeat picks stack.
+Each draft with an open slot has a 20% chance to offer one rare upgrade. The starting choices are **1 Life Slot**, **Extra Touch** and **Power Strike**. Three more rares unlock at personal bests of 25, 50 and 75. Picking a rare leaves its slot open. A rare that grants a once-per-draft action or a multiplier can be equipped once. Other rares stack.
 
 Bonus goals add together. For example, a first-touch goal from outside the box counts for three with First-Time Finish I and Double From Distance I. A multi-point finish counts as one scoring chance for streaks. Up to two bonus touches from a goal can carry into the next chance. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime.
 
@@ -111,7 +113,7 @@ Quick Feet increases movement speed. Its extra run-up speed can add up to 10% to
 
 Open **Settings → Gameplay → Abilities** in Freeroam. Select I, II or III to equip a tree through that phase, combine any trees and adjust rare counts with the minus and plus buttons. Select **Off** to remove one tree or **Clear** to empty the loadout. Your Freeroam choices are saved in this browser.
 
-A gold outline and question mark flag newly unlocked trees. Open Abilities to jump to the first unread tree. Each marker lasts through its first viewing. Practice goals stay separate from your 3 Touch record.
+A gold outline and question mark flag newly unlocked abilities. Open Abilities to jump to the first unread entry. Each marker lasts through its first viewing. Practice goals stay separate from your 3 Touch record.
 
 With abilities equipped, the HUD shows practice goals, touches and lives for shots at the guarded goal. Press **B** on desktop or **A** on the right controller for the next ball. Starting-touch bonuses apply when you spawn the next ball. A protected retry returns to the original spot. A new ball after the last life starts fresh practice counters.
 

@@ -23,12 +23,13 @@ import { FootballAudio } from "./audio.js";
 import { TURN_SPEED, HUD_HEIGHT, formatHUDHeight, VR_RESOLUTION_OPTIONS, normalizeSettings, readSettings, saveSettings } from "./settings.js";
 
 const PRACTICE_STORAGE = 'first-touch.practice-abilities.v1';
-function readPracticeLevels(highScore) {
+const practiceKey=epoch=>epoch?PRACTICE_STORAGE+'.'+epoch:PRACTICE_STORAGE;
+function readPracticeLevels(highScore,epoch) {
   try {
-    const stored=localStorage.getItem(PRACTICE_STORAGE);
+    const key=practiceKey(epoch),stored=localStorage.getItem(key);
     const levels=normalizeAbilityLevels(JSON.parse(stored||'{}'),highScore);
     if(stored&&JSON.stringify(levels)!==stored){
-      try {localStorage.setItem(PRACTICE_STORAGE,JSON.stringify(levels));} catch {}
+      try {localStorage.setItem(key,JSON.stringify(levels));} catch {}
     }
     return levels;
   } catch {return {};}
@@ -55,9 +56,10 @@ class FootballApp {
     this.controls=new FootballControls(this.scene,this.rig,this.camera,this.field);
     this.progression=progression;
     this.progression.refresh();
-    this.mode='freeroam';this.challenge=new FootballChallenge({highScore:this.progression.highScore});this.pendingChance=null;
-    this.practice=new FootballChallenge({drafts:false,highScore:this.progression.highScore});
-    this.practiceLevels=readPracticeLevels(this.progression.highScore);
+    this.progressEpoch=this.progression.epoch;
+    this.mode='freeroam';this.challenge=new FootballChallenge({highScore:this.progression.unlockScore});this.pendingChance=null;
+    this.practice=new FootballChallenge({drafts:false,highScore:this.progression.unlockScore});
+    this.practiceLevels=readPracticeLevels(this.progression.unlockScore,this.progressEpoch);
     this.hasPracticeAbilities=Object.keys(this.practiceLevels).length>0;
     this.practiceSpawn=new FT.Vector3();this.practicePlayer=new FT.Vector3();this.practiceYaw=0;
     this.idleSnapshot={mode:'freeroam',practice:false,phase:'ready',score:0,round:0,outcome:null};
@@ -79,6 +81,7 @@ class FootballApp {
       'ability-level':(id,level)=>this.setPracticeLevels({...this.practiceLevels,[id]:level}),
       'abilities-clear':()=>this.setPracticeLevels({}),
       'abilities-seen':ids=>this.markAbilitiesSeen(ids),
+      'progress-action':action=>this.applyProgressAction(action),
       'turn-down':()=>this.changeSettings({turnSpeed:this.settings.turnSpeed-TURN_SPEED.step}),
       'turn-up':()=>this.changeSettings({turnSpeed:this.settings.turnSpeed+TURN_SPEED.step}),
       'hud-height-down':()=>this.changeSettings({hudHeight:this.settings.hudHeight-HUD_HEIGHT.step}),
@@ -94,7 +97,7 @@ class FootballApp {
     this.hud=new FootballHUD(this.camera);
     this.onScoreTick=(step,total)=>this.audio.scoreTick(step,total);
     this.onTreeUnlock=()=>this.audio.treeUnlock();
-    this.rewardPicker=new FootballRewardPicker(this.scene,(id,hand)=>this.chooseReward(id,hand));
+    this.rewardPicker=new FootballRewardPicker(this.scene,(id,hand)=>this.chooseReward(id,hand),()=>this.rerollReward());
     this.optics=new FootballOptics(this.renderer,this.scene,this.camera);
     this.motion=new FootballMotionSources(this.field,this.controls,this.goalkeeper);
     this.optics.setMotionSources(this.motion.sources);this.optics.setHUD(this.hud.mesh);
@@ -128,6 +131,7 @@ class FootballApp {
     });
     this.abilitySwitcher.setLevels(this.practiceLevels);
     this.interface.setAbilityLevels(this.practiceLevels);
+    this.menuPages.onProgressAction=action=>this.applyProgressAction(action);
     this.syncProgression();
     const on=(el,event,fn)=>el?.addEventListener(event,fn,{signal:this.abort.signal});
     on(window,'storage',event=>{
@@ -259,11 +263,38 @@ class FootballApp {
     this.interface.setPage(page,this.menuPages.category);
   }
   syncProgression() {
-    const {highScore,trees,unseenIds}=this.progression;
-    this.challenge.setHighScore(highScore);this.practice.setHighScore(highScore);
+    const {highScore,unlockScore,epoch,trees,rares,unseenIds}=this.progression;
+    const reset=epoch!==this.progressEpoch;
+    this.challenge.setHighScore(unlockScore);this.practice.setHighScore(unlockScore);
+    if(reset){
+      try {localStorage.removeItem(practiceKey(this.progressEpoch));} catch {}
+      this.progressEpoch=epoch;
+      this.hud.clearUnlocks();
+      this.practiceLevels=readPracticeLevels(unlockScore,epoch);
+      this.hasPracticeAbilities=Object.keys(this.practiceLevels).length>0;
+      this.practice.stop();this.practice.setPracticeBuild(this.practiceLevels);
+      this.abilitySwitcher.setLevels(this.practiceLevels);
+      this.interface.setAbilityLevels(this.practiceLevels);
+      if(this.active&&this.mode==='challenge'){
+        const menu=this.menu,page=this.menuPage,category=this.menuPages.category;
+        this.restart();
+        if(menu){this.setMenu(true);this.setMenuPage(page,false,category);}
+      }else if(this.active){
+        this.hud.resetScore();
+        if(this.hasPracticeAbilities)this.practice.practiceBall(this.practiceLevels);
+        this.applyChallengeEffects();
+      }
+    }
     this.menuPages.setHighScore(highScore);
-    this.abilitySwitcher.setProgression(trees,unseenIds);
-    this.interface.setProgression(highScore,trees,unseenIds);
+    this.abilitySwitcher.setProgression(trees,unseenIds,rares);
+    this.interface.setProgression(highScore,trees,unseenIds,rares);
+    if(reset)this.syncPage();
+  }
+  applyProgressAction(action) {
+    if(action==='unlock-all')this.progression.unlockAll();
+    else if(action==='reset-progress')this.progression.reset();
+    else return;
+    this.syncProgression();
   }
   markAbilitiesSeen(ids) {
     if(this.progression.markSeen(ids))this.syncProgression();
@@ -289,13 +320,13 @@ class FootballApp {
   }
   setPracticeLevels(levels) {
     if(this.mode!=='freeroam')return;
-    const next=normalizeAbilityLevels(levels,this.progression.highScore),ids=Object.keys(next);
+    const next=normalizeAbilityLevels(levels,this.progression.unlockScore),ids=Object.keys(next);
     if(ids.length===Object.keys(this.practiceLevels).length&&ids.every(id=>next[id]===this.practiceLevels[id]))return;
     this.practiceLevels=next;this.hasPracticeAbilities=ids.length>0;
     if(!this.hasPracticeAbilities)this.hud.resetScore();
     this.abilitySwitcher.setLevels(this.practiceLevels);
     this.interface.setAbilityLevels(this.practiceLevels);
-    try {localStorage.setItem(PRACTICE_STORAGE,JSON.stringify(this.practiceLevels));} catch {}
+    try {localStorage.setItem(practiceKey(this.progressEpoch),JSON.stringify(this.practiceLevels));} catch {}
     if(this.active) {
       if(this.practice.active){
         this.practice.setPracticeBuild(this.practiceLevels);
@@ -451,8 +482,13 @@ class FootballApp {
     if(this.controls.desktop)document.exitPointerLock?.();
     this.controls.keys.clear();this.controls.invalidate();this.controls.prepareFeet(0,true);
     this.goalkeeper.clearContacts();this.motion.reset();
-    this.rewardPicker.show(choices,this.challenge.rewardPool,this.controls,this.challenge.score);
+    this.rewardPicker.show(choices,this.challenge.rewardPool,this.controls,this.challenge.score,this.challenge.canReroll?this.challenge.rerollsLeft:0);
     this.syncPage();
+  }
+  rerollReward() {
+    if(!this.rewardActive||this.menu||this.paused)return;
+    const choices=this.challenge.rerollReward();
+    if(choices)this.rewardPicker.reroll(choices,this.challenge.rewardPool,this.challenge.canReroll?this.challenge.rerollsLeft:0);
   }
   chooseReward(id,hand) {
     if(!this.rewardActive||!this.challenge.chooseReward(id))return;

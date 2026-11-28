@@ -27,6 +27,16 @@
 #settings-back{margin-top:22px}
 #settings-page h2{margin-bottom:18px}
 #settings-page [role=tabpanel]{min-height:272px}
+.progress-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}
+.progress-actions .secondary{padding-inline:8px}
+.progress-prompt{padding:18px 0 8px}
+.progress-prompt h3{margin:0 0 10px;color:var(--white);font-size:21px}
+.progress-prompt p,#progress-status{color:var(--muted);font-size:14px;line-height:1.45}
+.progress-prompt p{margin:0}
+#progress-confirm{color:var(--mint);border-color:var(--mint)}
+#progress-prompt[data-action=reset-progress] #progress-confirm{color:var(--lilac);border-color:var(--lilac)}
+#progress-status{margin:12px 0 0;color:var(--mint)}
+#progress-status:empty{display:none}
 #launcher[data-page=abilities]{align-items:safe center}
 #launcher[data-page=abilities] .card{display:flex;flex-direction:column;width:min(960px,100%);max-height:calc(100dvh - 48px);padding:clamp(20px,4vw,32px)}
 #launcher[data-page=abilities] .brand{flex:none;min-height:0;margin-bottom:14px}
@@ -111,7 +121,11 @@
 .reward-current,.reward-next{position:absolute;inset:0;display:grid;align-items:center;font-size:clamp(15px,2.35vw,22px);font-weight:800;letter-spacing:-.025em;line-height:1.07}
 .reward-current{transform:translateY(calc(var(--reel,0) * -100%))}
 .reward-next{color:var(--lilac);transform:translateY(calc((1 - var(--reel,0)) * 100%))}
-#reward-hint{min-height:19px;margin:16px 0 0;color:var(--muted);font-size:13px;line-height:1.35}
+.reward-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 16px;margin-top:16px}
+.reward-footer #reward-hint{min-height:19px;margin:0;color:var(--muted);font-size:13px;line-height:1.35}
+#reward-reroll{display:inline-flex;align-items:center;gap:12px;min-height:40px;padding:7px 12px;border:1px solid var(--line);border-radius:8px 2px 8px 2px;background:var(--panel);color:var(--white);font-weight:700;font-size:14px}
+#reward-reroll:not(:disabled):hover{border-color:var(--mint);background:#182e38}
+#reward-reroll kbd{color:var(--mint);font:700 11px Arial,sans-serif;border:1px solid var(--line);border-radius:3px;padding:2px 4px}
 @media(max-width:520px){.reward-cards{grid-template-columns:1fr;gap:9px}.reward-card{grid-template-columns:20px 1fr;grid-template-rows:auto;min-height:76px;padding:12px;gap:10px}.reward-key{align-self:center}.reward-info{align-self:center;gap:5px;margin-top:0;padding-bottom:0}.reward-reel{height:42px}#reward-title{margin-bottom:15px}#reward-hint{margin-top:13px}}
 @media(prefers-reduced-motion:reduce){.reward-current{transform:none}.reward-next{display:none}}
 .mode.challenge .mode-pips{margin-top:14px}

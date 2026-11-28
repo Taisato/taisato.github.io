@@ -173,7 +173,8 @@ class FootballHUD{
  }
  get scoreRolling(){return this.meter.roll!==null;}
  get hasUnlockNotice(){return !!this.unlockName||this.unlockQueue.length>0;}
- queueUnlocks(trees){for(const tree of trees)this.unlockQueue.push(tree.name);}
+ queueUnlocks(abilities){for(const ability of abilities)this.unlockQueue.push(ability.name);}
+ clearUnlocks(){this.unlockQueue.length=0;this.unlockName='';this.unlockSeconds=0;}
  advanceUnlock(seconds,onUnlock){
   if(this.unlockName){
    this.unlockSeconds-=Math.min(.075,Math.max(0,seconds));

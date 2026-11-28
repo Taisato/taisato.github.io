@@ -7,6 +7,8 @@ const WIDTH = 1080, HEIGHT = 430, PLANE_WIDTH = 1.76, PLANE_HEIGHT = PLANE_WIDTH
 const HOLD_SECONDS = .78;
 const RARE_GOLD = '#efc877';
 const CARDS = Array.from({length: 3}, (_, i) => ({x: 38 + i * 340, y: 152, w: 324, h: 200}));
+const REROLL = {x: 778, y: 365, w: 264, h: 52};
+const REROLL_INDEX = CARDS.length;
 
 function cardTitle(choice) {
   return choice.masteredName ?? choice.treeName ?? choice.name;
@@ -59,8 +61,10 @@ function linesFor(context, text, width) {
 }
 
 class FootballRewardPicker {
-  constructor(scene, onChoose) {
+  constructor(scene, onChoose, onReroll) {
     this.onChoose = onChoose;
+    this.onReroll = onReroll;
+    this.rerollsLeft = 0;
     this.active = false;
     this.visible = false;
     this.ready = false;
@@ -88,6 +92,8 @@ class FootballRewardPicker {
     this.overlay = document.querySelector('#desktop-rewards');
     this.hint = document.querySelector('#reward-hint');
     this.scoreLabel = document.querySelector('#reward-score');
+    this.rerollButton = this.overlay.querySelector('#reward-reroll');
+    this.rerollLabel = this.rerollButton.querySelector('span');
     this.desktopCards = this.buildDesktopCards();
     this.bindDesktop();
   }
@@ -110,6 +116,7 @@ class FootballRewardPicker {
 
   bindDesktop() {
     const on = (element, type, fn) => element.addEventListener(type, fn, {signal: this.abort.signal});
+    on(this.rerollButton, 'click', () => this.requestReroll());
     this.desktopCards.forEach(({card}, index) => {
       on(card, 'pointerdown', event => {
         if (event.button !== 0 || !this.visible || !this.ready) return;
@@ -129,6 +136,13 @@ class FootballRewardPicker {
     });
     on(window, 'keydown', event => {
       if (!this.visible || !this.desktop) return;
+      if (this.rerollsLeft && !event.ctrlKey && !event.altKey && !event.metaKey &&
+          (event.code === 'KeyR' || (event.target === this.rerollButton &&
+          (event.code === 'Space' || event.code === 'Enter')))) {
+        event.preventDefault();
+        if (!event.repeat) this.requestReroll();
+        return;
+      }
       const digit = /^(?:Digit|Numpad)([1-3])$/.exec(event.code);
       const index = digit ? Number(digit[1]) - 1 : (event.code === 'Space' || event.code === 'Enter')
         ? this.desktopCards.findIndex(({card}) => card === event.target) : -1;
@@ -140,21 +154,43 @@ class FootballRewardPicker {
     on(window, 'blur', () => this.resetHold());
   }
 
-  show(choices, catalog, controls, score) {
+  show(choices, catalog, controls, score, rerollsLeft = 0) {
     this.hide();
+    this.score = score;
+    this.scoreLabel.textContent = `${score} GOALS`;
+    this.setRoll(choices, catalog, rerollsLeft);
+    this.active = true;
+    this.present(controls);
+  }
+
+  setRoll(choices, catalog, rerollsLeft) {
+    this.commitAt = Infinity;
+    this.resetHold();
     this.choices = choices;
+    this.rerollsLeft = rerollsLeft;
+    this.rerollButton.hidden = !rerollsLeft;
+    this.rerollLabel.textContent = rerollsLeft ? `Reroll · ${rerollsLeft} left` : '';
     this.desktopCards.forEach(({card}, index) => {
       if (choices[index].pinned) card.setAttribute('aria-description', 'This slot continues your selected tree.');
       else card.removeAttribute('aria-description');
     });
     this.reels = choices.map((choice, lane) => makeReel(catalog, choice, lane));
     this.rollDuration = Math.max(...this.reels.map(reel => reel.end));
-    this.score = score;
-    this.scoreLabel.textContent = `${score} GOALS`;
     this.elapsed = 0;
     this.ready = this.rollDuration === 0;
-    this.active = true;
-    this.present(controls);
+    this.paintKey = '';
+  }
+
+  requestReroll(hand = null) {
+    if (!this.visible || !this.ready || !this.rerollsLeft || this.hold || !this.onReroll) return false;
+    this.onReroll(hand);
+    return true;
+  }
+
+  reroll(choices, catalog, rerollsLeft) {
+    this.setRoll(choices, catalog, rerollsLeft);
+    if (this.desktop) this.overlay.focus({preventScroll: true});
+    this.paint();
   }
 
   present(controls) {
@@ -218,6 +254,8 @@ class FootballRewardPicker {
     if (x < 0 || y < 0 || x > WIDTH || y > HEIGHT) return -1;
     this.hitPoint.copy(hand.rayDirection).multiplyScalar(distance).add(hand.rayPosition);
     this.controls.showRay(hand, this.hitPoint);
+    if (this.rerollsLeft && x >= REROLL.x && x <= REROLL.x + REROLL.w &&
+        y >= REROLL.y && y <= REROLL.y + REROLL.h) return REROLL_INDEX;
     return CARDS.findIndex((card,index) => !this.choices[index].closed &&
       x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h);
   }
@@ -237,7 +275,9 @@ class FootballRewardPicker {
       if (holding && (!hand.trigger || index !== this.hold.index)) this.endHold('trigger', name);
       if (hand.trigger) {
         const fresh = this.triggerReady.delete(name);
-        if (fresh && index >= 0) this.beginHold(index, 'trigger', name);
+        if (fresh && index === REROLL_INDEX) {
+          if (this.requestReroll(name)) return;
+        } else if (fresh && index >= 0) this.beginHold(index, 'trigger', name);
       } else this.triggerReady.add(name);
       if (index >= 0 && (this.hover < 0 || this.hold?.id === name)) {
         this.hover = index;
@@ -279,6 +319,7 @@ class FootballRewardPicker {
   }
 
   paintDesktop(states, progress) {
+    this.rerollButton.disabled = !this.rerollsLeft || !this.ready || !!this.hold;
     const hint = this.ready ? 'Hold an available card or its number key.' : 'Rolling abilities…';
     if (this.hint.textContent !== hint) this.hint.textContent = hint;
     this.desktopCards.forEach(({card, status, reel, current, next, info, name, description}, index) => {
@@ -353,6 +394,14 @@ class FootballRewardPicker {
       c.stroke(); c.restore();
     });
     label(c, this.ready ? 'Point at an ability and hold the trigger.' : 'Rolling abilities…', 38, 391, 21, UI.muted, 'left', 550);
+    if (this.rerollsLeft) {
+      const {x,y,w,h} = REROLL;
+      const enabled = this.ready && !this.hold, hot = enabled && this.hover === REROLL_INDEX;
+      shape(c,x,y,w,h,10);
+      c.fillStyle = hot ? '#182e38' : UI.panel; c.fill();
+      c.strokeStyle = hot ? UI.mint : UI.line; c.lineWidth = hot ? 2.5 : 1.5; c.stroke();
+      label(c,`Reroll · ${this.rerollsLeft} left`,x+w/2,y+h/2,23,enabled ? UI.white : UI.muted,'center',700);
+    }
     this.texture.needsUpdate = true;
   }
 
