@@ -1,6 +1,7 @@
 import { FT } from "../../vendor/three.js";
 import { FB } from "../config.js";
 import { FootballShotSurface, outsidePenaltyArea } from './shot-surface.js';
+import { continuesTouchWindow } from '../game/abilities.js';
 
 const SHOT_FOLLOW_THROUGH_SECONDS = .22;
 const MAX_CURL_PACE_BONUS = .08;
@@ -80,6 +81,11 @@ class FootballPhysics {
     const bonus = value => Number.isFinite(value) && value > 0 ? value : 0;
     this.shotStrength = multiplier(effects?.shotStrength);
     this.airShotStrength = multiplier(effects?.airShotStrength);
+    this.instepShotStrength = bonus(effects?.instepShotStrength);
+    this.instepVolleyPace = bonus(effects?.instepVolleyPace);
+    this.touchWindowStrength = bonus(effects?.touchWindowStrength);
+    this.touchWindowEffects = effects;
+    if (!this.touchWindowStrength) this._lastWindowContact = -Infinity;
     this.leftFootShotPace = bonus(effects?.leftFootShotPace);
     this.leftFootCurve = bonus(effects?.leftFootCurve);
     this.openingStrikePace = bonus(effects?.openingStrikePace);
@@ -89,7 +95,9 @@ class FootballPhysics {
     this.baseCurve = multiplier(effects?.curve);
     this.setShotFoot(this.shotFoot);
     this.ball.shotSurface.configure(effects);
-    if (this.shotStrength === 1 && this.airShotStrength === 1 && !this.leftFootShotPace && !this.openingStrikePace && !this.outsideShotPace) {
+    if (this.shotStrength === 1 && this.airShotStrength === 1 && !this.leftFootShotPace &&
+        !this.instepShotStrength && !this.instepVolleyPace && !this.touchWindowStrength &&
+        !this.openingStrikePace && !this.outsideShotPace) {
       this._shotSpeedLimit = 0; this._launchedFoot = null;
     }
   }
@@ -105,9 +113,23 @@ class FootballPhysics {
     this.ball.curvePace = 1;
     this.ball.fromPlayerShot = false;
     this._openingStrike = true;
+    this._lastWindowContact = -Infinity;
+    this._windowContactCount = 0;
+    this._lastWindowGentle = false;
     this.ball.offWoodwork = false;
     this._sawFlight = false;
     this._lastBounceTime = -Infinity;
+  }
+
+  recordWindowContact(gentle) {
+    if (!this.touchWindowStrength) return 0;
+    const gap = this.time - this._lastWindowContact;
+    const prior = continuesTouchWindow(gap, this.touchWindowEffects, gentle, this._lastWindowGentle)
+      ? this._windowContactCount : 0;
+    this._windowContactCount = prior + 1;
+    this._lastWindowContact = this.time;
+    this._lastWindowGentle = gentle;
+    return prior;
   }
 
   redirectPlayerShot(surface) {
@@ -681,9 +703,13 @@ class FootballPhysics {
         event.openingStrike = this._openingStrike;
         this._openingStrike = false;
         const volley = airborne || this.time - this._lastBounceTime <= this.volleyBounceGrace + 1e-9;
-        const strength = this.shotStrength + (volley ? this.airShotStrength - 1 : 0) + (f.id === 'left' ? this.leftFootShotPace : 0);
+        const priorWindowTouches = this.recordWindowContact(false);
+        const strength = this.shotStrength + (volley ? this.airShotStrength - 1 : 0) +
+          (f.id === 'left' ? this.leftFootShotPace : 0) + (event.instep ? this.instepShotStrength : 0) +
+          priorWindowTouches * this.touchWindowStrength;
         const openingScale = 1 + (event.openingStrike ? this.openingStrikePace : 0);
-        const paceScale = openingScale + (outsidePenaltyArea(event.position) ? this.outsideShotPace : 0);
+        const paceScale = openingScale + (outsidePenaltyArea(event.position) ? this.outsideShotPace : 0) +
+          (event.instep && airborne ? this.instepVolleyPace : 0);
         const downward = this._surface.y - (movement?.y ?? 0) < -.65;
         if(strength>1)b.velocity.multiplyScalar(shotStrengthScale(strength,launchSpeed,impulse,drive,approach));
         let limitedRun=false;
@@ -724,7 +750,10 @@ class FootballPhysics {
       b.fromPlayerShot = event.shot === true;
       this.setShotFoot(b.fromPlayerShot ? f.id : null);
     }
-    if (event && !event.shot) event.control = speedSq <= 3.2 ** 2 || drive <= 2.2 || controlPunt > .60;
+    if (event && !event.shot) {
+      event.control = speedSq <= 3.2 ** 2 || drive <= 2.2 || controlPunt > .60;
+      this.recordWindowContact(event.control);
+    }
     if(!continuing&&f.contactPart==='boot'&&approach>cfg.footFirmImpactSpeed&&
       drive>cfg.footStrikeBlendEnd&&drive>surfaceSpeed*.5&&drive/approach>.65&&
       speedSq>cfg.footStrikeBlendEnd**2&&controlPunt<.1){

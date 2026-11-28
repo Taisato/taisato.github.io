@@ -25,6 +25,7 @@ Choose **Settings** in the launcher or in-game menu. Settings opens on **Graphic
 | Setting | Options | Default |
 | --- | --- | --- |
 | Turn speed | 0.25×–4×, in 0.25× steps | 1× |
+| HUD height | Lower or raise the score panel by up to two panel heights, in half-panel steps | Default |
 | VR resolution | 100% (Full), 85%, 70%, 50% | 100% (Full) |
 | Chromatic aberration | On / Off | On |
 | Noise | On / Off | On |
@@ -35,6 +36,8 @@ Choose **Settings** in the launcher or in-game menu. Settings opens on **Graphic
 **Graphics → VR resolution** applies immediately, including during a run. On Quest 3, Full requests an eye buffer large enough to cover the panel in both dimensions while preserving the browser’s eye aspect ratio. A 1680 × 1760 recommendation gives a target of approximately 2108 × 2208 per eye. A larger native size reported by the browser takes priority. If the browser limits its output, the game renders at the higher scene resolution and scales it to the granted buffer. Graphics shows the measured scene dimensions and adds an **XR output** line when those sizes differ. At 70%, the scene uses 70% of the full width and height. The browser saves your preferences when local storage is available.
 
 **Gameplay → Turn speed** affects the right stick, desktop turn keys and horizontal mouse movement. The default is **1×**. Shot Trace is also under Gameplay.
+
+**Gameplay → HUD height** moves the touches, goals and lives panel in both 3 Touch and the Freeroam Ability demo. The default sits one panel lower than before. Choose **+1** for the previous height. Your selection carries over between modes and play sessions.
 
 The two effects are independent. Disabling aberration removes world colour separation, motion-based separation, and the fringe on the HUD, menus and calibration panels. Disabling noise removes animated grain, including behind the menu. Re-enabling either restores its original strength. Menu slow motion works with either effect disabled.
 
@@ -59,6 +62,7 @@ When you bring the ball close under control, the keeper steps out inside the six
 **3 TOUCH** starts each chance with a stationary ball and the player facing the guarded goal. You have three touches and three lives. Opening chances are central, 11–15 metres from the goal line. Scoring gradually introduces longer approaches, tighter angles and a more capable keeper. At 15 goals, starts average about 20.7 metres from the goal line, roughly 4.2 metres outside the penalty area. Starting depth remains bounded at 27 metres.
 
 - Score to regain one life, up to your current life limit, and move to a new chance.
+- The HUD rolls through every point in a goal award. Each number clicks into place, with a rising pitch on multi-point goals. The Freeroam Ability demo uses the same counter.
 - Lose one life when the ball goes out, the keeper secures it, or the final shot fails.
 - The final allowed touch gets time to complete its shot. The next distinct touch loses the chance.
 - By default, contacts less than 0.5 seconds apart count as one continuous sequence across both feet. Every contact still affects the ball normally.

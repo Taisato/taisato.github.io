@@ -94,7 +94,7 @@ class FootballAudio {
     this.rolling=null;this.strongVariant=0;this.netVariant=0;this.seed=3729;
     this.forward=new FT.Vector3();this.up=new FT.Vector3();
     this.listenerPosition=new FT.Vector3(NaN,NaN,NaN);this.listenerOrientation=new FT.Quaternion(0,0,0,0);
-    this.fallbackKick=null;this.fallbackNet=null;this.decoding=null;
+    this.fallbackKick=null;this.fallbackNet=null;this.scoreClick=null;this.decoding=null;
   }
   async start(){
     if(this.disposed)return false;
@@ -120,6 +120,10 @@ class FootballAudio {
         entry.encoded=null;
       }));
       await this.decoding;
+      if(!this.disposed&&!this.scoreClick){
+        const metal=FootballAudio.bank.get('goal_frame_hard_01')?.buffer||this.fallbackKick;
+        this.scoreClick=this.makeScoreClick(metal);
+      }
       return !this.disposed&&this.context.state==='running';
     }catch(error){console.warn('Audio unavailable',error);return false;}
   }
@@ -133,6 +137,24 @@ class FootballAudio {
       kick[i]=edge*(last*.55*Math.exp(-t*80)+Math.sin(2*Math.PI*(130*t-100*t*t))*.55*Math.exp(-t*55));
       net[i]=edge*last*.65*Math.exp(-t*20);
     }
+  }
+  makeScoreClick(recording){
+    // Roll off the impact thud and keep the short metallic ring of the recorded frame.
+    const rate=recording.sampleRate,input=recording.getChannelData(0);
+    const start=Math.min(input.length-1,Math.round(rate*.003));
+    const length=Math.min(input.length-start,Math.ceil(rate*.128));
+    const buffer=this.context.createBuffer(1,length,rate),data=buffer.getChannelData(0);
+    const lowPass=1-Math.exp(-2*Math.PI*1400/rate);
+    let body=input[start],peak=0;
+    for(let i=0;i<length;i++){
+      const t=i/rate,sample=input[start+i];
+      body+=lowPass*(sample-body);
+      const envelope=Math.min(1,t/.0025,(length-1-i)/(rate*.009))*Math.exp(-t/.059);
+      data[i]=(sample-body)*envelope;
+      peak=Math.max(peak,Math.abs(data[i]));
+    }
+    if(peak>0)for(let i=0;i<length;i++)data[i]/=peak;
+    return buffer;
   }
   available(){return !this.disposed&&!this.paused&&this.context?.state==='running';}
   setTimeScale(scale){
@@ -211,7 +233,7 @@ class FootballAudio {
       voice.source.stop(stopAt);
     }else{try{voice.source.stop(now);}catch{}this.finish(voice);}
   }
-  voice(buffer,level,position,rate=1,loop=false,wind=null){
+  voice(buffer,level,position,rate=1,loop=false,wind=null,when){
     if(!this.available()||!buffer||!(level>=0))return null;
     if(wind){
       const previous=this.windVoices.get(wind);if(previous)this.stopVoice(previous,0);
@@ -224,7 +246,8 @@ class FootballAudio {
     gain.gain.value=level;source.connect(gain);if(panner){gain.connect(panner);panner.connect(this.gain);}else gain.connect(this.gain);
     const voice={source,gain,panner,loop,wind,stopping:false,finished:false};this.voices.add(voice);
     if(wind)this.windVoices.set(wind,voice);
-    source.onended=()=>this.finish(voice);source.start(context.currentTime);return voice;
+    source.onended=()=>this.finish(voice);
+    source.start(Number.isFinite(when)?Math.max(context.currentTime,when):context.currentTime);return voice;
   }
   play(id,level,position,rate=1){
     const entry=FootballAudio.bank.get(id);
@@ -260,6 +283,11 @@ class FootballAudio {
     return this.play(id,level,position,this.variation())||!!this.voice(this.fallbackNet,level,position);
   }
   whistle(){return this.available()&&this.play('whistle_start_01',.65,null);}
+  scoreTick(step,total,when){
+    if(!this.available()||!Number.isSafeInteger(step)||!Number.isSafeInteger(total)||step<1||step>total)return false;
+    const semitones=9*(step-1)/Math.max(4,total-1);
+    return !!this.voice(this.scoreClick,.40,null,1.55*2**(semitones/12),false,null,when);
+  }
   updateListener(controls){
     if(!controls?.headWorld||!controls.viewOrientation)return;
     const listener=this.context.listener;

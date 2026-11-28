@@ -38,13 +38,13 @@ const THREE_TOUCH_TREES = Object.freeze([
   ]],
   ['touch-window', 'Touch Window', [
     ['Add 0.5 s to the gap needed to count a new touch.', {touchCooldown: .5}],
-    ['Gentle control uses a 1.25 s touch window.', {gentleTouchCooldown: .25}],
-    ['Once per chance, a soft trap that would use your last touch is free.', {freeLastTrap: 1}]
+    ['Gentle touches open a 1.5 s window for your next touch or shot.', {gentleTouchCooldown: .5}],
+    ['Shots gain 10% power for each earlier touch in the same window.', {touchWindowStrength: .10}]
   ]],
-  ['long-range-bonus', 'Long-Range Bonus', [
-    ['A goal from outside the box adds one touch to your next chance.', {longRangeBonus: 1}],
-    ['Keep that extra touch in reserve until you spend it.', {longRangeBank: 1}],
-    ['Bank up to two extra touches and spend both in one chance.', {longRangeBank: 1}]
+  ['instep', 'Instep Specialist', [
+    ['Instep shots gain 10% shot power.', {instepShotStrength: .10}],
+    ['Instep volleys gain 10% forward pace.', {instepVolleyPace: .10}],
+    ['Score with an instep volley to add one goal.', {instepVolleyGoal: 1}]
   ]],
   ['keeper-setback', 'Keeper Setback', [
     ['Lower the keeper difficulty by five goal levels.', {keeperLevelOffset: 5}],
@@ -90,10 +90,18 @@ const THREE_TOUCH_BASE_EFFECTS = Object.freeze({
   doubleFromDistance: 0, outsideShotPace: 0, distanceProtection: 0,
   lowCurveBounce: 0, grassCutter: 0, grassAirLanding: 0, volleyBounceGrace: 0, volleyDriven: 0,
   woodworkCredit: 0, woodworkCarry: 0, woodworkGoal: 0, recoverySpeedBonus: 0, freeRecoveryTouch: 0,
-  gentleTouchCooldown: 0, freeLastTrap: 0, longRangeBonus: 0, longRangeBank: 0,
+  gentleTouchCooldown: 0, touchWindowStrength: 0,
+  instepShotStrength: 0, instepVolleyPace: 0, instepVolleyGoal: 0,
   keeperReverseDelay: 0, keeperWrongFootParry: 0, lastChance: 0, lastLifeTouch: 0,
   leftFootShotPace: 0, leftFootCurve: 0, leftFootGoalBonus: 0
 });
+
+function continuesTouchWindow(gap, effects, gentle, previousGentle) {
+  const base = effects.touchCooldown ?? THREE_TOUCH_BASE_EFFECTS.touchCooldown;
+  const extension = effects.gentleTouchCooldown ?? 0;
+  const duration = base + (gentle || previousGentle ? extension : 0);
+  return gap < duration - 1e-9;
+}
 
 function normalizeAbilityLevels(levels) {
   const normalized = {};
@@ -123,4 +131,4 @@ function buildAbilityEffects(levels) {
 }
 
 export { THREE_TOUCH_ABILITIES, THREE_TOUCH_TREES, THREE_TOUCH_RARES, THREE_TOUCH_BASE_EFFECTS,
-  normalizeAbilityLevels, buildAbilityEffects, addAbilityEffects };
+  normalizeAbilityLevels, buildAbilityEffects, addAbilityEffects, continuesTouchWindow };

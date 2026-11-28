@@ -19,7 +19,7 @@ import { FootballChallenge } from "./game/challenge.js";
 import { normalizeAbilityLevels } from "./game/abilities.js";
 import { FootballAbilitySwitcher } from "./ui/ability-switcher.js";
 import { FootballAudio } from "./audio.js";
-import { TURN_SPEED, VR_RESOLUTION_OPTIONS, normalizeSettings, readSettings, saveSettings } from "./settings.js";
+import { TURN_SPEED, HUD_HEIGHT, formatHUDHeight, VR_RESOLUTION_OPTIONS, normalizeSettings, readSettings, saveSettings } from "./settings.js";
 
 const PRACTICE_STORAGE = 'first-touch.practice-abilities.v1';
 function readPracticeLevels() {
@@ -71,6 +71,8 @@ class FootballApp {
       'abilities-clear':()=>this.setPracticeLevels({}),
       'turn-down':()=>this.changeSettings({turnSpeed:this.settings.turnSpeed-TURN_SPEED.step}),
       'turn-up':()=>this.changeSettings({turnSpeed:this.settings.turnSpeed+TURN_SPEED.step}),
+      'hud-height-down':()=>this.changeSettings({hudHeight:this.settings.hudHeight-HUD_HEIGHT.step}),
+      'hud-height-up':()=>this.changeSettings({hudHeight:this.settings.hudHeight+HUD_HEIGHT.step}),
       'toggle-chromatic':()=>this.changeSettings({chromatic:!this.settings.chromatic}),
       'toggle-noise':()=>this.changeSettings({noise:!this.settings.noise}),
       'toggle-shot-trace':()=>this.changeSettings({shotTrace:!this.settings.shotTrace}),
@@ -80,6 +82,7 @@ class FootballApp {
     },credits);
     this.calibrationPanel=new FootballCalibrationPanel(this.camera);
     this.hud=new FootballHUD(this.camera);
+    this.onScoreTick=(step,total)=>this.audio.scoreTick(step,total);
     this.rewardPicker=new FootballRewardPicker(this.scene,(id,hand)=>this.chooseReward(id,hand));
     this.optics=new FootballOptics(this.renderer,this.scene,this.camera);
     this.motion=new FootballMotionSources(this.field,this.controls,this.goalkeeper);
@@ -101,6 +104,7 @@ class FootballApp {
       pauseLabel:document.querySelector('#pause-label'),pauseScore:document.querySelector('#pause-score'),
       settings:menuPages.settingsButton,
       turnSpeed:document.querySelector('#turn-speed'),turnSpeedValue:document.querySelector('#turn-speed-value'),
+      hudHeight:document.querySelector('#hud-height'),hudHeightValue:document.querySelector('#hud-height-value'),
       chromatic:document.querySelector('#toggle-chromatic'),noise:document.querySelector('#toggle-noise'),wind:document.querySelector('#toggle-wind'),
       shotTrace:document.querySelector('#toggle-shot-trace'),
       vrResolution:document.querySelector('#vr-resolution'),
@@ -119,6 +123,7 @@ class FootballApp {
     on(this.ui.restart,'click',()=>this.restart());
     on(this.ui.freeroam,'click',()=>this.selectMode('freeroam'));on(this.ui.challenge,'click',()=>this.selectMode('challenge'));
     on(this.ui.turnSpeed,'input',()=>this.changeSettings({turnSpeed:Number(this.ui.turnSpeed.value)}));
+    on(this.ui.hudHeight,'input',()=>this.changeSettings({hudHeight:this.ui.hudHeight.valueAsNumber}));
     on(this.ui.chromatic,'click',()=>this.changeSettings({chromatic:!this.settings.chromatic}));
     on(this.ui.noise,'click',()=>this.changeSettings({noise:!this.settings.noise}));
     on(this.ui.shotTrace,'click',()=>this.changeSettings({shotTrace:!this.settings.shotTrace}));
@@ -193,6 +198,11 @@ class FootballApp {
     this.ui.turnSpeed.value=String(settings.turnSpeed);
     this.ui.turnSpeed.setAttribute('aria-valuetext',settings.turnSpeed+' times');
     this.ui.turnSpeedValue.value=settings.turnSpeed+'×';this.ui.turnSpeedValue.textContent=settings.turnSpeed+'×';
+    this.hud.setHeight(settings.hudHeight);
+    this.ui.hudHeight.value=String(settings.hudHeight);
+    const heightLabel=formatHUDHeight(settings.hudHeight);
+    this.ui.hudHeightValue.value=heightLabel;
+    this.ui.hudHeight.setAttribute('aria-valuetext',heightLabel);
     if(!settings.shotTrace)this.shotTrail.clear();
     for(const [element,enabled]of [[this.ui.chromatic,settings.chromatic],[this.ui.noise,settings.noise],[this.ui.shotTrace,settings.shotTrace]]){
       element.setAttribute('aria-checked',String(enabled));element.textContent=enabled?'On':'Off';
@@ -206,7 +216,7 @@ class FootballApp {
   }
   changeSettings(patch) {
     const next=normalizeSettings({...this.settings,...patch}),old=this.settings;
-    if(next.turnSpeed===old.turnSpeed&&next.chromatic===old.chromatic&&next.noise===old.noise&&
+    if(next.turnSpeed===old.turnSpeed&&next.hudHeight===old.hudHeight&&next.chromatic===old.chromatic&&next.noise===old.noise&&
       next.wind===old.wind&&next.stadium===old.stadium&&next.shotTrace===old.shotTrace&&next.vrResolution===old.vrResolution)return;
     this.settings=next;this.applySettings();saveSettings(next);
   }
@@ -256,6 +266,7 @@ class FootballApp {
     const next=normalizeAbilityLevels(levels),ids=Object.keys(next);
     if(ids.length===Object.keys(this.practiceLevels).length&&ids.every(id=>next[id]===this.practiceLevels[id]))return;
     this.practiceLevels=next;this.hasPracticeAbilities=ids.length>0;
+    if(!this.hasPracticeAbilities)this.hud.resetScore();
     this.abilitySwitcher.setLevels(this.practiceLevels);
     this.interface.setAbilityLevels(this.practiceLevels);
     try {localStorage.setItem(PRACTICE_STORAGE,JSON.stringify(this.practiceLevels));} catch {}
@@ -400,7 +411,7 @@ class FootballApp {
     return alpha+lead*free*free*(3-2*free);
   }
   clearChallengePresentation() {
-    this.hud.hide();this.rewardPicker.hide();this.shotTrail.clear();this.rewardAwaitRelease=false;
+    this.hud.resetScore();this.hud.hide();this.rewardPicker.hide();this.shotTrail.clear();this.rewardAwaitRelease=false;
   }
   applyChallengeEffects() {
     const effects=this.activeRules?.effects;
@@ -451,6 +462,7 @@ class FootballApp {
     this.motion.reset();
     this.audio.resetBall();
     this.shotTrail.clear();
+    if(this.practice.phase==='gameover')this.hud.resetScore();
     const retry=this.hasPracticeAbilities&&this.practice.active&&this.practice.outcome==='retry';
     if(retry){
       this.controls.place(this.practicePlayer,this.practiceYaw);
@@ -620,7 +632,10 @@ class FootballApp {
           if(rules){
             this.modeInput.previous=this.ballBefore;
             const result=rules.update(FB.fixedStep,this.modeInput);
-            if(result){this.interface.setState(this.snapshot);this.syncPage();}
+            if(result){
+              if(result==='goal')this.hud.awardGoal(rules.snapshot);
+              this.interface.setState(this.snapshot);this.syncPage();
+            }
             if(this.mode==='challenge'&&rules.phase==='gameover'&&!this.menu){this.setMenu(true);this.accumulator-=FB.fixedStep;break;}
           }
           this.accumulator-=FB.fixedStep;
@@ -647,7 +662,7 @@ class FootballApp {
       this.netVisual.render(worldBlocked?1:alpha);
       this.calibrationPanel.update(this.controls,this.active&&!this.menu);
       const rewardInteractive=!worldBlocked&&!this.menu&&!pointedMenu;
-      if(this.mode==='challenge'&&this.challenge.phase==='result'&&rewardInteractive){
+      if(this.mode==='challenge'&&this.challenge.phase==='result'&&rewardInteractive&&!this.hud.scoreRolling){
         if(this.challenge.rewardDue){
           if(this.challenge.resultAge>=.85)this.openReward();
         }else if(this.challenge.resultAge>=1.6){
@@ -657,7 +672,7 @@ class FootballApp {
       }
       if(this.rewardActive)this.rewardPicker.update(dt,this.controls,rewardInteractive);
       this.hud.update(this.hudSnapshot,!worldBlocked&&!this.menu&&!this.rewardActive,this.controls.desktop,
-        this.renderer.xr.isPresenting?this.renderer.xr.getCamera():this.camera);
+        this.renderer.xr.isPresenting?this.renderer.xr.getCamera():this.camera,dt,this.onScoreTick);
     }else{
       for(const hand of this.controls.hands){hand.visual.root.visible=false;hand.ray.visible=false;}
       this.calibrationPanel.hide();

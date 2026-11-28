@@ -1,6 +1,6 @@
 import { FT } from "../../vendor/three.js";
 import {SKY_OPTIONS} from '../config.js';
-import {DEFAULT_SETTINGS,VR_RESOLUTION_OPTIONS} from '../settings.js';
+import {DEFAULT_SETTINGS,HUD_HEIGHT,VR_RESOLUTION_OPTIONS,formatHUDHeight,normalizeHUDHeight} from '../settings.js';
 import {UI,panel,label,tracked,brand,heart,touch,pitch,button,shape} from './theme.js';
 import {createOpticalMaterial} from '../render/optics.js';
 import {drawAbilitySwitcher,VR_PAGES} from './ability-switcher.js';
@@ -30,12 +30,13 @@ class FootballInterface {
  setState(snapshot){this.snapshot={...snapshot};const key=[snapshot.mode,snapshot.phase,snapshot.score].join('|');if(key===this.stateKey)return;this.stateKey=key;if(this.visible)this.drawMenu();}
  setSettings(settings={}){
   const next={turnSpeed:Number.isFinite(settings.turnSpeed)?Math.max(.25,Math.min(4,settings.turnSpeed)):this.settings.turnSpeed,
+   hudHeight:Number.isFinite(settings.hudHeight)?normalizeHUDHeight(settings.hudHeight):this.settings.hudHeight,
    vrResolution:VR_RESOLUTION_OPTIONS.some(option=>option.scale===settings.vrResolution)?settings.vrResolution:this.settings.vrResolution,
    chromatic:typeof settings.chromatic==='boolean'?settings.chromatic:this.settings.chromatic,noise:typeof settings.noise==='boolean'?settings.noise:this.settings.noise,
    shotTrace:typeof settings.shotTrace==='boolean'?settings.shotTrace:this.settings.shotTrace,
    wind:settings.wind==='normal'||settings.wind==='heavy'?settings.wind:this.settings.wind,
    stadium:SKY_OPTIONS.some(option=>option.id===settings.stadium)?settings.stadium:this.settings.stadium};
-  const key=[next.turnSpeed,next.vrResolution,next.chromatic,next.noise,next.shotTrace,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
+  const key=[next.turnSpeed,next.hudHeight,next.vrResolution,next.chromatic,next.noise,next.shotTrace,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
   if(this.visible&&this.page==='settings')this.drawMenu();
  }
  setRenderSize(width,height,rightWidth=width,rightHeight=height,leftViewport,rightViewport){
@@ -86,12 +87,15 @@ class FootballInterface {
     this.buttons.push({id:'stadium-prev',label:'‹',x:470,y:434,w:78,h},{id:'stadium-next',label:'›',x:834,y:434,w:78,h});
    }
   }else if(this.category==='gameplay'){
-   label(c,'Turn speed',48,241,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,241,36,UI.white,'center',800);
-   label(c,'Shot Trace',48,320,28);label(c,'Shows each shot’s path for 2.5 seconds.',48,352,21,UI.muted);
-   this.buttons.push({id:'turn-down',label:'−',x:492,y:212,w:112,h,disabled:s.turnSpeed<=.25},
-    {id:'turn-up',label:'+',x:800,y:212,w:112,h,disabled:s.turnSpeed>=4},
-    {id:'toggle-shot-trace',label:s.shotTrace?'On':'Off',x:720,y:305,w:192,h,on:s.shotTrace});
-   if(freeroam)this.buttons.push({id:'abilities',label:'Abilities',x:48,y:400,w:864,h});
+   label(c,'Turn speed',48,230,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,230,36,UI.white,'center',800);
+   label(c,'HUD height',48,305,28);label(c,formatHUDHeight(s.hudHeight),702,305,30,UI.white,'center',750);
+   label(c,'Shot Trace',48,365,28);label(c,'Shows each shot’s path for 2.5 seconds.',48,397,21,UI.muted);
+   this.buttons.push({id:'turn-down',label:'−',x:492,y:201,w:112,h,disabled:s.turnSpeed<=.25},
+    {id:'turn-up',label:'+',x:800,y:201,w:112,h,disabled:s.turnSpeed>=4},
+    {id:'hud-height-down',label:'Lower',x:492,y:276,w:112,h,disabled:s.hudHeight<=HUD_HEIGHT.min},
+    {id:'hud-height-up',label:'Higher',x:800,y:276,w:112,h,disabled:s.hudHeight>=HUD_HEIGHT.max},
+    {id:'toggle-shot-trace',label:s.shotTrace?'On':'Off',x:720,y:351,w:192,h,on:s.shotTrace});
+   if(freeroam)this.buttons.push({id:'abilities',label:'Abilities',x:48,y:431,w:864,h});
   }else{
    label(c,'Wind',48,241,28);
    this.buttons.push({id:'toggle-wind',label:s.wind==='heavy'?'Heavy':'Normal',x:720,y:212,w:192,h,on:true},

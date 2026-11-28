@@ -2,6 +2,8 @@
 
 All 15 supplied recordings are included and connected. The original MP3 bytes are preserved; files were given consistent names. Audio uses `assets/audio/manifest.json`.
 
+The score counter uses the goal-frame recording with a softer attack and a short metallic ring. Successive ticks in a multi-point award rise in pitch.
+
 ## Installed files
 
 Every destination below is inside **`assets/audio/`**.
