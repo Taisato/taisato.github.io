@@ -1,6 +1,6 @@
 import { FB, footballClamp, KEEPER_PEAK_LEVEL } from '../config.js';
 import { outsidePenaltyArea } from '../physics/shot-surface.js';
-import { THREE_TOUCH_BASE_EFFECTS, addAbilityEffects, buildAbilityEffects, normalizeAbilityLevels } from './abilities.js';
+import { THREE_TOUCH_BASE_EFFECTS, addAbilityEffects, buildAbilityEffects, continuesTouchWindow, normalizeAbilityLevels } from './abilities.js';
 import { abilityReelPool, draftAbilityChoices, emptyAbilitySlots } from './ability-draft.js';
 
 const EMPTY_REWARDS=Object.freeze([]);
@@ -15,7 +15,7 @@ class FootballChallenge {
     this.active=false;this.phase='idle';this.score=0;this.lives=3;this.touches=3;
     this.round=0;this.outcome=null;this.resultAge=0;this.chance=null;this.goalValue=0;
     this.time=0;this.lastTouchTime=0;this.settledAge=0;this.saveStoppedAge=0;
-    this.savePending=false;this._lastPhysicalTouchTime=-Infinity;
+    this.savePending=false;this._lastPhysicalTouchTime=-Infinity;this._lastTouchGentle=false;
     this._motion=null;this._motionObserved=false;
     this.effects={...THREE_TOUCH_BASE_EFFECTS};
     this._practiceLevels={};
@@ -72,8 +72,8 @@ class FootballChallenge {
   start() {
     Object.assign(this.effects,this.drafts?THREE_TOUCH_BASE_EFFECTS:buildAbilityEffects(this._practiceLevels));
     this.rewardSlots=emptyAbilitySlots();this.rewardChoices=EMPTY_REWARDS;this._acceptedRewards=0;
-    this._chanceBonusTouches=0;this._nextLongRangeTouches=0;this._nextWoodworkTouches=0;
-    this._longRangeBank=0;this._lastChanceRetries=0;this._distanceProtected=false;
+    this._chanceBonusTouches=0;this._nextWoodworkTouches=0;
+    this._lastChanceRetries=0;this._distanceProtected=false;
     this._practiceLifeCredit=this.maxLives;
     this.active=true;this.score=0;this.lives=this.maxLives;this.round=0;this.time=0;
     this.chance=null;
@@ -110,7 +110,7 @@ class FootballChallenge {
   stop() {
     this.active=false;this.phase='idle';this.outcome=null;this.resultAge=0;
     this.rewardChoices=EMPTY_REWARDS;
-    this._motion=null;this._motionObserved=false;this._lastPhysicalTouchTime=-Infinity;
+    this._motion=null;this._motionObserved=false;this._lastPhysicalTouchTime=-Infinity;this._lastTouchGentle=false;
   }
 
   _random() {
@@ -149,29 +149,24 @@ class FootballChallenge {
 
   _prepareChance() {
     this.round++;
-    this._chanceFixedTouches=this.effects.woodworkCarry?this._nextWoodworkTouches:0;
+    this._chanceWoodworkTouches=this.effects.woodworkCarry?this._nextWoodworkTouches:0;
     this._nextWoodworkTouches=0;
-    if(this.effects.longRangeBank){
-      this._longRangeBank=Math.min(this.effects.longRangeBank,this._longRangeBank+this._nextLongRangeTouches);
-    }else if(this.effects.longRangeBonus)this._chanceFixedTouches+=this._nextLongRangeTouches;
-    this._nextLongRangeTouches=0;
     this._resetAttempt();
   }
 
   _resetAttempt() {
-    this._chanceBankGranted=Math.min(this._longRangeBank,this.effects.longRangeBank);
-    this._chanceBankSpent=0;
     const lastLifeTouch=this.lives===1?this.effects.lastLifeTouch:0;
-    this._chanceBonusTouches=this._chanceFixedTouches+this._chanceBankGranted+lastLifeTouch;
+    this._chanceBonusTouches=this._chanceWoodworkTouches+lastLifeTouch;
     this._practiceTouchCredit=this.effects.maxTouches;
     this.touches=this.maxTouches;this.phase='ready';this.outcome=null;this.resultAge=0;
     this.goalValue=0;
     this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
-    this._physicalTouches=0;this._woodworkUsed=false;this._lastTouchOutsideBox=false;this._shotDistance=0;
+    this._physicalTouches=0;this._lastTouchLeft=false;this._woodworkUsed=false;this._lastTouchOutsideBox=false;this._shotDistance=0;
+    this._lastTouchInstepVolley=false;
     this._lastFrameEnd=0;this._directOutsideShot=false;
     this._firstTimeQualified=false;this._firstTimeRescueUsed=false;this._firstTimeParryUntil=-Infinity;
-    this._recoveryUntil=-Infinity;this._recoveryTouchUsed=false;this._lastTrapUsed=false;
-    this._lastPhysicalTouchTime=-Infinity;this._motion=null;this._motionObserved=false;
+    this._recoveryUntil=-Infinity;this._recoveryTouchUsed=false;
+    this._lastPhysicalTouchTime=-Infinity;this._lastTouchGentle=false;this._motion=null;this._motionObserved=false;
   }
 
   _crossing(from,to,plane) {
@@ -202,12 +197,17 @@ class FootballChallenge {
   _touch(event) {
     const time=Number.isFinite(event.time)?event.time:this.time;
     const gap=time-this._lastPhysicalTouchTime;
+    const gentle=!event.shot&&(event.control??(Number.isFinite(event.speed)&&event.speed<=2.2));
+    const inWindow=continuesTouchWindow(gap,this.effects,gentle,this._lastTouchGentle);
     // The required gap is shared by both feet. Every physical contact slides
     // the window forward, including contacts in the same touch sequence.
-    this._lastPhysicalTouchTime=time;
+    this._lastPhysicalTouchTime=time;this._lastTouchGentle=gentle;
     this.lastTouchTime=this.time;this.settledAge=0;this.saveStoppedAge=0;this.savePending=false;
     this.phase='live';
     this._physicalTouches++;
+    // The latest ball contact owns the finish, even during the touch cooldown.
+    this._lastTouchLeft=event.footId==='left';
+    this._lastTouchInstepVolley=event.shot===true&&event.instep===true&&event.airborne===true;
     const isAirborne=event.airborne??(event.position?.y>FB.ballRadius+.05);
     const parryFinish=this.effects.firstTimeParry&&event.shot&&isAirborne&&this.time<=this._firstTimeParryUntil;
     this._firstTimeQualified=!!event.shot&&(this._physicalTouches===1||!!parryFinish);
@@ -219,20 +219,12 @@ class FootballChallenge {
     this._shotDistance=this._lastTouchOutsideBox?Math.hypot(point.x,point.z+FB.halfLength):0;
     this._directOutsideShot=this._lastTouchOutsideBox&&!!event.shot;
     this._lastFrameEnd=0;
-    const gentle=!event.shot&&(event.control??(Number.isFinite(event.speed)&&event.speed<=2.2));
-    const cooldown=this.effects.touchCooldown+(gentle?this.effects.gentleTouchCooldown:0);
-    if(gap<cooldown-1e-9)return false;
+    if(inWindow)return false;
     if(this.effects.freeRecoveryTouch&&!this._recoveryTouchUsed&&this.time<this._recoveryUntil){
       this._recoveryTouchUsed=true;
       return false;
     }
-    if(gentle&&this.effects.freeLastTrap&&!this._lastTrapUsed&&this.touches===1){
-      this._lastTrapUsed=true;
-      return false;
-    }
     if(this.touches===0)return true;
-    const bankUnspent=this._chanceBankGranted-this._chanceBankSpent;
-    if(this.touches<=bankUnspent){this._chanceBankSpent++;this._longRangeBank--;}
     this.touches--;
     return false;
   }
@@ -266,10 +258,11 @@ class FootballChallenge {
       const firstTime=this.effects.firstTimeFinish&&this._firstTimeQualified;
       const distance=this.effects.doubleFromDistance&&this._lastTouchOutsideBox;
       const woodwork=this.effects.woodworkGoal&&offWoodwork;
-      this.goalValue=1+Number(!!firstTime)+Number(!!distance)+Number(!!woodwork);
+      const leftFoot=this.effects.leftFootGoalBonus&&this._lastTouchLeft;
+      const instepVolley=this.effects.instepVolleyGoal&&this._lastTouchInstepVolley;
+      this.goalValue=1+Number(!!firstTime)+Number(!!distance)+Number(!!woodwork)+Number(!!leftFoot)+Number(!!instepVolley);
       this.score+=this.goalValue;
       this.lives=Math.min(this.maxLives,this.lives+1);
-      this._nextLongRangeTouches=this._lastTouchOutsideBox?this.effects.longRangeBonus:0;
       if(this.effects.distanceProtection&&this._shotDistance>=DISTANCE_BANK_METERS)this._distanceProtected=true;
     }else if(outcome==='out'&&this._directOutsideShot&&this.effects.distanceProtection&&this._distanceProtected){
       this._distanceProtected=false;outcome='retry';

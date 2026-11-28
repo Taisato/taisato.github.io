@@ -150,7 +150,7 @@ class FootballApp {
     on(this.renderer.domElement,'click',()=>{
       if(this.active&&this.controls.desktop&&!this.menu&&!this.rewardActive){
         if(document.pointerLockElement!==this.renderer.domElement)this.renderer.domElement.requestPointerLock?.();
-        else if(this.controls.kickAge>.7)this.controls.kickAge=0;
+        else if(this.controls.kickAge>.7)this.controls.kickDesktop('right');
       }
     });
     on(window,'mousemove',event=>{

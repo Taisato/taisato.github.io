@@ -78,7 +78,7 @@ Lilac outlines identify pinned upgrades. Rare upgrades have a gold outline with 
 
 Each draft with an open slot has a 20% chance to offer one rare upgrade. **1 Life Slot** adds a slot and restores one life, **Extra Touch** adds a touch per chance, and **Power Strike** adds 10% shot strength. Picking a rare leaves its slot open, and repeat picks stack.
 
-First-Time Finish I, Double From Distance I, Woodwork Credit III and Left foot maestro III each add one goal for a qualifying finish. With all four equipped in Freeroam, a first-time left-foot goal from outside the box that goes in off the woodwork counts for five. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime.
+First-Time Finish I, Double From Distance I, Woodwork Credit III, Left foot maestro III and Instep Specialist III each add one goal for a qualifying finish. An airborne left-foot instep goal with both foot specialties mastered counts for three. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime.
 
 | Tree | Phase I | Phase II | Phase III |
 | --- | --- | --- | --- |
@@ -89,13 +89,15 @@ First-Time Finish I, Double From Distance I, Woodwork Credit III and Left foot m
 | Volley Boost | Airborne strikes gain 25% shot strength. | Keep the volley bonus for 0.25 s after a bounce. | Downward volleys retain more forward pace. |
 | Woodwork Credit | The first post or bar hit each chance refunds one touch. | A shot out directly off the frame costs a life but carries one touch to the next chance. | A goal scored off a post or the crossbar adds one goal. |
 | Quick Feet | Move 10% faster. | Move 25% faster for 2 s after a frame hit or keeper parry. | Your first recovery touch is free once per chance. |
-| Touch Window | Add 0.5 s to the gap needed to count a new touch. | Gentle control uses a 1.25 s touch window. | Once per chance, a soft trap that would use your last touch is free. |
-| Long-Range Bonus | A goal from outside the box adds one touch to your next chance. | Keep that extra touch in reserve until you spend it. | Bank up to two extra touches and spend both in one chance. |
+| Touch Window | Add 0.5 s to the gap needed to count a new touch. | Gentle touches open a 1.5 s window for your next touch or shot. | Shots gain 10% power for each earlier touch in the same window. |
+| Instep Specialist | Instep shots gain 10% shot power. | Instep volleys gain 10% forward pace. | Score with an instep volley to add one goal. |
 | Keeper Setback | Lower the keeper difficulty by five goal levels. | The keeper takes 0.12 s longer to reverse after committing. | Once per chance, a wrong-footed keeper parries a ball they would have caught. |
 | Last Chance | Once per run, a miss on your last life gives a same-spot retry. | Start a chance or retry on your last life with one extra touch. | Your run can use two retries in total. |
 | Left foot maestro | Left-foot strikes gain 25% shot power. | Left-foot shots gain 25% sideways curve. | Score with your left foot to add one goal. |
 
-On desktop, press **Q** to kick with the left foot. **Space** or a click kicks with the right. In VR, use the corresponding tracked boot.
+Touch Window counts separate contacts from either foot. At phase III, two quick setup taps give the following shot 20% extra power. Holding a boot against the ball counts as one contact. A gap of 1.5 seconds after gentle control, or 1 second between firm contacts, starts a fresh count.
+
+On desktop, press **Q** to kick with the left foot. **Space** or a click kicks with the right. Hold **E** for an instep. In VR, use the corresponding tracked boot and squeeze its trigger past halfway for an instep. An instep volley connects while the ball is airborne.
 
 Quick Feet increases movement speed. Its extra run-up speed can add up to 10% to the forward pace of a shot compared with the same swing and contact at ordinary running speed. A stationary swing gets no extra pace from Quick Feet.
 

@@ -29,7 +29,7 @@ class FootballControls {
     this.poseValid=false;this.desktop=false;this.desktopPitch=-.45;
     this.poseInverse=new FT.Quaternion();this.poseVector=new FT.Vector3();
     this.trackingHoldSeconds=.12;
-    this.keys=new Set();this.kickAge=10;
+    this.keys=new Set();this.kickAge=10;this.kickFoot='right';
     this._xrMenuSession=null;this._xrMenuSelections=new Map();
     this._onXRMenuSelectStart=({inputSource:source})=>{
       if(!this.calibrationPaused||source?.hand||source?.targetRayMode!=='tracked-pointer')return;
@@ -386,6 +386,9 @@ class FootballControls {
       hand.visual.setLength(hand.length);hand.visualProfile=hand.profile;
     }
   }
+  kickDesktop(foot) {
+    this.kickFoot=foot;this.kickAge=0;
+  }
   sampleDesktop(dt) {
     this.poseValid=true;const key=k=>this.keys.has(k);
     this.left.x=(key('KeyD')?1:0)-(key('KeyA')?1:0);
@@ -394,12 +397,12 @@ class FootballControls {
     const length=Math.hypot(this.left.x,this.left.y);if(length>1){this.left.x/=length;this.left.y/=length;}
     this.sprint=key('ShiftLeft')||key('ShiftRight');
     this.kickAge+=dt;
-    if(key('Space')&&this.kickAge>1)this.kickAge=0;
+    if(this.kickAge>1&&(key('KeyQ')||key('Space')))this.kickDesktop(key('KeyQ')?'left':'right');
     const a=this.kickAge,phase=footballClamp(a/.18,0,1);
     for(const hand of this.hands){
       hand.tracked=true;hand.contactTracked=true;hand.rayTracked=true;hand.poseMode='desktop';hand.localOrientation.identity();hand.rayLocalOrientation.identity();
       const right=hand.name==='right',baseX=right?.16:-.16;
-      const active=right&&a<.34;
+      const active=hand.name===this.kickFoot&&a<.34;
       const swing=active?(a<.18?-.62+phase*1.3:.68-(a-.18)*4.25):0;
       hand.localPosition.set(baseX,1.02+(active?Math.max(0,Math.sin(phase*Math.PI))*.16:0),-.17-swing);
       hand.instep=key('KeyE');hand.instepInput=Number(hand.instep);
