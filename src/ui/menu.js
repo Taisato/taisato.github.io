@@ -1,9 +1,9 @@
 import { FT } from "../../vendor/three.js";
 import {SKY_OPTIONS} from '../config.js';
-import {DEFAULT_SETTINGS,VR_RESOLUTION_OPTIONS} from '../settings.js';
+import {DEFAULT_SETTINGS,HUD_HEIGHT,VR_RESOLUTION_OPTIONS,formatHUDHeight,normalizeHUDHeight} from '../settings.js';
 import {UI,panel,label,tracked,brand,heart,touch,pitch,button,shape} from './theme.js';
 import {createOpticalMaterial} from '../render/optics.js';
-import {drawAbilitySwitcher,VR_PAGES} from './ability-switcher.js';
+import {abilityPages,BASE_TREES,drawAbilitySwitcher,drawUnlockMark,UNLOCK_GOLD} from './ability-switcher.js';
 
 function eyeDimensions(width,height,rightWidth,rightHeight){
  const left=width+' × '+height;
@@ -17,7 +17,8 @@ class FootballInterface {
   this.callbacks=callbacks;this.credits=credits;this.hover=null;this.visible=false;this.snapshot={mode:'freeroam',phase:'ready',score:0};this.stateKey='';
   this.page='main';this.category='graphics';this.settings=DEFAULT_SETTINGS;this.settingsKey='';
   this.renderSize={};this.renderSizeLabel='';this.outputSizeLabel='';
-  this.abilityLevels={};this.abilityPage=0;
+  this.abilityLevels={};this.abilityPage=0;this.abilityPages=abilityPages(BASE_TREES);
+  this.highScore=0;this.unseen=new Set();this.highlights=new Set();
   this.canvas=document.createElement('canvas');this.canvas.width=960;this.canvas.height=660;this.ctx=this.canvas.getContext('2d');this.texture=new FT.CanvasTexture(this.canvas);
   this.texture.colorSpace=FT.SRGBColorSpace;this.texture.generateMipmaps=false;this.texture.minFilter=FT.LinearFilter;this.width=1.32;this.height=.9075;
   this.root=new FT.Mesh(new FT.PlaneGeometry(this.width,this.height),createOpticalMaterial(this.texture,{strength:.5}));this.root.visible=false;this.root.frustumCulled=false;this.root.renderOrder=90;scene.add(this.root);
@@ -30,12 +31,13 @@ class FootballInterface {
  setState(snapshot){this.snapshot={...snapshot};const key=[snapshot.mode,snapshot.phase,snapshot.score].join('|');if(key===this.stateKey)return;this.stateKey=key;if(this.visible)this.drawMenu();}
  setSettings(settings={}){
   const next={turnSpeed:Number.isFinite(settings.turnSpeed)?Math.max(.25,Math.min(4,settings.turnSpeed)):this.settings.turnSpeed,
+   hudHeight:Number.isFinite(settings.hudHeight)?normalizeHUDHeight(settings.hudHeight):this.settings.hudHeight,
    vrResolution:VR_RESOLUTION_OPTIONS.some(option=>option.scale===settings.vrResolution)?settings.vrResolution:this.settings.vrResolution,
    chromatic:typeof settings.chromatic==='boolean'?settings.chromatic:this.settings.chromatic,noise:typeof settings.noise==='boolean'?settings.noise:this.settings.noise,
    shotTrace:typeof settings.shotTrace==='boolean'?settings.shotTrace:this.settings.shotTrace,
    wind:settings.wind==='normal'||settings.wind==='heavy'?settings.wind:this.settings.wind,
    stadium:SKY_OPTIONS.some(option=>option.id===settings.stadium)?settings.stadium:this.settings.stadium};
-  const key=[next.turnSpeed,next.vrResolution,next.chromatic,next.noise,next.shotTrace,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
+  const key=[next.turnSpeed,next.hudHeight,next.vrResolution,next.chromatic,next.noise,next.shotTrace,next.wind,next.stadium].join('|');if(key===this.settingsKey)return;this.settingsKey=key;this.settings=next;
   if(this.visible&&this.page==='settings')this.drawMenu();
  }
  setRenderSize(width,height,rightWidth=width,rightHeight=height,leftViewport,rightViewport){
@@ -58,10 +60,21 @@ class FootballInterface {
   const next=['settings','credits','abilities'].includes(page)?page:'main';
   if(next===this.page&&category===this.category)return;
   this.page=next;this.category=category;this.hover=null;this.reticle.visible=false;this.reticleCore.visible=false;
-  if(next==='abilities')this.abilityPage=0;
+  this.highlights.clear();
+  if(next==='abilities'){
+   this.highlights=new Set(this.unseen);
+   this.abilityPage=Math.max(0,this.abilityPages.findIndex(list=>list.some(tree=>this.unseen.has(tree.id))));
+  }
   if(this.visible)this.drawMenu();
  }
  setAbilityLevels(levels){this.abilityLevels=levels;if(this.visible&&this.page==='abilities')this.drawMenu();}
+ setProgression(highScore,trees,unseenIds){
+  this.highScore=highScore;this.abilityPages=abilityPages(trees);
+  this.abilityPage=Math.min(this.abilityPage,this.abilityPages.length-1);
+  this.unseen=new Set(unseenIds);
+  if(this.page==='abilities')for(const id of this.unseen)this.highlights.add(id);
+  if(this.visible)this.drawMenu();
+ }
  drawSettings(){
   const c=this.ctx,s=this.settings;panel(c,960,660);brand(c,48,58);tracked(c,'SETTINGS',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
   const freeroam=this.snapshot.mode==='freeroam',h=58;
@@ -86,12 +99,15 @@ class FootballInterface {
     this.buttons.push({id:'stadium-prev',label:'‹',x:470,y:434,w:78,h},{id:'stadium-next',label:'›',x:834,y:434,w:78,h});
    }
   }else if(this.category==='gameplay'){
-   label(c,'Turn speed',48,241,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,241,36,UI.white,'center',800);
-   label(c,'Shot Trace',48,320,28);label(c,'Shows each shot’s path for 2.5 seconds.',48,352,21,UI.muted);
-   this.buttons.push({id:'turn-down',label:'−',x:492,y:212,w:112,h,disabled:s.turnSpeed<=.25},
-    {id:'turn-up',label:'+',x:800,y:212,w:112,h,disabled:s.turnSpeed>=4},
-    {id:'toggle-shot-trace',label:s.shotTrace?'On':'Off',x:720,y:305,w:192,h,on:s.shotTrace});
-   if(freeroam)this.buttons.push({id:'abilities',label:'Abilities',x:48,y:400,w:864,h});
+   label(c,'Turn speed',48,230,28);label(c,s.turnSpeed.toFixed(2).replace(/\.?0+$/,'')+'×',702,230,36,UI.white,'center',800);
+   label(c,'HUD height',48,305,28);label(c,formatHUDHeight(s.hudHeight),702,305,30,UI.white,'center',750);
+   label(c,'Shot Trace',48,365,28);label(c,'Shows each shot’s path for 2.5 seconds.',48,397,21,UI.muted);
+   this.buttons.push({id:'turn-down',label:'−',x:492,y:201,w:112,h,disabled:s.turnSpeed<=.25},
+    {id:'turn-up',label:'+',x:800,y:201,w:112,h,disabled:s.turnSpeed>=4},
+    {id:'hud-height-down',label:'Lower',x:492,y:276,w:112,h,disabled:s.hudHeight<=HUD_HEIGHT.min},
+    {id:'hud-height-up',label:'Higher',x:800,y:276,w:112,h,disabled:s.hudHeight>=HUD_HEIGHT.max},
+    {id:'toggle-shot-trace',label:s.shotTrace?'On':'Off',x:720,y:351,w:192,h,on:s.shotTrace});
+   if(freeroam)this.buttons.push({id:'abilities',label:'Abilities',x:48,y:431,w:864,h});
   }else{
    label(c,'Wind',48,241,28);
    this.buttons.push({id:'toggle-wind',label:s.wind==='heavy'?'Heavy':'Normal',x:720,y:212,w:192,h,on:true},
@@ -99,6 +115,11 @@ class FootballInterface {
   }
   this.buttons.push({id:'settings-back',label:'Back',x:48,y:527,w:864,h:62});
   for(const b of this.buttons){c.save();if(b.disabled)c.globalAlpha=.32;button(c,b,{selected:b.category===this.category,primary:b.on||b.id==='settings-back',hover:!b.disabled&&this.hover===b.id});c.restore();}
+  if(this.category==='gameplay'&&freeroam&&this.unseen.size){
+   const b=this.buttons.find(item=>item.id==='abilities');
+   shape(c,b.x,b.y,b.w,b.h,12);c.strokeStyle=UNLOCK_GOLD;c.lineWidth=2.5;c.stroke();
+   drawUnlockMark(c,b.x+b.w-32,b.y+b.h/2);
+  }
   label(c,'Trigger  Select',48,615,20,UI.muted);label(c,'Y  Menu',912,615,20,UI.muted,'right');this.texture.needsUpdate=true;
  }
  drawCredits(){
@@ -128,18 +149,33 @@ class FootballInterface {
   if(this.page==='settings'){this.drawSettings();return;}
   if(this.page==='credits'){this.drawCredits();return;}
   if(this.page==='abilities'){
-   this.buttons=drawAbilitySwitcher(this.ctx,this.abilityPage,this.abilityLevels,this.hover);
-   this.texture.needsUpdate=true;return;
+   this.buttons=drawAbilitySwitcher(this.ctx,this.abilityPages,this.abilityPage,this.abilityLevels,this.hover,this.highlights);
+   this.texture.needsUpdate=true;
+   if(this.visible){
+    const seen=this.abilityPages[this.abilityPage].filter(tree=>this.unseen.delete(tree.id)).map(tree=>tree.id);
+    if(seen.length)this.callbacks['abilities-seen']?.(seen);
+   }
+   return;
   }
   const c=this.ctx,s=this.snapshot,over=s.mode==='challenge'&&s.phase==='gameover';panel(c,960,660);brand(c,48,58);tracked(c,s.mode==='challenge'?'3 TOUCH':'FREEROAM',724,58,18,UI.mint,2);c.fillStyle=UI.line;c.fillRect(48,106,864,1);
-  if(over)tracked(c,'RUN OVER',48,153,21,UI.lilac,3);
-  if(s.mode==='challenge'){label(c,String(s.score||0),912,149,54,UI.white,'right',800);label(c,'GOALS',822,151,18,UI.muted,'right');}
+  if(over){tracked(c,'RUN OVER',48,139,21,UI.lilac,3);label(c,'High score '+this.highScore,48,170,22,UI.muted);}
+  if(s.mode==='challenge'){
+   const score=String(s.score||0);
+   label(c,score,912,149,score.length>8?36:54,UI.white,'right',800);
+   label(c,'GOALS',912-c.measureText(score).width-14,151,18,UI.muted,'right');
+  }
   const resumeY=s.mode==='freeroam'?138:196;
   this.buttons=[{id:over?'restart':'resume',label:over?'Again':'Resume',x:48,y:resumeY,w:864,h:284-resumeY},{id:'freeroam',label:'Freeroam',x:48,y:310,w:420,h:154},{id:'challenge',label:'3 TOUCH',x:492,y:310,w:420,h:154}];
   button(c,this.buttons[0],{primary:true,hover:this.hover===this.buttons[0].id});
   for(const b of this.buttons.slice(1)){
    const selected=s.mode===b.id;shape(c,b.x,b.y,b.w,b.h,14);c.fillStyle=this.hover===b.id?'#263653':selected?'#153630':UI.panel;c.fill();c.strokeStyle=selected?UI.mint:this.hover===b.id?'#7b90b1':UI.line;c.lineWidth=selected?2.5:1.5;c.stroke();label(c,b.label,b.x+26,b.y+43,31,selected?UI.mint:UI.white,'left',800);
-   if(b.id==='freeroam')pitch(c,b.x+28,b.y+83,94,42,selected?UI.mint:UI.muted);else{for(let i=0;i<3;i++)touch(c,b.x+40+i*34,b.y+108,23);for(let i=0;i<3;i++)heart(c,b.x+195+i*34,b.y+110,20);}
+   if(b.id==='freeroam')pitch(c,b.x+28,b.y+83,94,42,selected?UI.mint:UI.muted);
+   else{
+    const y=b.y+(over?108:86);
+    for(let i=0;i<3;i++)touch(c,b.x+40+i*34,y,23);
+    for(let i=0;i<3;i++)heart(c,b.x+195+i*34,y+2,20);
+    if(!over)label(c,'High score '+this.highScore,b.x+26,b.y+126,22,UI.muted);
+   }
    c.beginPath();c.arc(b.x+b.w-30,b.y+40,7,0,Math.PI*2);c.fillStyle=selected?UI.mint:'#37465e';c.fill();
   }
   const utility=over?[{id:'calibrate',label:'Calibrate',x:48,y:490,w:276,h:76},{id:'settings',label:'Settings',x:342,y:490,w:276,h:76},{id:'exit',label:'Exit',x:636,y:490,w:276,h:76}]:[{id:'restart',label:s.mode==='challenge'?'New run':'Reset',x:48,y:490,w:204,h:76},{id:'calibrate',label:'Calibrate',x:268,y:490,w:204,h:76},{id:'settings',label:'Settings',x:488,y:490,w:204,h:76},{id:'exit',label:'Exit',x:708,y:490,w:204,h:76}];
@@ -153,7 +189,7 @@ class FootballInterface {
   if(target?.scale){this.callbacks['vr-resolution']?.(target.scale);return;}
   if(target?.abilityId){this.callbacks['ability-level']?.(target.abilityId,target.level);return;}
   if(id==='ability-page-prev'||id==='ability-page-next'){
-   this.abilityPage=Math.max(0,Math.min(VR_PAGES-1,this.abilityPage+(id==='ability-page-next'?1:-1)));
+   this.abilityPage=Math.max(0,Math.min(this.abilityPages.length-1,this.abilityPage+(id==='ability-page-next'?1:-1)));
    this.drawMenu();return;
   }
   this.callbacks[id]?.();

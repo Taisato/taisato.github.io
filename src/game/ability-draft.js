@@ -1,4 +1,4 @@
-import { THREE_TOUCH_RARES, THREE_TOUCH_TREES } from './abilities.js';
+import { THREE_TOUCH_RARES, THREE_TOUCH_TREES, availableTrees } from './abilities.js';
 
 const SLOT_COUNT = 3;
 const RARE_CHANCE = .20;
@@ -7,19 +7,19 @@ function emptyAbilitySlots() {
   return Array(SLOT_COUNT).fill(null);
 }
 
-function abilityReelPool(slots) {
+function abilityReelPool(slots, highScore=0) {
   if (!slots.includes(null)) return [];
-  return [...unownedTrees(slots).map(tree => tree.phases[0]), ...THREE_TOUCH_RARES];
+  return [...unownedTrees(slots,highScore).map(tree => tree.phases[0]), ...THREE_TOUCH_RARES];
 }
 
-function unownedTrees(slots) {
+function unownedTrees(slots, highScore) {
   const owned = new Set(slots.filter(Boolean).map(slot => slot.treeId));
-  return THREE_TOUCH_TREES.filter(tree => !owned.has(tree.id));
+  return availableTrees(highScore).filter(tree => !owned.has(tree.id));
 }
 
-function draftAbilityChoices(slots, random) {
+function draftAbilityChoices(slots, random, highScore=0) {
   const openSlots = slots.flatMap((slot, index) => slot === null ? [index] : []);
-  const available = unownedTrees(slots);
+  const available = unownedTrees(slots,highScore);
   const rareSlot = openSlots.length && random() < RARE_CHANCE
     ? openSlots[Math.floor(random() * openSlots.length)] : -1;
   return Object.freeze(slots.map((owned, slot) => {

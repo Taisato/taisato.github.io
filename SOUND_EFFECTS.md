@@ -4,6 +4,8 @@ All 15 supplied recordings are included and connected. The original MP3 bytes ar
 
 The score counter uses the goal-frame recording with a softer attack and a short metallic ring. Successive ticks in a multi-point award rise in pitch.
 
+Each permanent tree unlock plays an original four-note chime when its banner appears. The game synthesizes the tuned metallic notes locally and mixes them over the wind.
+
 ## Installed files
 
 Every destination below is inside **`assets/audio/`**.

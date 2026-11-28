@@ -15,6 +15,7 @@ class FootballMenuPages {
     this.category='graphics';
     this.creditsTitle=document.querySelector('#credits-title');
     this.abilitiesTitle=document.querySelector('#abilities-title');
+    this.highScores=this.launcher.querySelectorAll('[data-high-score]');
     this.page='main';
 
     this.settingsButton.addEventListener('click',()=>navigate('settings'));
@@ -35,6 +36,10 @@ class FootballMenuPages {
       });
     });
     this.settingsButton.disabled=false;
+  }
+
+  setHighScore(score) {
+    for(const element of this.highScores)element.textContent=String(score);
   }
 
   setPage(page,focus=true,category) {

@@ -1,6 +1,7 @@
 import { FT } from "../../vendor/three.js";
 import { FB } from "../config.js";
 import { FootballShotSurface, outsidePenaltyArea } from './shot-surface.js';
+import { ShotTechniques } from './shot-techniques.js';
 import { continuesTouchWindow } from '../game/abilities.js';
 
 const SHOT_FOLLOW_THROUGH_SECONDS = .22;
@@ -72,6 +73,7 @@ class FootballPhysics {
     this._launchDirection = new V();
     this._regularRunBall = {velocity:new V(), spin:new V(), radius:this.ball.radius};
     this._regularRunSurface = new V(); this._regularRunMotion = new V();
+    this.techniques = new ShotTechniques();
     this.setPlayerAbilities(null);
     this.resetShotHistory();
   }
@@ -93,18 +95,24 @@ class FootballPhysics {
     this.volleyBounceGrace = bonus(effects?.volleyBounceGrace);
     this.volleyDriven = effects?.volleyDriven > 0;
     this.baseCurve = multiplier(effects?.curve);
-    this.setShotFoot(this.shotFoot);
+    this.techniques.configure(effects);
+    this.setShotFoot(this.shotFoot, this.switchShot, this.farPostShot);
     this.ball.shotSurface.configure(effects);
     if (this.shotStrength === 1 && this.airShotStrength === 1 && !this.leftFootShotPace &&
         !this.instepShotStrength && !this.instepVolleyPace && !this.touchWindowStrength &&
-        !this.openingStrikePace && !this.outsideShotPace) {
+        !this.openingStrikePace && !this.outsideShotPace &&
+        !(effects?.switchPace || effects?.boxPace || effects?.reboundPace || effects?.farPace || effects?.halfVolleyStrength)) {
       this._shotSpeedLimit = 0; this._launchedFoot = null;
     }
   }
 
-  setShotFoot(footId) {
+  setShotFoot(footId, switchShot = false, farPostShot = false) {
     this.shotFoot = footId;
-    this.ball.curveMultiplier = this.baseCurve + (footId === 'left' ? this.leftFootCurve : 0);
+    this.switchShot = switchShot;
+    this.farPostShot = farPostShot;
+    const effects = this.techniques.effects;
+    this.ball.curveMultiplier = this.baseCurve + (footId === 'left' ? this.leftFootCurve : 0) +
+      (switchShot ? effects?.switchCurve || 0 : 0) + (farPostShot ? effects?.farCurve || 0 : 0);
   }
 
   resetShotHistory() {
@@ -119,6 +127,7 @@ class FootballPhysics {
     this.ball.offWoodwork = false;
     this._sawFlight = false;
     this._lastBounceTime = -Infinity;
+    this.techniques.reset();
   }
 
   recordWindowContact(gentle) {
@@ -138,7 +147,10 @@ class FootballPhysics {
     this.ball.shotSurface.redirect();
     // A foot contact is classified after resolving its impulse. A continuing
     // follow-through retains the shot's curve until a fresh touch or deflection.
-    if(surface !== 'foot')this.setShotFoot(null);
+    if (surface !== 'foot') {
+      this.setShotFoot(null);
+      if (this.techniques.active) this.techniques.redirect(surface);
+    }
     // Contact sounds are debounced. Even a quiet graze can send the ball in.
     this.ball.offWoodwork = surface === 'frame' && this.ball.position.z < 0;
   }
@@ -704,12 +716,15 @@ class FootballPhysics {
         this._openingStrike = false;
         const volley = airborne || this.time - this._lastBounceTime <= this.volleyBounceGrace + 1e-9;
         const priorWindowTouches = this.recordWindowContact(false);
+        if (this.techniques.active) this.techniques.recordStrike(event, b.velocity);
         const strength = this.shotStrength + (volley ? this.airShotStrength - 1 : 0) +
           (f.id === 'left' ? this.leftFootShotPace : 0) + (event.instep ? this.instepShotStrength : 0) +
-          priorWindowTouches * this.touchWindowStrength;
+          priorWindowTouches * this.touchWindowStrength +
+          (event.halfVolley ? this.techniques.effects.halfVolleyStrength || 0 : 0);
         const openingScale = 1 + (event.openingStrike ? this.openingStrikePace : 0);
         const paceScale = openingScale + (outsidePenaltyArea(event.position) ? this.outsideShotPace : 0) +
-          (event.instep && airborne ? this.instepVolleyPace : 0);
+          (event.instep && airborne ? this.instepVolleyPace : 0) +
+          (this.techniques.active ? this.techniques.paceBonus(event) : 0);
         const downward = this._surface.y - (movement?.y ?? 0) < -.65;
         if(strength>1)b.velocity.multiplyScalar(shotStrengthScale(strength,launchSpeed,impulse,drive,approach));
         let limitedRun=false;
@@ -748,11 +763,12 @@ class FootballPhysics {
     // dribbling range. Only a distinct player touch starts a new roll.
     if (event && !continuing) {
       b.fromPlayerShot = event.shot === true;
-      this.setShotFoot(b.fromPlayerShot ? f.id : null);
+      this.setShotFoot(b.fromPlayerShot ? f.id : null, !!event.switchShot, !!event.farSide);
     }
     if (event && !event.shot) {
       event.control = speedSq <= 3.2 ** 2 || drive <= 2.2 || controlPunt > .60;
       this.recordWindowContact(event.control);
+      if (this.techniques.active && !continuing) this.techniques.recordControl(event);
     }
     if(!continuing&&f.contactPart==='boot'&&approach>cfg.footFirmImpactSpeed&&
       drive>cfg.footStrikeBlendEnd&&drive>surfaceSpeed*.5&&drive/approach>.65&&
@@ -795,7 +811,10 @@ class FootballPhysics {
     if (trackImpact && this._sawFlight) {
       this._sawFlight = false;
       if (incoming > .105 * pace) this.events.push({type: 'bounce', time: this.time, speed: incoming, position: b.position.clone()});
-      if (incoming > .65 * pace) this._lastBounceTime = this.time;
+      if (incoming > .65 * pace) {
+        this._lastBounceTime = this.time;
+        if (this.techniques.halfEnabled) this.techniques.bounceAt = this.time;
+      }
     }
     b.shotSurface.land();
     let normalImpulse = this.config.gravity * pace * pace * dt;
@@ -863,6 +882,7 @@ class FootballPhysics {
       this.surfaceFriction(this._normal, this._surface, speed * .16);
       if (this.time - this._frameEventTime > .06 && speed > .15) {
         this.events.push({type: 'frame', time: this.time, speed, position: b.position.clone()});
+        if (this.techniques.reboundEnabled) this.techniques.recordRebound(this.time, frame.a.z < 0);
         this._frameEventTime = this.time;
       }
     }

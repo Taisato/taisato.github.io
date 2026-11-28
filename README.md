@@ -74,6 +74,8 @@ Use the menu to switch modes, restart or recalibrate. Recalibration preserves th
 
 ### Abilities
 
+Your best score in a single 3 Touch run determines which trees can appear. You start with ten. Each new ten-goal personal milestone through 100 permanently adds one tree to the draft and the Freeroam switcher. The record saves when the ball scores, even if you leave before the run ends. Check the 3 Touch mode card or the run-over screen for your best. Progress is local to this browser.
+
 At each five-goal milestone, time slows to quarter speed. Aim at an available card and hold the trigger until it fills. On desktop, hold the card or its number key (1–3). A goal that takes the score past a milestone still earns its draft.
 
 Picking Phase I pins that tree in the same slot. Its next phase stays available until you take it. Phase III completes the tree and closes the slot. When all three trees are complete, the run continues with the finished build. A new run resets the slots and effects.
@@ -82,7 +84,9 @@ Lilac outlines identify pinned upgrades. Rare upgrades have a gold outline with 
 
 Each draft with an open slot has a 20% chance to offer one rare upgrade. **1 Life Slot** adds a slot and restores one life, **Extra Touch** adds a touch per chance, and **Power Strike** adds 10% shot strength. Picking a rare leaves its slot open, and repeat picks stack.
 
-First-Time Finish I, Double From Distance I, Woodwork Credit III, Left foot maestro III and Instep Specialist III each add one goal for a qualifying finish. An airborne left-foot instep goal with both foot specialties mastered counts for three. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime.
+Bonus goals add together. For example, a first-touch goal from outside the box counts for three with First-Time Finish I and Double From Distance I. A multi-point finish counts as one scoring chance for streaks. Up to two bonus touches from a goal can carry into the next chance. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime.
+
+The ten starting trees are listed below.
 
 | Tree | Phase I | Phase II | Phase III |
 | --- | --- | --- | --- |
@@ -94,10 +98,8 @@ First-Time Finish I, Double From Distance I, Woodwork Credit III, Left foot maes
 | Woodwork Credit | The first post or bar hit each chance refunds one touch. | A shot out directly off the frame costs a life but carries one touch to the next chance. | A goal scored off a post or the crossbar adds one goal. |
 | Quick Feet | Move 10% faster. | Move 25% faster for 2 s after a frame hit or keeper parry. | Your first recovery touch is free once per chance. |
 | Touch Window | Add 0.5 s to the gap needed to count a new touch. | Gentle touches open a 1.5 s window for your next touch or shot. | Shots gain 10% power for each earlier touch in the same window. |
-| Instep Specialist | Instep shots gain 10% shot power. | Instep volleys gain 10% forward pace. | Score with an instep volley to add one goal. |
 | Keeper Setback | Lower the keeper difficulty by five goal levels. | The keeper takes 0.12 s longer to reverse after committing. | Once per chance, a wrong-footed keeper parries a ball they would have caught. |
 | Last Chance | Once per run, a miss on your last life gives a same-spot retry. | Start a chance or retry on your last life with one extra touch. | Your run can use two retries in total. |
-| Left foot maestro | Left-foot strikes gain 25% shot power. | Left-foot shots gain 25% sideways curve. | Score with your left foot to add one goal. |
 
 Touch Window counts separate contacts from either foot. At phase III, two quick setup taps give the following shot 20% extra power. Holding a boot against the ball counts as one contact. A gap of 1.5 seconds after gentle control, or 1 second between firm contacts, starts a fresh count.
 
@@ -108,6 +110,8 @@ Quick Feet increases movement speed. Its extra run-up speed can add up to 10% to
 ### Freeroam ability switcher
 
 Open **Settings → Gameplay → Abilities** in Freeroam. Select I, II or III to equip a tree through that phase, combine any trees and adjust rare counts with the minus and plus buttons. Select **Off** to remove one tree or **Clear** to empty the loadout. Your Freeroam choices are saved in this browser.
+
+A gold outline and question mark flag newly unlocked trees. Open Abilities to jump to the first unread tree. Each marker lasts through its first viewing. Practice goals stay separate from your 3 Touch record.
 
 With abilities equipped, the HUD shows practice goals, touches and lives for shots at the guarded goal. Press **B** on desktop or **A** on the right controller for the next ball. Starting-touch bonuses apply when you spawn the next ball. A protected retry returns to the original spot. A new ball after the last life starts fresh practice counters.
 

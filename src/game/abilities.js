@@ -41,11 +41,6 @@ const THREE_TOUCH_TREES = Object.freeze([
     ['Gentle touches open a 1.5 s window for your next touch or shot.', {gentleTouchCooldown: .5}],
     ['Shots gain 10% power for each earlier touch in the same window.', {touchWindowStrength: .10}]
   ]],
-  ['instep', 'Instep Specialist', [
-    ['Instep shots gain 10% shot power.', {instepShotStrength: .10}],
-    ['Instep volleys gain 10% forward pace.', {instepVolleyPace: .10}],
-    ['Score with an instep volley to add one goal.', {instepVolleyGoal: 1}]
-  ]],
   ['keeper-setback', 'Keeper Setback', [
     ['Lower the keeper difficulty by five goal levels.', {keeperLevelOffset: 5}],
     ['The keeper takes 0.12 s longer to reverse after committing.', {keeperReverseDelay: .12}],
@@ -56,14 +51,60 @@ const THREE_TOUCH_TREES = Object.freeze([
     ['Start a chance or retry on your last life with one extra touch.', {lastLifeTouch: 1}],
     ['Your run can use two retries in total.', {lastChance: 1}]
   ]],
+  ['instep', 'Instep Specialist', [
+    ['Instep shots gain 10% shot power.', {instepShotStrength: .10}],
+    ['Instep volleys gain 10% forward pace.', {instepVolleyPace: .10}],
+    ['Score with an instep volley to add one goal.', {instepVolleyGoal: 1}]
+  ], 10],
   ['left-foot-maestro', 'Left foot maestro', [
     ['Left-foot strikes gain 25% shot power.', {leftFootShotPace: .25}],
     ['Left-foot shots gain 25% sideways curve.', {leftFootCurve: .25}],
     ['Score with your left foot to add one goal.', {leftFootGoalBonus: 1}]
-  ]]
-].map(([treeId, name, phases]) => Object.freeze({
+  ], 20],
+  ['switch-hitter', 'Switch Hitter', [
+    ['Control with one foot, then shoot with the other within 2 s for 10% more forward pace.', {switchPace: .10}],
+    ['That opposite-foot shot also gains 15% sideways curve.', {switchCurve: .15}],
+    ['Once per chance, that shot is free if it would spend a touch.', {switchFree: 1}]
+  ], 30],
+  ['box-raider', 'Box Raider', [
+    ['Control outside the box, then control inside to refund one touch. Once per chance.', {boxRefund: 1}],
+    ['Your first shot after that entry gains 10% forward pace if struck inside the box.', {boxPace: .10}],
+    ['Score with that inside-box shot to add one goal.', {boxGoal: 1}]
+  ], 40],
+  ['second-ball', 'Second Ball', [
+    ['Your first shot within 2 s of a keeper parry or a live frame rebound gains 15% forward pace.', {reboundPace: .15}],
+    ['You have 4 s to reach the rebound and take that shot.', {reboundWindow: 2}],
+    ['Score with the rebound shot to restore one extra life.', {reboundHeal: 1}]
+  ], 50],
+  ['far-post', 'Far Post', [
+    ['Shoot across goal from at least 4 m off centre to gain 10% sideways curve.', {farCurve: .10}],
+    ['That cross-goal shot also gains 10% forward pace.', {farPace: .10}],
+    ['Put that shot into the far outer third of the goal to add one goal.', {farGoal: 1}]
+  ], 60],
+  ['hot-streak', 'Hot Streak', [
+    ['Every second consecutive scoring chance grants one touch on the next chance.', {streakTouch: 1}],
+    ['Every second consecutive scoring chance also restores one extra life.', {streakHeal: 1}],
+    ['Every third consecutive scoring chance adds one goal. A miss resets the streak.', {streakGoal: 1}]
+  ], 70],
+  ['half-volley', 'Half Volley', [
+    ['Strike within 0.30 s of a bounce for 12% more shot power. Take the shot before your next control touch.', {halfVolleyStrength: .12}],
+    ['The half-volley window extends to 0.50 s.', {halfVolleyWindow: .20}],
+    ['Once per chance, a half-volley is free if it would spend a touch.', {halfVolleyFree: 1}]
+  ], 80],
+  ['top-bins', 'Top Bins', [
+    ['Score in the upper third of the goal to restore one extra life.', {highHeal: 1}],
+    ['Find either top corner to start the next chance with an extra touch.', {cornerTouch: 1}],
+    ['Finish in both the upper third and an outer third of the goal to add one goal.', {cornerGoal: 1}]
+  ], 90],
+  ['clutch-captain', 'Clutch Captain', [
+    ['Scoring on your last life restores one extra life.', {clutchHeal: 1}],
+    ['Score with the strike that spends your final touch to carry one touch into the next chance.', {lastShotCarry: 1}],
+    ['On your last life, score with that final-touch strike to add one goal.', {clutchGoal: 1}]
+  ], 100]
+].map(([treeId, name, phases, unlockAt=0]) => Object.freeze({
   id: treeId,
   name,
+  unlockAt,
   phases: Object.freeze(phases.map(([description, effects], index) => Object.freeze({
     id: index === 0 ? treeId : `${treeId}-${index + 1}`,
     treeId,
@@ -93,7 +134,11 @@ const THREE_TOUCH_BASE_EFFECTS = Object.freeze({
   gentleTouchCooldown: 0, touchWindowStrength: 0,
   instepShotStrength: 0, instepVolleyPace: 0, instepVolleyGoal: 0,
   keeperReverseDelay: 0, keeperWrongFootParry: 0, lastChance: 0, lastLifeTouch: 0,
-  leftFootShotPace: 0, leftFootCurve: 0, leftFootGoalBonus: 0
+  leftFootShotPace: 0, leftFootCurve: 0, leftFootGoalBonus: 0,
+  switchPace: 0, switchCurve: 0, switchFree: 0, boxRefund: 0, boxPace: 0, boxGoal: 0,
+  reboundPace: 0, reboundWindow: 0, reboundHeal: 0, farCurve: 0, farPace: 0, farGoal: 0,
+  streakTouch: 0, streakHeal: 0, streakGoal: 0, halfVolleyStrength: 0, halfVolleyWindow: 0, halfVolleyFree: 0,
+  highHeal: 0, cornerTouch: 0, cornerGoal: 0, clutchHeal: 0, lastShotCarry: 0, clutchGoal: 0
 });
 
 function continuesTouchWindow(gap, effects, gentle, previousGentle) {
@@ -103,11 +148,15 @@ function continuesTouchWindow(gap, effects, gentle, previousGentle) {
   return gap < duration - 1e-9;
 }
 
-function normalizeAbilityLevels(levels) {
+function availableTrees(highScore) {
+  return THREE_TOUCH_TREES.filter(tree=>tree.unlockAt<=highScore);
+}
+
+function normalizeAbilityLevels(levels,highScore=Infinity) {
   const normalized = {};
   for (const ability of THREE_TOUCH_ABILITIES) {
     const level = levels?.[ability.id];
-    if (Number.isSafeInteger(level) && level > 0) {
+    if ((ability.rare || ability.unlockAt<=highScore) && Number.isSafeInteger(level) && level > 0) {
       normalized[ability.id] = ability.rare ? level : Math.min(ability.phases.length, level);
     }
   }
@@ -131,4 +180,4 @@ function buildAbilityEffects(levels) {
 }
 
 export { THREE_TOUCH_ABILITIES, THREE_TOUCH_TREES, THREE_TOUCH_RARES, THREE_TOUCH_BASE_EFFECTS,
-  normalizeAbilityLevels, buildAbilityEffects, addAbilityEffects, continuesTouchWindow };
+  availableTrees, normalizeAbilityLevels, buildAbilityEffects, addAbilityEffects, continuesTouchWindow };

@@ -503,6 +503,7 @@ class FootballGoalkeeper {
           this._wrongFootParryUsed = true;
         }
         const parry = forcedParry || ball.velocity.lengthSq() >= 3.2 ** 2;
+        if (physics.techniques.reboundEnabled) physics.techniques.recordRebound(physics.time, parry && this.goalEnd < 0);
         physics.events.push({type: 'save', time: physics.time, speed: incoming, position: ball.position.clone(),
           surface: capsule.kind, parry, forcedParry});
         this._lastImpact = physics.time; this.saves++;

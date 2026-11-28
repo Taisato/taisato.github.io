@@ -1,10 +1,13 @@
 import { FootballMenuPages } from './ui/menu-pages.js';
+import { FootballProgression } from './game/progression.js';
 
 export let footballApp=null;
 const pages=new FootballMenuPages((page,category)=>{
   if(footballApp)footballApp.setMenuPage(page,true,category);
   else pages.setPage(page,true,category);
 });
+const progression=new FootballProgression();
+pages.setHighScore(progression.highScore);
 window.addEventListener('keydown',event=>{
   if(footballApp||event.code!=='Escape'||pages.page==='main')return;
   pages.setPage(pages.backPage);
@@ -24,7 +27,7 @@ async function bootstrap(){
     ]);
     await Promise.all([FootballKeeperMeshes.load(),FootballAudio.load()]);
     status.textContent='';
-    footballApp=new FootballApp(pages);
+    footballApp=new FootballApp(pages,progression);
     desktop.disabled=false;
     return footballApp;
   }catch(error){
