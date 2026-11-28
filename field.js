@@ -1,6 +1,7 @@
 import { FT } from "../../vendor/three.js";
 import { FB } from "../config.js";
 import { FootballPlayerVisuals } from "../player/visuals.js";
+import { applyPitchPaint, PITCH_PAINT, pitchFloodlight, runoffOpacity } from "../render/markings.js";
 
 /* Floodlit full-size training pitch, reconstructed from the supplied reference. Units: metres. */
 class FootballField {
@@ -22,9 +23,9 @@ class FootballField {
     this._makeGoals();
     this._makeBall();
     this.player=new FootballPlayerVisuals(this);
-    // The headset's actual viewport clips the scene. Do not make individual
-    // field pieces or the ball disappear near a view edge.
-    this.root.traverse(object=>{if(object.isMesh)object.frustumCulled=false;});
+    // The turf and instanced frames span the pitch. The moving ball and its
+    // flat shadow each have their own tight sphere for stereo frustum tests.
+    this.turfMesh.frustumCulled=this.goalFrames.frustumCulled=this.goalJoints.frustumCulled=false;
   }
 
   geometry(geometry) { this.geometries.add(geometry); return geometry; }
@@ -38,11 +39,22 @@ class FootballField {
   _makeLighting() {
     // The reference has an almost black sky but a brightly floodlit playing surface.
     // A baked grass light field avoids ten expensive shadowed spot lights in VR.
-    const sky = new FT.HemisphereLight(0xf3f6e8, 0x2d421d, 1.38);
-    this.root.add(sky);
-    for(const [x,z,intensity,colour] of [[-42,-28,.9,0xf4f6ff],[42,28,.65,0xfff9df]]){
-      const light=new FT.DirectionalLight(colour,intensity);light.position.set(x,22,z);this.root.add(light);
-    }
+    this.skyLight = new FT.HemisphereLight(0xf3f6e8, 0x2d421d, 1.38);
+    this.keyLight = new FT.DirectionalLight(0xf4f6ff, .9);
+    this.fillLight = new FT.DirectionalLight(0xfff9df, .65);
+    this.keyLight.position.set(-42,22,-28);
+    this.fillLight.position.set(42,22,28);
+    this.root.add(this.skyLight,this.keyLight,this.fillLight);
+  }
+
+  setSkyLighting(lighting,horizon) {
+    this.skyLight.color.set(lighting.sky);
+    this.skyLight.groundColor.set(lighting.ground);
+    this.keyLight.color.set(lighting.key);
+    this.fillLight.color.set(lighting.fill);
+    this.pitchLighting.flood.value.set(lighting.pitch);
+    this.pitchLighting.ambient.value.set(lighting.runoff).multiplyScalar(.28);
+    this.pitchLighting.horizon.value.copy(horizon);
   }
 
   _grassTexture() {
@@ -67,15 +79,11 @@ class FootballField {
 
   _makePitch() {
     const grass=this._grassTexture();this.grassTexture=grass;
-    const material=this.material(new FT.MeshBasicMaterial({map:grass,color:0xffffff,vertexColors:true}));
-    // Solid paint keeps distant lines from breaking into translucent dashes.
-    // The renderer's multisample antialiasing resolves the actual geometry edge.
-    const lineMaterial=this.material(new FT.MeshBasicMaterial({color:0xeaefd7,
-      polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2,side:2}));
+    const material=this.material(applyPitchPaint(new FT.MeshBasicMaterial({map:grass,color:0xffffff,vertexColors:true})));
+    this.pitchLighting=material.userData.pitchLighting;
     const positions=[],colours=[],uvs=[];
     const surface=(x,z)=>{
-      const outside=Math.max(0,Math.abs(x)-FB.halfWidth,Math.abs(z)-FB.halfLength);
-      const fade=outside<=7?1:Math.exp(-Math.pow((outside-7)/11,1.55));
+      const fade=pitchFloodlight(x,z);
       const stripe=(Math.floor((z+FB.halfLength)/(FB.length/12))&1)?.90:1.15;
       const cross=(Math.floor((x+FB.halfWidth)/(FB.width/8))&1)?.985:1.025;
       // Broad, subtle light pools fade smoothly into the unlit run-off area.
@@ -99,80 +107,20 @@ class FootballField {
     geometry.setAttribute('color',new FT.BufferAttribute(new Float32Array(colours),3));geometry.setAttribute('uv',new FT.BufferAttribute(new Float32Array(uvs),2));
     this.turfMesh=this.addMesh(geometry,material);this.turfMesh.name='Floodlit mown turf';
 
-    // Each path is one joined ribbon. Neighbouring arc segments share exactly
-    // the same radial vertices, and square corners use a proper miter join.
-    // No alpha strip, independent butt caps, or overlapping translucent paint.
-    const vertices=[],indices=[],width=.115,half=width*.5,paintY=.009;
-    const pair=(ax,az,bx,bz)=>{const i=vertices.length/3;vertices.push(ax,paintY,az,bx,paintY,bz);return i;};
-    const join=(a,b)=>indices.push(a,b,b+1,a,b+1,a+1);
-    const path=(points,closed=false)=>{
-      const first=vertices.length/3,count=points.length;
-      for(let i=0;i<count;i++){
-        const p=points[i],previous=points[(i+count-1)%count],next=points[(i+1)%count];
-        let ax=p[0]-previous[0],az=p[1]-previous[1],bx=next[0]-p[0],bz=next[1]-p[1];
-        if(!closed&&i===0){ax=bx;az=bz;}
-        if(!closed&&i===count-1){bx=ax;bz=az;}
-        const al=Math.hypot(ax,az),bl=Math.hypot(bx,bz);ax/=al;az/=al;bx/=bl;bz/=bl;
-        const m=half/(1+ax*bx+az*bz),ox=-(az+bz)*m,oz=(ax+bx)*m;
-        pair(p[0]+ox,p[1]+oz,p[0]-ox,p[1]-oz);
-        if(i)join(first+(i-1)*2,first+i*2);
-      }
-      if(closed)join(first+(count-1)*2,first);
-    };
-    const arc=(x,z,radius,start=0,end=Math.PI*2)=>{
-      // At most 0.1 mm deviation from the true circle, including corner arcs.
-      const segments=Math.ceil((end-start)/(2*Math.acos(1-.0001/(radius+half))));
-      const first=vertices.length/3;
-      for(let i=0;i<=segments;i++){
-        // Reuse the exact angle at the closing seam, not sin(2*pi) rounding.
-        const a=i===segments&&end-start===Math.PI*2?start:start+(end-start)*i/segments;
-        const dx=Math.cos(a),dz=Math.sin(a);
-        pair(x+dx*(radius-half),z+dz*(radius-half),x+dx*(radius+half),z+dz*(radius+half));
-        if(i)join(first+(i-1)*2,first+i*2);
-      }
-    };
-    const spot=(x,z,radius)=>{
-      const first=vertices.length/3;vertices.push(x,paintY,z);
-      for(let i=0;i<64;i++){const a=i*Math.PI/32;vertices.push(x+Math.cos(a)*radius,paintY,z+Math.sin(a)*radius);}
-      for(let i=0;i<64;i++)indices.push(first,first+1+i,first+1+(i+1)%64);
-    };
-
-    path([[-FB.halfWidth,-FB.halfLength],[FB.halfWidth,-FB.halfLength],
-      [FB.halfWidth,FB.halfLength],[-FB.halfWidth,FB.halfLength]],true);
-    path([[-FB.halfWidth,0],[FB.halfWidth,0]]);
-    arc(0,0,9.15);
-    spot(0,0,.12);
-    for(const end of [-1,1]){
-      const goalZ=end*FB.halfLength;
-      for(const [depth,halfWidth]of[[16.5,FB.goalWidth*.5+16.5],[5.5,FB.goalWidth*.5+5.5]]){
-        const edge=goalZ-end*depth;
-        path([[-halfWidth,goalZ],[-halfWidth,edge],[halfWidth,edge],[halfWidth,goalZ]]);
-      }
-      const penaltyZ=goalZ-end*11,angle=Math.asin(5.5/9.15);
-      spot(0,penaltyZ,.105);
-      // Exact line/arc intersections prevent the old sampled-endpoint gaps.
-      arc(0,penaltyZ,9.15,end<0?angle:Math.PI+angle,end<0?Math.PI-angle:Math.PI*2-angle);
-      for(const side of [-1,1]){
-        const a=end<0?(side<0?0:Math.PI*.5):(side<0?Math.PI*1.5:Math.PI);
-        arc(side*FB.halfWidth,goalZ,1,a,a+Math.PI*.5);
-      }
-    }
-    const linesGeometry=this.geometry(new FT.BufferGeometry());
-    linesGeometry.setAttribute('position',new FT.BufferAttribute(new Float32Array(vertices),3));
-    linesGeometry.setIndex(indices);linesGeometry.computeVertexNormals();
-    this.markingsMesh=new FT.Mesh(linesGeometry,lineMaterial);
-    this.markingsMesh.name='Painted pitch markings';
-    this.root.add(this.markingsMesh);
-    this.pitchBounds = {width: FB.width, length: FB.length, lineWidth: width};
+    // The opaque turf shader owns the paint, including filtered distant coverage.
+    // No independent thin triangles or second depth surface can break up a line.
+    this.pitchBounds = {width: FB.width, length: FB.length, lineWidth: PITCH_PAINT.lineWidth};
   }
 
   _makeGoals() {
     const frameMaterial = this.material(new FT.MeshStandardMaterial({color: 0xf0f1e8, roughness: .8, metalness: .05}));
-    const frameGeometry = this.geometry(new FT.CylinderGeometry(1, 1, 1, 12));
+    const frameGeometry = this.geometry(new FT.CylinderGeometry(1, 1, 1, 24));
     const frames = new FT.InstancedMesh(frameGeometry, frameMaterial, 6);
+    const jointGeometry = this.geometry(new FT.SphereGeometry(1, 24, 12));
+    const joints = new FT.InstancedMesh(jointGeometry, frameMaterial, 4);
     const half = FB.goalWidth * .5 + FB.postRadius;
     const top = FB.goalHeight + FB.postRadius;
-    let index = 0;
+    let index = 0, jointIndex = 0;
     for (const end of [-1, 1]) {
       const z = end * FB.halfLength;
       for (const side of [-1, 1]) {
@@ -181,6 +129,12 @@ class FootballField {
         this.scale.set(FB.postRadius, top, FB.postRadius);
         this.matrix.compose(this.translation, this.quaternion, this.scale);
         frames.setMatrixAt(index++, this.matrix);
+        // The capsule collision frame already has rounded endpoints. Fill
+        // the missing outer corner where the two flat-ended tubes meet.
+        this.translation.set(side * half, top, z);
+        this.scale.setScalar(FB.postRadius);
+        this.matrix.compose(this.translation, this.quaternion, this.scale);
+        joints.setMatrixAt(jointIndex++, this.matrix);
       }
       this.translation.set(0, top, z);
       this.quaternion.setFromAxisAngle(new FT.Vector3(0, 0, 1), Math.PI / 2);
@@ -189,8 +143,10 @@ class FootballField {
       frames.setMatrixAt(index++, this.matrix);
     }
     frames.instanceMatrix.needsUpdate = true;
-    this.root.add(frames);
+    joints.instanceMatrix.needsUpdate = true;
+    this.root.add(frames, joints);
     this.goalFrames = frames;
+    this.goalJoints = joints;
 
     this.goalBounds = {innerWidth: FB.goalWidth, innerHeight: FB.goalHeight, depth: FB.goalDepth,
       postX: half, crossbarY: top, lineZ: FB.halfLength};
@@ -245,8 +201,11 @@ class FootballField {
     geometry.setAttribute('position', new FT.BufferAttribute(new Float32Array(positions), 3));
     geometry.setAttribute('normal', new FT.BufferAttribute(new Float32Array(normals), 3));
     geometry.setAttribute('color', new FT.BufferAttribute(new Float32Array(colours), 3));
-    const material = this.material(new FT.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.78,metalness:0}));
-    this.ballMesh = new FT.Mesh(geometry, material);
+    this.ballMaterial = this.material(new FT.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.78,metalness:0}));
+    this.fadingBallMaterial = this.material(this.ballMaterial.clone());
+    this.fadingBallMaterial.transparent = true;
+    this.fadingBallMaterial.depthWrite = false;
+    this.ballMesh = new FT.Mesh(geometry, this.ballMaterial);
     this.ballMesh.name = 'Football'; this.ballMesh.position.set(0, FB.ballRadius, 0);
     this.root.add(this.ballMesh);
 
@@ -254,7 +213,7 @@ class FootballField {
     const sc=shadowCanvas.getContext('2d'),gradient=sc.createRadialGradient(64,64,10,64,64,62);
     gradient.addColorStop(0,'rgba(0,0,0,.75)');gradient.addColorStop(.35,'rgba(0,0,0,.48)');gradient.addColorStop(1,'rgba(0,0,0,0)');
     sc.fillStyle=gradient;sc.fillRect(0,0,128,128);const shadowMap=new FT.CanvasTexture(shadowCanvas);this.textures.add(shadowMap);
-    this.ballShadowMaterial=this.material(new FT.MeshBasicMaterial({map:shadowMap,color:0x0b1806,transparent:true,opacity:.72,depthWrite:false,side:2}));
+    this.ballShadowMaterial=this.material(new FT.MeshBasicMaterial({map:shadowMap,color:0x0b1806,transparent:true,opacity:.72,depthWrite:false,side:2,forceSinglePass:true}));
     this.ballShadow=new FT.Mesh(this.geometry(new FT.PlaneGeometry(2,2)),this.ballShadowMaterial);
     this.ballShadow.rotation.x=-Math.PI/2;this.ballShadow.scale.set(.19,.19,1);this.ballShadow.position.y=.014;this.root.add(this.ballShadow);
     this.ballPanelCounts = {pentagons: 12, hexagons: 20};
@@ -263,11 +222,19 @@ class FootballField {
   updateBall(ball) {
     this.ballMesh.position.copy(ball.position);
     this.ballMesh.quaternion.copy(ball.orientation);
+    const light = pitchFloodlight(ball.position.x, ball.position.z);
+    const opacity = runoffOpacity(light);
+    // Keep the opaque depth pass for play. In deep shade let the turf or sky
+    // show through the ball, including the specular highlights on its panels.
+    const material = opacity < 1 ? this.fadingBallMaterial : this.ballMaterial;
+    material.color.setScalar(light); material.opacity = opacity;
+    this.ballMesh.material = material;
+    this.ballMesh.visible = this.ballShadow.visible = opacity > 0;
     const height = Math.max(0,ball.position.y-FB.ballRadius);
     const scale = .19 + Math.sqrt(Math.min(height,12))*.038;
     this.ballShadow.position.set(ball.position.x,.014,ball.position.z);
     this.ballShadow.scale.set(scale,scale,1);
-    this.ballShadowMaterial.opacity = .72 / (1+height*.28);
+    this.ballShadowMaterial.opacity = .72 * light * opacity / (1+height*.28);
   }
 
   makeFoot(hand) { return this.player.makeFoot(hand); }

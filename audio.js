@@ -1,5 +1,8 @@
 import { FT } from '../vendor/three.js';
 import { footballClamp } from './config.js';
+import { loadAsset } from './assets.js';
+
+const WIND_TYPES=['normal','heavy'];
 
 // Decode recordings before play. Frames only adjust already prepared voices.
 class FootballAudio {
@@ -10,8 +13,7 @@ class FootballAudio {
     if(this.loading)return this.loading;
     this.loading=(async()=>{
       try{
-        const url=new URL('../assets/audio/manifest.json',import.meta.url);
-        const response=await fetch(url);
+        const response=await loadAsset('assets/audio/manifest.json');
         if(!response.ok)throw new Error('Audio manifest: HTTP '+response.status);
         const manifest=await response.json();
         if(manifest.format!=='first-touch-audio-v1'||!Array.isArray(manifest.assets))throw new Error('Invalid audio manifest');
@@ -21,7 +23,7 @@ class FootballAudio {
         await Promise.all(manifest.assets.map(async definition=>{
           try{
             if(typeof definition.id!=='string'||typeof definition.file!=='string')throw new Error('Invalid audio entry');
-            const asset=await fetch(new URL(definition.file,url));
+            const asset=await loadAsset('assets/audio/'+definition.file);
             if(!asset.ok)throw new Error('HTTP '+asset.status);
             const encoded=await asset.arrayBuffer();
             const entry={definition,buffer:null,encoded};
@@ -63,7 +65,8 @@ class FootballAudio {
       const buffer=context.createBuffer(channels,count-fade,sampleRate),middle=count-2*fade;
       for(let channel=0;channel<channels;channel++){
         const output=buffer.getChannelData(channel);
-        for(let i=0;i<middle;i++)output[i]=read(channel,begin+fade+i);
+        if(!mono)output.set(input[channel].subarray(begin+fade,end-fade));
+        else for(let i=0;i<middle;i++)output[i]=read(channel,begin+fade+i);
         for(let i=0;i<fade;i++){
           const angle=i/Math.max(1,fade-1)*Math.PI*.5;
           output[middle+i]=read(channel,end-fade+i)*Math.cos(angle)+read(channel,begin+i)*Math.sin(angle);
@@ -86,8 +89,11 @@ class FootballAudio {
   constructor(){
     this.context=null;this.gain=null;this.ceiling=null;this.masterLevel=.55;
     this.paused=true;this.disposed=false;this.voices=new Set();this.maxVoices=12;
+    this.timeScale=1;this.timeDetune=0;
+    this.wind='normal';this.windActive=false;this.windApplied=null;this.windVoices=new Map();
     this.rolling=null;this.strongVariant=0;this.netVariant=0;this.seed=3729;
-    this.forward=new FT.Vector3();this.up=new FT.Vector3();this.listenerPosition=new FT.Vector3();
+    this.forward=new FT.Vector3();this.up=new FT.Vector3();
+    this.listenerPosition=new FT.Vector3(NaN,NaN,NaN);this.listenerOrientation=new FT.Quaternion(0,0,0,0);
     this.fallbackKick=null;this.fallbackNet=null;this.decoding=null;
   }
   async start(){
@@ -129,6 +135,51 @@ class FootballAudio {
     }
   }
   available(){return !this.disposed&&!this.paused&&this.context?.state==='running';}
+  setTimeScale(scale){
+    if(this.disposed||!Number.isFinite(scale))return;
+    const next=footballClamp(scale,.25,1);if(next===this.timeScale)return;
+    this.timeScale=next;this.timeDetune=1200*Math.log2(next);
+    // Detune compounds with playbackRate, stretching the recording without
+    // overwriting its pitch variation or the rolling loop's existing smoothing.
+    // The app supplies the eased menu factor; voices keep their playback phase.
+    for(const voice of this.voices)voice.source.detune.value=this.timeDetune;
+  }
+  setWind(kind){
+    if(this.disposed||!WIND_TYPES.includes(kind)||this.wind===kind)return;
+    this.wind=kind;if(this.windActive&&this.available())this.updateWind(true);
+  }
+  fadeWind(voice,level){
+    const now=this.context.currentTime,duration=.5;
+    // Hold the real point of an interrupted fade, not its previously scheduled
+    // destination. Rapid switching reuses both loops without gain jumps.
+    const elapsed=footballClamp((now-voice.windFadeStart)/duration,0,1);
+    const current=voice.windFrom+(voice.windTo-voice.windFrom)*elapsed;
+    voice.windFrom=current;voice.windTo=level;voice.windFadeStart=now;
+    voice.gain.gain.cancelScheduledValues(now);voice.gain.gain.setValueAtTime(current,now);
+    voice.gain.gain.linearRampToValueAtTime(level,now+duration);
+  }
+  updateWind(active){
+    this.windActive=!!active;
+    if(!active||!this.available()){
+      this.windApplied=null;for(const voice of this.windVoices.values())this.stopVoice(voice,.015);
+      return;
+    }
+    let created=false;
+    for(const kind of WIND_TYPES){
+      const entry=FootballAudio.bank.get('wind_'+kind);if(!entry?.buffer)continue;
+      const previous=this.windVoices.get(kind);
+      if(previous&&!previous.finished&&!previous.stopping)continue;
+      const voice=this.voice(entry.buffer,0,null,1,true,kind);
+      if(voice){voice.windFrom=0;voice.windTo=0;voice.windFadeStart=this.context.currentTime;created=true;}
+    }
+    if(!created&&this.windApplied===this.wind)return;
+    const selected=this.windVoices.has(this.wind)?this.wind:WIND_TYPES.find(kind=>this.windVoices.has(kind));
+    for(const [kind,voice]of this.windVoices){
+      const entry=FootballAudio.bank.get('wind_'+kind);
+      this.fadeWind(voice,kind===selected?footballClamp(entry?.definition.gain??0,0,1):0);
+    }
+    this.windApplied=this.wind;
+  }
   speed(value){return Number.isFinite(value)?Math.max(0,value):0;}
   variation(){this.seed=(this.seed*1664525+1013904223)>>>0;return .985+this.seed/4294967296*.03;}
   position(panner,position){
@@ -146,6 +197,7 @@ class FootballAudio {
   finish(voice){
     if(voice.finished)return;voice.finished=true;this.voices.delete(voice);
     if(this.rolling===voice)this.rolling=null;
+    if(voice.wind&&this.windVoices.get(voice.wind)===voice)this.windVoices.delete(voice.wind);
     voice.source.onended=null;voice.source.disconnect();voice.gain.disconnect();voice.panner?.disconnect();
   }
   stopVoice(voice,fade=.015){
@@ -159,13 +211,19 @@ class FootballAudio {
       voice.source.stop(stopAt);
     }else{try{voice.source.stop(now);}catch{}this.finish(voice);}
   }
-  voice(buffer,level,position,rate=1,loop=false){
+  voice(buffer,level,position,rate=1,loop=false,wind=null){
     if(!this.available()||!buffer||!(level>=0))return null;
-    while(this.voices.size>=this.maxVoices)this.stopVoice(this.voices.values().next().value,0);
+    if(wind){
+      const previous=this.windVoices.get(wind);if(previous)this.stopVoice(previous,0);
+    }else while(this.voices.size-this.windVoices.size>=this.maxVoices){
+      // Continuous ambience has its own two slots; impact bursts cannot evict it.
+      for(const candidate of this.voices)if(!candidate.wind){this.stopVoice(candidate,0);break;}
+    }
     const context=this.context,source=context.createBufferSource(),gain=context.createGain(),panner=this.makePanner(position);
-    source.buffer=buffer;source.playbackRate.value=rate;source.loop=loop;
+    source.buffer=buffer;source.playbackRate.value=rate;source.detune.value=this.timeDetune;source.loop=loop;
     gain.gain.value=level;source.connect(gain);if(panner){gain.connect(panner);panner.connect(this.gain);}else gain.connect(this.gain);
-    const voice={source,gain,panner,loop,stopping:false,finished:false};this.voices.add(voice);
+    const voice={source,gain,panner,loop,wind,stopping:false,finished:false};this.voices.add(voice);
+    if(wind)this.windVoices.set(wind,voice);
     source.onended=()=>this.finish(voice);source.start(context.currentTime);return voice;
   }
   play(id,level,position,rate=1){
@@ -173,13 +231,18 @@ class FootballAudio {
     if(!entry?.buffer)return false;
     return !!this.voice(entry.buffer,level*footballClamp(entry.definition.gain??1,0,4),position,rate);
   }
-  kick(value=5,position){
+  kick(value=5,position,pitchRate=1){
     if(!this.available())return false;const speed=this.speed(value);if(speed<.05)return false;
     const id=speed<1.5?'ball_touch_soft_01':speed<5?'ball_kick_medium_01':speed<14?('ball_kick_strong_0'+(1+(this.strongVariant++%2))):'ball_kick_hard_01';
     // Feather contacts rise smoothly from silence; firm strikes keep their level.
     const soft=footballClamp(speed/1.5,0,1);
     const level=footballClamp(.16+.035*speed,.16,1.1)*(soft*soft*(3-2*soft));
-    return this.play(id,level,position,this.variation())||!!this.voice(this.fallbackKick,level*.7,position);
+    return this.play(id,level,position,pitchRate*this.variation())||!!this.voice(this.fallbackKick,level*.7,position,pitchRate);
+  }
+  keeperKick(value=5,position){
+    const speed=this.speed(value),strength=footballClamp((speed-3)/12,0,1);
+    const semitones=3-7*strength;
+    return this.kick(speed,position,2**(semitones/12));
   }
   frame(value,position){
     if(!this.available())return false;const speed=this.speed(value);if(speed<.1)return false;
@@ -199,18 +262,27 @@ class FootballAudio {
   whistle(){return this.available()&&this.play('whistle_start_01',.65,null);}
   updateListener(controls){
     if(!controls?.headWorld||!controls.viewOrientation)return;
-    const listener=this.context.listener;this.listenerPosition.copy(controls.headWorld);
-    this.forward.set(0,0,-1).applyQuaternion(controls.viewOrientation);this.up.set(0,1,0).applyQuaternion(controls.viewOrientation);
-    const p=this.listenerPosition,f=this.forward,u=this.up;
-    if(listener.positionX){
-      listener.positionX.value=p.x;listener.positionY.value=p.y;listener.positionZ.value=p.z;
-      listener.forwardX.value=f.x;listener.forwardY.value=f.y;listener.forwardZ.value=f.z;
-      listener.upX.value=u.x;listener.upY.value=u.y;listener.upZ.value=u.z;
-    }else{listener.setPosition(p.x,p.y,p.z);listener.setOrientation(f.x,f.y,f.z,u.x,u.y,u.z);}
+    const listener=this.context.listener;
+    // Web Audio keeps the last value. Walking and turning can change these
+    // independently, so only send the part of the pose that actually moved.
+    if(!this.listenerPosition.equals(controls.headWorld)){
+      const p=this.listenerPosition.copy(controls.headWorld);
+      if(listener.positionX){listener.positionX.value=p.x;listener.positionY.value=p.y;listener.positionZ.value=p.z;}
+      else listener.setPosition(p.x,p.y,p.z);
+    }
+    if(!this.listenerOrientation.equals(controls.viewOrientation)){
+      const q=this.listenerOrientation.copy(controls.viewOrientation);
+      const f=this.forward.set(0,0,-1).applyQuaternion(q),u=this.up.set(0,1,0).applyQuaternion(q);
+      if(listener.forwardX){
+        listener.forwardX.value=f.x;listener.forwardY.value=f.y;listener.forwardZ.value=f.z;
+        listener.upX.value=u.x;listener.upY.value=u.y;listener.upZ.value=u.z;
+      }else listener.setOrientation(f.x,f.y,f.z,u.x,u.y,u.z);
+    }
   }
   update(ball,controls,active,dt){
     if(!this.context||this.disposed)return;
     this.updateListener(controls);
+    this.updateWind(active&&this.available());
     if(!active||!this.available()||!ball){this.resetBall();return;}
     const speed=Math.hypot(ball.velocity.x,ball.velocity.z),grounded=ball.position.y<=ball.radius+.018&&Math.abs(ball.velocity.y)<.25;
     if(!Number.isFinite(speed)||!grounded||speed<(this.rolling ? .1 : .18)){this.resetBall();return;}
@@ -226,12 +298,12 @@ class FootballAudio {
   resetBall(){if(this.rolling){const voice=this.rolling;this.rolling=null;this.stopVoice(voice,.08);}}
   pause(paused){
     this.paused=!!paused;if(!this.context)return;
-    if(this.paused){this.resetBall();for(const voice of this.voices)this.stopVoice(voice,.015);}
+    if(this.paused){this.windActive=false;this.windApplied=null;this.resetBall();for(const voice of this.voices)this.stopVoice(voice,.015);}
     this.gain.gain.setTargetAtTime(this.paused?0:this.masterLevel,this.context.currentTime,.02);
     if(!this.paused&&this.context.state==='suspended')this.context.resume().catch(()=>{});
   }
   dispose(){
-    if(this.disposed)return;this.disposed=true;this.rolling=null;
+    if(this.disposed)return;this.disposed=true;this.rolling=null;this.windActive=false;this.windApplied=null;
     for(const voice of this.voices)this.stopVoice(voice,0);
     this.gain?.disconnect();this.ceiling?.disconnect();this.context?.close().catch(()=>{});
   }

@@ -1,4 +1,5 @@
 import { FT } from "../../vendor/three.js";
+import { loadAsset } from "../assets.js";
 
 /* Prebaked smooth keeper geometry. Positions: 16-bit bounds; normals: octahedral. */
 class FootballKeeperMeshes {
@@ -8,8 +9,7 @@ class FootballKeeperMeshes {
     if(this.data)return Promise.resolve(this.data);
     if(this._loading)return this._loading;
     this._loading=(async()=>{
-      const url=new URL('../../assets/models/keeper/keeper.json',import.meta.url);
-      const response=await fetch(url);
+      const response=await loadAsset('assets/models/keeper/keeper.json');
       if(!response.ok)throw new Error('Keeper metadata: HTTP '+response.status);
       const metadata=await response.json();
       if(metadata.format!=='first-touch-keeper-v1')throw new Error('Unsupported keeper model');
@@ -22,7 +22,7 @@ class FootballKeeperMeshes {
           throw new Error('Invalid keeper metadata: '+name);
         const expected=m.vertices*(m.skin?18:14)+m.count*2;
         if(m.byteLength!==expected)throw new Error('Invalid keeper byte count: '+name);
-        const asset=await fetch(new URL(m.file,url));
+        const asset=await loadAsset('assets/models/keeper/'+m.file);
         if(!asset.ok)throw new Error('Keeper '+name+': HTTP '+asset.status);
         const bytes=new Uint8Array(await asset.arrayBuffer());
         if(bytes.byteLength!==expected)throw new Error('Incomplete keeper model: '+name);

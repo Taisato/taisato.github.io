@@ -4248,12 +4248,13 @@ void main() {
 
 // The only retained dependency is the bundled Three.js renderer and math library.
 const FT = Object.freeze({
-  Vector3:q, Quaternion:K, Group:kt, Scene:Rt, PerspectiveCamera:Jo,
+  Vector2:G, Vector3:q, Vector4:Ze, Quaternion:K, Group:kt, Scene:Rt, PerspectiveCamera:Jo,
   Matrix4:X, Mesh:sr, SkinnedMesh:yr, Bone:br, Skeleton:wr,
-  MeshStandardMaterial:Ja, MeshBasicMaterial:Yn, CanvasTexture:ci, DataTexture:xr,
+  MeshStandardMaterial:Ja, MeshBasicMaterial:Yn, ShaderMaterial:Ka, CanvasTexture:ci, DataTexture:xr,
   PlaneGeometry:Ia, CylinderGeometry:mi, SphereGeometry:La, BufferGeometry:Nn, BufferAttribute:vn,
   InstancedMesh:Nr, Color:Z, HemisphereLight:Io, DirectionalLight:ts, WebGLRenderer:Nu,
-  SRGBColorSpace:M, LinearFilter:o
+  WebGLRenderTarget:$e, DepthTexture:li, HalfFloatType:p, UnsignedByteType:l, AlwaysDepth:1,
+  SRGBColorSpace:M, LinearSRGBColorSpace:N, LinearFilter:o
 });
 
 export { FT };

@@ -1,5 +1,17 @@
-// Assets finish loading before either play button is available.
+import { FootballMenuPages } from './ui/menu-pages.js';
+
 export let footballApp=null;
+const pages=new FootballMenuPages((page,category)=>{
+  if(footballApp)footballApp.setMenuPage(page,true,category);
+  else pages.setPage(page,true,category);
+});
+window.addEventListener('keydown',event=>{
+  if(footballApp||event.code!=='Escape'||pages.page==='main')return;
+  pages.setPage(pages.backPage);
+  event.preventDefault();
+});
+
+// Play waits for the assets, while launcher navigation is ready immediately.
 async function bootstrap(){
   const status=document.querySelector('#status');
   const desktop=document.querySelector('#desktop');
@@ -12,12 +24,12 @@ async function bootstrap(){
     ]);
     await Promise.all([FootballKeeperMeshes.load(),FootballAudio.load()]);
     status.textContent='';
-    footballApp=new FootballApp();
+    footballApp=new FootballApp(pages);
     desktop.disabled=false;
     return footballApp;
   }catch(error){
     console.error('Football initialization failed',error);
-    status.textContent='Could not load the game. Check all game files, then reload.';
+    status.textContent='Could not load. Reload.';
     desktop.disabled=true;enter.disabled=true;
     return null;
   }

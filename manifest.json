@@ -96,6 +96,30 @@
       "gain": 1.0,
       "channels": "mono",
       "trimOnset": true
+    },
+    {
+      "id": "wind_normal",
+      "file": "wind_normal.mp3",
+      "gain": 0.0448,
+      "channels": "stereo",
+      "loop": {
+        "start": 1.8,
+        "end": 46.0,
+        "crossfade": 1.2,
+        "referenceOnset": 0.046
+      }
+    },
+    {
+      "id": "wind_heavy",
+      "file": "wind_heavy.mp3",
+      "gain": 0.048,
+      "channels": "stereo",
+      "loop": {
+        "start": 0.08,
+        "end": 17.7,
+        "crossfade": 1.0,
+        "referenceOnset": 0.046
+      }
     }
   ]
 }

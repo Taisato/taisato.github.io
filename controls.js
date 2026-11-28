@@ -1,5 +1,6 @@
 import { FT } from "../../vendor/three.js";
 import { FB, footballClamp } from "../config.js";
+import { calibrationProfile, readCalibration, saveCalibration } from "./calibration-storage.js";
 
 class FootballControls {
   constructor(scene,rig,camera,field) {
@@ -8,6 +9,8 @@ class FootballControls {
     this.headWorld=new FT.Vector3();this.viewOrientation=new FT.Quaternion();
     this.forward=new FT.Vector3(0,0,-1);this.right=new FT.Vector3(1,0,0);
     this.velocity=new FT.Vector3();this.up=new FT.Vector3(0,1,0);
+    this.runBonusSpeed=0;this.runBonusTravel=new FT.Vector3();this.previousRunBonusTravel=new FT.Vector3();
+    this.runBonusSample=new FT.Vector3();this.runBonusVelocity=new FT.Vector3();
     this.temp=new FT.Vector3();this.temp2=new FT.Vector3();this.instepQ=new FT.Quaternion();this.shinQ=new FT.Quaternion();
     this.pitchAxis=new FT.Vector3(1,0,0);
     // Player feet may pass through the turf during a low swing. This limit is
@@ -15,7 +18,7 @@ class FootballControls {
     this.floorPenetration=.20;
     this.footAxis=new FT.Vector3();this.contactOffset=new FT.Vector3();
     this.calibration={stage:'floor',progress:0,stable:false,reason:'Touch both controllers to the floor.',floorY:0,revision:0,awaitRelease:true};
-    this.calibrationRecord=null;this.calibrationPaused=false;this._captureArmed=false;this._floorHeadHeight=0;
+    this.calibrationRecord=null;this.calibrationInMemoryOnly=false;this.calibrationPaused=false;this._captureArmed=false;this._floorHeadHeight=0;
     this._calibrationSqueezed=[false,false];
     this._calibrationTime=0;this._calibrationCount=0;
     this._calibrationAnchor=[new FT.Vector3(),new FT.Vector3(),new FT.Vector3()];
@@ -23,22 +26,38 @@ class FootballControls {
     this._calibrationAnchorQ=[new FT.Quaternion(),new FT.Quaternion()];
     this._calibrationMeanQ=[new FT.Quaternion(),new FT.Quaternion()];
     this._desktopProfile=Object.freeze({length:.91,offset:Object.freeze(new FT.Vector3(0,-.91,0)),correction:Object.freeze(new FT.Quaternion())});
-    this.poseValid=false;this.desktop=false;this.desktopPitch=-.78;
+    this.poseValid=false;this.desktop=false;this.desktopPitch=-.45;
     this.poseInverse=new FT.Quaternion();this.poseVector=new FT.Vector3();
     this.trackingHoldSeconds=.12;
-    this.keys=new Set();this.kickAge=10;
-    this.edges={ball:false,menu:false,calibrate:false};this.left={x:0,y:0};this.turn=0;this.sprint=false;
+    this.keys=new Set();this.kickAge=10;this.kickFoot='right';
+    this._xrMenuSession=null;this._xrMenuSelections=new Map();
+    this._onXRMenuSelectStart=({inputSource:source})=>{
+      if(!this.calibrationPaused||source?.hand||source?.targetRayMode!=='tracked-pointer')return;
+      const hand=this.hands.find(item=>item.name===source.handedness);
+      const previous=this._xrMenuSelections.get(source);
+      if(hand&&previous?.ended!==false){
+        const alreadySampled=hand.source===source&&hand.trigger&&!previous?.ended;
+        this._xrMenuSelections.set(source,{pending:!alreadySampled,ended:false});
+      }
+    };
+    this._onXRMenuSelectEnd=({inputSource:source})=>{
+      const selection=this._xrMenuSelections.get(source);
+      if(selection)selection.ended=true;
+    };
+    this.edges={ball:false,menu:false,calibrate:false};this.left={x:0,y:0};this.turn=0;this.turnSpeedMultiplier=1;this.speedMultiplier=1;this.sprint=false;
     this.hands=['left','right'].map((name,index)=>{
       const visual=field.makeFoot(name);scene.add(visual.root);visual.root.visible=false;
       const collider=this.colliderFor(visual);
-      const ray=new FT.Mesh(new FT.CylinderGeometry(.002,.002,1,5),new FT.MeshBasicMaterial({color:0xccf191,depthTest:false}));
-      ray.renderOrder=50;ray.visible=false;scene.add(ray);
-      return {name,index,visual,ray,source:null,tracked:false,ready:false,previousTracked:false,
+      const reachOf=mesh=>{const bound=mesh?.geometry?.boundingSphere;return bound?bound.center.length()+bound.radius:0;};
+      const visualReach=Math.max(reachOf(visual.boot),reachOf(visual.shin),collider.offset.length()+collider.radius+collider.halfLength);
+      const ray=new FT.Mesh(new FT.CylinderGeometry(.002,.002,1,5),new FT.MeshBasicMaterial({color:0xccf191,transparent:true,opacity:.9,depthTest:false,depthWrite:false,toneMapped:false}));
+      ray.renderOrder=200;ray.frustumCulled=false;ray.visible=false;scene.add(ray);
+      return {name,index,visual,visualReach,ray,source:null,tracked:false,ready:false,previousTracked:false,
         inputPresent:false,contactTracked:false,rayTracked:false,poseMode:'none',poseAge:Infinity,hasPose:false,hasRayGrip:false,
         lastPosePosition:new FT.Vector3(),lastPoseOrientation:new FT.Quaternion(),
         rayToGripPosition:new FT.Vector3(),rayToGripOrientation:new FT.Quaternion(),
         length:0,calibrated:false,profile:null,visualProfile:null,colliderOffset:collider.offset,neutralHeight:collider.neutralHeight||.105,instep:false,instepInput:0,instepAmount:0,grip:false,trigger:false,previousTrigger:false,
-        lastB:false,lastX:false,lastMenu:false,select:false,
+        lastA:false,lastX:false,lastMenu:false,select:false,
         localPosition:new FT.Vector3(),localOrientation:new FT.Quaternion(),
         rayLocalPosition:new FT.Vector3(),rayLocalOrientation:new FT.Quaternion(),
         rayPosition:new FT.Vector3(),rayOrientation:new FT.Quaternion(),rayDirection:new FT.Vector3(),
@@ -47,10 +66,11 @@ class FootballControls {
         frameStartControllerOrientation:new FT.Quaternion(),frameTargetControllerOrientation:new FT.Quaternion(),
         frameStartOrientation:new FT.Quaternion(),frameTargetOrientation:new FT.Quaternion(),
         frameStartShinOrientation:new FT.Quaternion(),frameTargetShinOrientation:new FT.Quaternion(),
-        frameStartDrive:new FT.Vector3(),frameTargetDrive:new FT.Vector3(),
+        frameStartDrive:new FT.Vector3(),frameTargetDrive:new FT.Vector3(),frameLocalDrive:new FT.Vector3(),
+        frameStartLocomotion:new FT.Vector3(),frameTargetLocomotion:new FT.Vector3(),
         frameStart:new FT.Vector3(),frameTarget:new FT.Vector3(),sampleVelocity:new FT.Vector3(),
         foot:{id:name,position:new FT.Vector3(),previous:new FT.Vector3(),velocity:new FT.Vector3(),anklePosition:new FT.Vector3(),previousAnklePosition:new FT.Vector3(),ankleVelocity:new FT.Vector3(),orientation:new FT.Quaternion(),previousOrientation:new FT.Quaternion(),angularVelocity:new FT.Vector3(),contactShape:collider.shape||null,contactOffset:collider.offset,radius:collider.radius,halfLength:collider.halfLength,
-          drivePosition:new FT.Vector3(),previousDrivePosition:new FT.Vector3(),driveVelocity:new FT.Vector3(),controlOrientation:new FT.Quaternion(),previousControlOrientation:new FT.Quaternion(),controlAngularVelocity:new FT.Vector3(),
+          drivePosition:new FT.Vector3(),previousDrivePosition:new FT.Vector3(),driveVelocity:new FT.Vector3(),locomotionPosition:new FT.Vector3(),previousLocomotionPosition:new FT.Vector3(),locomotionVelocity:new FT.Vector3(),runBonusVelocity:new FT.Vector3(),controlOrientation:new FT.Quaternion(),previousControlOrientation:new FT.Quaternion(),controlAngularVelocity:new FT.Vector3(),
           shinContactShape:visual.shinContactShape||visual.shin?.geometry?.userData?.footballShin?.contact||null,shinOrientation:new FT.Quaternion(),previousShinOrientation:new FT.Quaternion(),shinAngularVelocity:new FT.Vector3(),instep:false,instepAmount:0,enabled:false}}
     });
     this.feet=this.hands.map(hand=>hand.foot);this.angularDelta=new FT.Quaternion();
@@ -59,6 +79,7 @@ class FootballControls {
     const listen=(type,fn)=>window.addEventListener(type,fn,{signal:this.abort.signal});
     listen('keydown',event=>{
       if(!this.desktop||event.repeat)return;
+      if(event.code!=='Escape'&&event.target?.closest?.('button,input,select,textarea,summary,[contenteditable]'))return;
       this.keys.add(event.code);
       if(event.code==='KeyB')this.edges.ball=true;
       if(event.code==='KeyX')this.edges.calibrate=true;
@@ -84,7 +105,15 @@ class FootballControls {
     return{radius,halfLength,offset:Object.freeze(new FT.Vector3((minX+maxX)*.5,minY+radius,(minZ+maxZ)*.5))};
   }
   setDesktop(enabled) {
-    this.desktop=enabled;this.poseValid=false;this.keys.clear();this.velocity.set(0,0,0);this.invalidate();
+    this.desktop=enabled;this.poseValid=false;this.keys.clear();this.velocity.set(0,0,0);
+    if(enabled)this._setXRMenuSession(null);
+    else{
+      const record=(this.calibrationInMemoryOnly?null:readCalibration())??this.calibrationRecord;
+      if(record)this.applyCalibration(record);
+      else if(this.calibration.stage==='stance')this.beginCalibration();
+    }
+    this.invalidate();
+    // The input pass only needs the rig matrix. The scene render updates its camera and HUD children.
     this.rig.position.y=-this.floorY;this.resetCalibrationWindow();
     if(enabled){this.headLocal.set(0,1.7,0);this.headOrientation.setFromAxisAngle(new FT.Vector3(1,0,0),this.desktopPitch);}
   }
@@ -101,6 +130,14 @@ class FootballControls {
     const p=pose?.transform?.position,q=pose?.transform?.orientation;
     return !!(p&&q&&Number.isFinite(p.x+p.y+p.z+q.x+q.y+q.z+q.w)&&Math.hypot(q.x,q.y,q.z,q.w)>.5);
   }
+  _setXRMenuSession(session) {
+    if(this._xrMenuSession===session)return;
+    this._xrMenuSession?.removeEventListener?.('selectstart',this._onXRMenuSelectStart);
+    this._xrMenuSession?.removeEventListener?.('selectend',this._onXRMenuSelectEnd);
+    this._xrMenuSelections.clear();this._xrMenuSession=session;
+    session?.addEventListener?.('selectstart',this._onXRMenuSelectStart);
+    session?.addEventListener?.('selectend',this._onXRMenuSelectEnd);
+  }
   readControllerInput(hand,source) {
     const pad=source.gamepad,connected=hand.source!==source;
     if(connected){
@@ -108,7 +145,7 @@ class FootballControls {
       // A newly attached controller may already be held. Start from its live
       // button state; only a subsequent press is an action edge.
       hand.previousTrigger=this.button(pad,0);
-      hand.lastB=hand.name==='right'&&this.button(pad,5);
+      hand.lastA=hand.name==='right'&&this.button(pad,4);
       hand.lastX=hand.name==='left'&&this.button(pad,4);
       hand.lastMenu=hand.name==='left'&&(this.button(pad,5)||this.button(pad,6));
     }
@@ -117,9 +154,9 @@ class FootballControls {
     if(hand.name==='left'){this.left.x=stick[0];this.left.y=stick[1];}else this.turn=stick[0];
     hand.trigger=this.button(pad,0);hand.instep=hand.trigger;hand.instepInput=this.buttonValue(pad,0);hand.grip=this.button(pad,1);
     hand.select=hand.trigger&&!hand.previousTrigger;hand.previousTrigger=hand.trigger;this.sprint=this.sprint||hand.grip;
-    const b=hand.name==='right'&&this.button(pad,5),x=hand.name==='left'&&this.button(pad,4),menu=hand.name==='left'&&(this.button(pad,5)||this.button(pad,6));
-    if(b&&!hand.lastB)this.edges.ball=true;if(x&&!hand.lastX)this.edges.calibrate=true;if(menu&&!hand.lastMenu)this.edges.menu=true;
-    hand.lastB=b;hand.lastX=x;hand.lastMenu=menu;
+    const a=hand.name==='right'&&this.button(pad,4),x=hand.name==='left'&&this.button(pad,4),menu=hand.name==='left'&&(this.button(pad,5)||this.button(pad,6));
+    if(a&&!hand.lastA)this.edges.ball=true;if(x&&!hand.lastX)this.edges.calibrate=true;if(menu&&!hand.lastMenu)this.edges.menu=true;
+    hand.lastA=a;hand.lastX=x;hand.lastMenu=menu;
   }
   sampleControllerPose(hand,frame,reference,dt) {
     const source=hand.source;let grip=null,ray=null;
@@ -170,17 +207,26 @@ class FootballControls {
     this.left.x=0;this.left.y=0;this.turn=0;this.sprint=false;
     for(const hand of this.hands){hand.previousTracked=hand.tracked;hand.tracked=false;hand.contactTracked=false;hand.rayTracked=false;hand.inputPresent=false;hand.poseMode='none';hand.select=false;}
     if(this.desktop){this.sampleDesktop(dt);return true;}
+    this._setXRMenuSession(session??null);
+    if(!this.calibrationPaused)this._xrMenuSelections.clear();
     // WebXR gamepad state is independent of whether getPose can locate a hand
     // (or the viewer) this frame. Always read it, including release transitions.
     for(const source of session?.inputSources||[]){
       const hand=this.hands.find(h=>h.name===source.handedness);
       if(!hand||source.hand||source.targetRayMode!=='tracked-pointer'||source.gamepad?.connected===false)continue;
       this.readControllerInput(hand,source);
+      const selection=this._xrMenuSelections.get(source);
+      if(selection){
+        // A browser may report primary input between frames or before its polled
+        // Gamepad edge. Each native press owns one menu selection until release.
+        hand.select=selection.pending;selection.pending=false;
+        if(selection.ended)this._xrMenuSelections.delete(source);
+      }
     }
     for(const hand of this.hands)if(!hand.inputPresent){
-      if(hand.source)this.requireCalibrationRelease();
+      if(hand.source){this.requireCalibrationRelease();this._xrMenuSelections.delete(hand.source);}
       hand.source=null;hand.hasPose=false;hand.hasRayGrip=false;hand.poseAge=Infinity;hand.ready=false;
-      hand.trigger=hand.instep=hand.grip=hand.previousTrigger=hand.lastB=hand.lastX=hand.lastMenu=false;hand.instepInput=0;
+      hand.trigger=hand.instep=hand.grip=hand.previousTrigger=hand.lastA=hand.lastX=hand.lastMenu=false;hand.instepInput=0;
     }
     let viewer=null;
     if(frame&&reference)try{viewer=frame.getViewerPose(reference);}catch{}
@@ -319,21 +365,29 @@ class FootballControls {
         const inverse=this._calibrationMeanQ[index].clone().invert();
         const offset=new FT.Vector3(0,-length,0).applyQuaternion(inverse);
         const correction=inverse.clone().multiply(neutralFoot);
-        const profile=Object.freeze({length,offset:Object.freeze(offset),correction:Object.freeze(correction)});
-        profiles.push(profile);
+        profiles.push(calibrationProfile(length,offset,correction));
       }
-      calibration.revision++;calibration.stage='ready';calibration.progress=1;calibration.stable=true;
-      this.calibrationRecord=Object.freeze({floorY:calibration.floorY,headHeight:this._calibrationMean[2].y-calibration.floorY,revision:calibration.revision,profiles:Object.freeze(profiles)});
-      for(let index=0;index<2;index++){
-        const hand=this.hands[index];hand.profile=profiles[index];hand.length=profiles[index].length;hand.calibrated=true;
-        // Confirmation triggers are not a kick and must not retain an old toe tilt.
-        hand.instepInput=0;hand.instepAmount=0;hand.foot.instep=false;hand.foot.instepAmount=0;
-        hand.visual.setLength(hand.length);hand.visualProfile=hand.profile;
-      }
-      this.rig.position.y=-calibration.floorY;calibration.reason='Release both triggers.';
+      calibration.revision++;
+      this.applyCalibration({floorY:calibration.floorY,headHeight:this._calibrationMean[2].y-calibration.floorY,profiles});
+      this.calibrationInMemoryOnly=!saveCalibration(this.calibrationRecord);
     }
     calibration.awaitRelease=true;this._captureArmed=false;this.resetCalibrationWindow();this.invalidate();
     return {ok:true,stage:calibration.stage,reason:calibration.reason};
+  }
+  applyCalibration({floorY,headHeight,profiles}) {
+    const cal=this.calibration;
+    this.calibrationRecord=Object.freeze({floorY,headHeight,revision:cal.revision,profiles:Object.freeze(profiles)});
+    cal.stage='ready';cal.floorY=floorY;cal.stable=true;cal.progress=1;
+    cal.awaitRelease=true;cal.reason='Release both triggers.';
+    this.rig.position.y=-floorY;
+    for(const hand of this.hands){
+      hand.profile=profiles[hand.index];hand.length=hand.profile.length;hand.calibrated=true;
+      hand.instepInput=0;hand.instepAmount=0;hand.foot.instep=false;hand.foot.instepAmount=0;
+      hand.visual.setLength(hand.length);hand.visualProfile=hand.profile;
+    }
+  }
+  kickDesktop(foot) {
+    this.kickFoot=foot;this.kickAge=0;
   }
   sampleDesktop(dt) {
     this.poseValid=true;const key=k=>this.keys.has(k);
@@ -343,12 +397,12 @@ class FootballControls {
     const length=Math.hypot(this.left.x,this.left.y);if(length>1){this.left.x/=length;this.left.y/=length;}
     this.sprint=key('ShiftLeft')||key('ShiftRight');
     this.kickAge+=dt;
-    if(key('Space')&&this.kickAge>1)this.kickAge=0;
+    if(this.kickAge>1&&(key('KeyQ')||key('Space')))this.kickDesktop(key('KeyQ')?'left':'right');
     const a=this.kickAge,phase=footballClamp(a/.18,0,1);
     for(const hand of this.hands){
       hand.tracked=true;hand.contactTracked=true;hand.rayTracked=true;hand.poseMode='desktop';hand.localOrientation.identity();hand.rayLocalOrientation.identity();
       const right=hand.name==='right',baseX=right?.16:-.16;
-      const active=right&&a<.34;
+      const active=hand.name===this.kickFoot&&a<.34;
       const swing=active?(a<.18?-.62+phase*1.3:.68-(a-.18)*4.25):0;
       hand.localPosition.set(baseX,1.02+(active?Math.max(0,Math.sin(phase*Math.PI))*.16:0),-.17-swing);
       hand.instep=key('KeyE');hand.instepInput=Number(hand.instep);
@@ -356,56 +410,98 @@ class FootballControls {
     }
     this.headOrientation.setFromAxisAngle(new FT.Vector3(1,0,0),this.desktopPitch);
   }
+  horizontalForward(orientation,target) {
+    target.set(0,0,-1).applyQuaternion(orientation);
+    target.y=0;
+    // Looking down at the ball can take the gaze through vertical. The line
+    // between the ears still describes the player's heading at that angle.
+    const upright=1-2*(orientation.x*orientation.x+orientation.z*orientation.z);
+    if(upright<.30){
+      this.right.set(1,0,0).applyQuaternion(orientation);
+      const weight=.30-upright;
+      target.x+=this.right.z*weight;target.z-=this.right.x*weight;
+    }
+    return target.normalize();
+  }
   refreshHead() {
+    // The input pass only needs the rig matrix. The scene render updates its camera and HUD children.
     this.rig.position.y=-this.floorY;
-    this.rig.updateMatrixWorld(true);
+    this.rig.updateWorldMatrix(false,false);
     this.headWorld.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
     this.viewOrientation.copy(this.rig.quaternion).multiply(this.headOrientation);
-    this.forward.set(0,0,-1).applyQuaternion(this.viewOrientation);this.forward.y=0;
-    if(this.forward.lengthSq()<.01)this.forward.set(0,0,-1).applyQuaternion(this.rig.quaternion);
-    this.forward.normalize();this.right.crossVectors(this.forward,this.up).normalize();
+    this.horizontalForward(this.viewOrientation,this.forward);
+    this.right.crossVectors(this.forward,this.up).normalize();
     if(this.desktop){this.camera.position.copy(this.headLocal);this.camera.quaternion.copy(this.headOrientation);}
+  }
+  ballClearance(hand,ball,margin){
+    const foot=hand.foot,reach=hand.visualReach,ankle=hand.frameTarget;
+    const translation=ankle.distanceTo(foot.anklePosition);
+    const outer=ball.position.distanceTo(ankle)-reach-translation-ball.radius;
+    if(outer>=margin||!foot.contactShape||!foot.shinContactShape)return outer;
+    // Both authored boxes are ankle-local. Cover the angular sweep as well as
+    // the translation between the solved foot and the displayed controller.
+    const boot=this.shapeClearance(ball.position,ankle,hand.frameTargetOrientation,foot.orientation,foot.contactShape.bounds,reach);
+    const shin=this.shapeClearance(ball.position,ankle,hand.frameTargetShinOrientation,foot.shinOrientation,foot.shinContactShape.bounds,reach);
+    return Math.min(boot,shin)-translation-ball.radius;
+  }
+  shapeClearance(point,ankle,target,solved,bounds,reach){
+    const local=this.temp.copy(point).sub(ankle).applyQuaternion(this.shinQ.copy(target).invert());
+    const {min,max}=bounds;
+    const distance=Math.hypot(Math.max(min[0]-local.x,0,local.x-max[0]),Math.max(min[1]-local.y,0,local.y-max[1]),Math.max(min[2]-local.z,0,local.z-max[2]));
+    const dot=target.dot(solved);
+    return distance-2*reach*Math.sqrt(Math.max(0,1-dot*dot));
   }
   move(dt,blocked) {
     this.refreshHead();
-    if(blocked||!this.poseValid||!this.isCalibrated||(!this.desktop&&this.calibration.awaitRelease)){this.velocity.set(0,0,0);return;}
-    const yaw=-this.turn*FB.turnSpeed*dt;
+    this.previousRunBonusTravel.copy(this.runBonusTravel);
+    if(blocked||!this.poseValid||!this.isCalibrated||(!this.desktop&&this.calibration.awaitRelease)){this.velocity.set(0,0,0);this.runBonusSpeed=0;return;}
+    const yaw=-this.turn*FB.turnSpeed*this.turnSpeedMultiplier*dt;
     if(Math.abs(yaw)>1e-6){
-      this.temp.copy(this.headWorld);this.rig.rotation.y+=yaw;this.rig.updateMatrixWorld(true);
+      this.temp.copy(this.headWorld);this.rig.rotation.y+=yaw;this.rig.updateWorldMatrix(false,false);
       this.temp2.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
       this.rig.position.x+=this.temp.x-this.temp2.x;this.rig.position.z+=this.temp.z-this.temp2.z;
       this.refreshHead();
     }
-    const speed=this.sprint?FB.sprintSpeed:FB.walkSpeed;
+    const baseSpeed=this.sprint?FB.sprintSpeed:FB.walkSpeed;
+    const speed=baseSpeed*this.speedMultiplier;
     this.temp.copy(this.forward).multiplyScalar(-this.left.y).addScaledVector(this.right,this.left.x);
     const inputLength=this.temp.length();
+    if(this.velocity.lengthSq()===0)this.runBonusSpeed=0;
     if(inputLength>1e-6){
       // Direction follows the stick immediately. Smoothing the velocity vector
       // makes a reversal brake through zero, even while the stick stays fully held.
       const targetSpeed=speed*Math.min(inputLength,1),currentSpeed=this.velocity.length();
-      const nextSpeed=currentSpeed+(targetSpeed-currentSpeed)*(1-Math.exp(-24*dt));
+      const blend=1-Math.exp(-24*dt),nextSpeed=currentSpeed+(targetSpeed-currentSpeed)*blend;
+      this.runBonusSpeed+=((speed-baseSpeed)*Math.min(inputLength,1)-this.runBonusSpeed)*blend;
       this.velocity.copy(this.temp).multiplyScalar(nextSpeed/inputLength);
     }else{
-      this.velocity.multiplyScalar(Math.exp(-18*dt));
+      const decay=Math.exp(-18*dt);
+      this.velocity.multiplyScalar(decay);this.runBonusSpeed*=decay;
       if(this.velocity.lengthSq()<1e-8)this.velocity.set(0,0,0);
     }
-    this.rig.position.addScaledVector(this.velocity,dt);this.rig.updateMatrixWorld(true);
+    const startX=this.rig.position.x,startZ=this.rig.position.z;
+    this.rig.position.addScaledVector(this.velocity,dt);this.rig.updateWorldMatrix(false,false);
     this.temp.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
     const bx=FB.halfWidth+5,bz=FB.halfLength+5;
     this.rig.position.x+=footballClamp(this.temp.x,-bx,bx)-this.temp.x;
     this.rig.position.z+=footballClamp(this.temp.z,-bz,bz)-this.temp.z;
+    // Only the perk's actual stick translation contributes extra run-up power.
+    // Exclude turning, controller swings, and travel blocked by the pitch bounds.
+    const fraction=this.runBonusSpeed/Math.max(.000001,this.velocity.length());
+    this.runBonusTravel.x+=(this.rig.position.x-startX)*fraction;
+    this.runBonusTravel.z+=(this.rig.position.z-startZ)*fraction;
     this.refreshHead();
   }
   place(position,yaw=0) {
-    this.temp.set(0,0,-1).applyQuaternion(this.headOrientation);
-    const localYaw=Math.hypot(this.temp.x,this.temp.z)>.01?Math.atan2(-this.temp.x,-this.temp.z):0;
-    this.rig.rotation.set(0,yaw-localYaw,0);this.rig.position.set(0,-this.floorY,0);this.rig.updateMatrixWorld(true);
+    this.horizontalForward(this.headOrientation,this.temp);
+    const localYaw=Math.atan2(-this.temp.x,-this.temp.z);
+    this.rig.rotation.set(0,yaw-localYaw,0);this.rig.position.set(0,-this.floorY,0);this.rig.updateWorldMatrix(false,false);
     this.temp.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
     this.rig.position.set(position.x-this.temp.x,-this.floorY,position.z-this.temp.z);
     this.velocity.set(0,0,0);this.invalidate();this.refreshHead();
   }
   prepareFeet(dt,blocked) {
-    this.rig.updateMatrixWorld(true);
+    this.rig.updateWorldMatrix(false,false);
     for(const hand of this.hands){
       hand.ray.visible=false;
       // Menu aiming can remain available even when the boot has no trusted
@@ -427,6 +523,14 @@ class FootballControls {
       this.temp.copy(profile.offset).applyQuaternion(hand.worldOrientation).add(hand.worldPosition);
       // Impact energy follows the real controller-driven ankle. A clearance
       // adjustment can move the visible pose, but must not invent a foot swing.
+      // Separate the rig's movement from the real calibrated controller swing.
+      // Keep a cumulative displacement so both components use exactly the same
+      // fixed-step interpolation, including frames with no physics step.
+      this.temp2.copy(profile.offset).applyQuaternion(hand.localOrientation).add(hand.localPosition);
+      this.poseVector.subVectors(this.temp2,hand.frameLocalDrive).applyQuaternion(this.rig.quaternion);
+      hand.frameLocalDrive.copy(this.temp2);
+      hand.frameStartLocomotion.copy(hand.frameTargetLocomotion);
+      hand.frameTargetLocomotion.add(this.temp).sub(hand.frameTargetDrive).sub(this.poseVector);
       hand.frameStartDrive.copy(hand.frameTargetDrive);hand.frameTargetDrive.copy(this.temp);
       // In the reference's held-up-foot demonstration, full instep extends the
       // toe along the shin, a quarter turn about the ankle. Follow the analog
@@ -479,6 +583,7 @@ class FootballControls {
     hand.frameStart.copy(hand.frameTarget);hand.sampleVelocity.set(0,0,0);
     hand.frameStartControllerPosition.copy(hand.frameTargetControllerPosition);hand.frameStartControllerOrientation.copy(hand.frameTargetControllerOrientation);
     hand.frameStartDrive.copy(hand.frameTargetDrive);foot.drivePosition.copy(hand.frameTargetDrive);foot.previousDrivePosition.copy(foot.drivePosition);foot.driveVelocity.set(0,0,0);
+    hand.frameStartLocomotion.set(0,0,0);hand.frameTargetLocomotion.set(0,0,0);foot.locomotionPosition.set(0,0,0);foot.previousLocomotionPosition.set(0,0,0);foot.locomotionVelocity.set(0,0,0);
     foot.controlOrientation.copy(hand.frameTargetControllerOrientation);foot.previousControlOrientation.copy(foot.controlOrientation);foot.controlAngularVelocity.set(0,0,0);
     hand.frameStartOrientation.copy(hand.frameTargetOrientation);foot.orientation.copy(hand.frameTargetOrientation);foot.previousOrientation.copy(foot.orientation);
     foot.anklePosition.copy(hand.frameTarget);foot.previousAnklePosition.copy(foot.anklePosition);foot.ankleVelocity.set(0,0,0);
@@ -493,12 +598,19 @@ class FootballControls {
     output.set(this.angularDelta.x*rate,this.angularDelta.y*rate,this.angularDelta.z*rate);
   }
   physicsFeet(alpha1) {
+    this.runBonusVelocity.copy(this.runBonusSample);
+    this.runBonusSample.lerpVectors(this.previousRunBonusTravel,this.runBonusTravel,alpha1);
+    this.runBonusVelocity.subVectors(this.runBonusSample,this.runBonusVelocity).multiplyScalar(1/FB.fixedStep);
     for(const hand of this.hands){
+      hand.foot.runBonusVelocity.copy(this.runBonusVelocity);
       hand.foot.previous.copy(hand.foot.position);hand.foot.previousOrientation.copy(hand.foot.orientation);
       hand.foot.previousShinOrientation.copy(hand.foot.shinOrientation);
       hand.foot.previousDrivePosition.copy(hand.foot.drivePosition);
       hand.foot.drivePosition.lerpVectors(hand.frameStartDrive,hand.frameTargetDrive,alpha1);
       hand.foot.driveVelocity.subVectors(hand.foot.drivePosition,hand.foot.previousDrivePosition).multiplyScalar(1/FB.fixedStep);
+      hand.foot.previousLocomotionPosition.copy(hand.foot.locomotionPosition);
+      hand.foot.locomotionPosition.lerpVectors(hand.frameStartLocomotion,hand.frameTargetLocomotion,alpha1);
+      hand.foot.locomotionVelocity.subVectors(hand.foot.locomotionPosition,hand.foot.previousLocomotionPosition).multiplyScalar(1/FB.fixedStep);
       hand.foot.previousControlOrientation.copy(hand.foot.controlOrientation);
       hand.foot.controlOrientation.slerpQuaternions(hand.frameStartControllerOrientation,hand.frameTargetControllerOrientation,alpha1);
       this.measureAngularVelocity(hand.foot.previousControlOrientation,hand.foot.controlOrientation,hand.foot.controlAngularVelocity);
@@ -527,9 +639,9 @@ class FootballControls {
     const actuator=this.hands.find(hand=>hand.name===footId)?.source?.gamepad?.hapticActuators?.[0];
     if(actuator?.pulse)try{const p=actuator.pulse(footballClamp(strength,0,1),35);p?.catch?.(()=>{});}catch{}
   }
-  invalidate(){this.requireCalibrationRelease();for(const hand of this.hands){this.resetFootHistory(hand);hand.ready=false;hand.foot.enabled=false;hand.poseAge=this.trackingHoldSeconds;}this.velocity.set(0,0,0);}
+  invalidate(){this.requireCalibrationRelease();this._xrMenuSelections.clear();for(const hand of this.hands){this.resetFootHistory(hand);hand.ready=false;hand.foot.enabled=false;hand.poseAge=this.trackingHoldSeconds;}this.velocity.set(0,0,0);this.runBonusSpeed=0;this.runBonusSample.copy(this.runBonusTravel);}
   clearEdges(){this.edges.ball=false;this.edges.menu=false;this.edges.calibrate=false;}
-  dispose(){this.abort.abort();for(const hand of this.hands){hand.ray.geometry.dispose();hand.ray.material.dispose();hand.ray.removeFromParent();hand.visual.root.removeFromParent();}}
+  dispose(){this.abort.abort();this._setXRMenuSession(null);for(const hand of this.hands){hand.ray.geometry.dispose();hand.ray.material.dispose();hand.ray.removeFromParent();hand.visual.root.removeFromParent();}}
 }
 
 export { FootballControls };

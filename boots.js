@@ -32,9 +32,32 @@ class FootballBoots {
     return target;
   }
   static groundClearance(orientation,hand='right'){
-    const up=this._up.set(0,1,0).applyQuaternion(this._inverse.copy(orientation).invert()),data=this.supportVertices(hand);
+    const up=this._up.set(0,1,0).applyQuaternion(this._inverse.copy(orientation).invert());
+    const octant=Number(up.x<0)+2*Number(up.y<0)+4*Number(up.z<0);
+    const data=this.source(hand).groundSupport[octant];
     let low=Infinity;for(let i=0;i<data.length;i+=3)low=Math.min(low,data[i]*up.x+data[i+1]*up.y+data[i+2]*up.z);
     return -low+.002;
+  }
+  static makeGroundSupport(points){
+    // For one sign combination a vertex can never be lowest if another
+    // vertex is at least as low on all three axes. Store the exact remaining
+    // vertices, including the studs, for each orientation of the boot.
+    const offsets=Array.from({length:points.length/3},(_,i)=>i*3);
+    return Array.from({length:8},(_,octant)=>{
+      const sx=octant&1?-1:1,sy=octant&2?-1:1,sz=octant&4?-1:1;
+      offsets.sort((a,b)=>sx*(points[a]-points[b])||sy*(points[a+1]-points[b+1])||sz*(points[a+2]-points[b+2]));
+      const kept=[];
+      for(const i of offsets){
+        const y=points[i+1],z=points[i+2];
+        if(kept.some(j=>sy*(points[j+1]-y)<=0&&sz*(points[j+2]-z)<=0))continue;
+        kept.push(i);
+      }
+      const support=new Float32Array(kept.length*3);
+      for(let n=0;n<kept.length;n++){
+        const i=kept[n];support[n*3]=points[i];support[n*3+1]=points[i+1];support[n*3+2]=points[i+2];
+      }
+      return support;
+    });
   }
   static describe(hand='right'){return this.source(hand).description;}
   static build(hand){
@@ -210,7 +233,7 @@ class FootballBoots {
     const collider=Object.freeze({radius,halfLength,offset:Object.freeze([(b.max.x+b.min.x)*.5,b.min.y+radius,(b.max.z+b.min.z)*.5])});
     const supportArray=new Float32Array(support),contact=hand==='left'?this.makeStrikingBody(last,bounds,scale,new Float32Array(lastSupport)):this.mirrorContact(this.source('left').description.contact,bounds);
     const description=Object.freeze({hand,spec:this.spec,bounds,collider,contact,support:supportArray,toeLocal:Object.freeze([mirror*.012*scale,-.046*scale,-.224*scale]),heelLocal:Object.freeze([0,-.027*scale,.061*scale]),triangles:I.length/3});
-    return{geometry,description};
+    return{geometry,description,groundSupport:this.makeGroundSupport(supportArray)};
   }
   static makeStrikingBody(last,bounds,scale,lastSupport){
     // A tapered, bevelled boot body. Its broad side faces transfer an inside-foot
@@ -270,9 +293,7 @@ class FootballBoots {
     }
     const data=[];
     for(const f of faces){const a=points[f.a],b=points[f.b],c=points[f.c];data.push(...a,...b,...c,...f.n,f.w,Math.min(a[0],b[0],c[0]),Math.min(a[1],b[1],c[1]),Math.min(a[2],b[2],c[2]),Math.max(a[0],b[0],c[0]),Math.max(a[1],b[1],c[1]),Math.max(a[2],b[2],c[2]));}
-    const surface={triangles:new Float32Array(data),count:faces.length,bounds};
-    surface.query=(point,target,normal,maxDistance=Infinity)=>FootballBoots.querySurface(surface,point,target,normal,maxDistance);
-    return Object.freeze(surface);
+    return this.makeSurface(new Float32Array(data),bounds);
   }
   static mirrorContact(source,bounds){
     const data=new Float32Array(source.triangles),s=source.triangles;
@@ -280,46 +301,74 @@ class FootballBoots {
       data[i]=-s[i];data[i+3]=-s[i+6];data[i+4]=s[i+7];data[i+5]=s[i+8];data[i+6]=-s[i+3];data[i+7]=s[i+4];data[i+8]=s[i+5];
       data[i+9]=-s[i+9];data[i+13]=-s[i+16];data[i+16]=-s[i+13];
     }
-    const surface={triangles:data,count:source.count,bounds};surface.query=(p,target,normal,maxDistance=Infinity)=>FootballBoots.querySurface(surface,p,target,normal,maxDistance);return Object.freeze(surface);
+    return this.makeSurface(data,bounds);
+  }
+  static makeSurface(triangles,bounds){
+    // Consecutive faces keep the original tie-breaking order on seams and edges.
+    const groupStride=16*19,groups=new Float32Array(6*Math.ceil(triangles.length/groupStride));
+    for(let start=0,g=0;start<triangles.length;start+=groupStride,g+=6){
+      for(let axis=0;axis<3;axis++){
+        let low=Infinity,high=-Infinity;
+        for(let i=start,end=Math.min(start+groupStride,triangles.length);i<end;i+=19){
+          low=Math.min(low,triangles[i+13+axis]);high=Math.max(high,triangles[i+16+axis]);
+        }
+        groups[g+axis]=low;groups[g+3+axis]=high;
+      }
+    }
+    const surface={triangles,bounds,groups,groupStride,count:triangles.length/19};
+    surface.query=(p,target,normal,maxDistance=Infinity)=>FootballBoots.querySurface(surface,p,target,normal,maxDistance);
+    return Object.freeze(surface);
   }
   static querySurface(surface,p,target,normal,maxDistance=Infinity){
     const bounds=surface.bounds,px=p.x,py=p.y,pz=p.z;
     const dx=Math.max(bounds.min[0]-px,0,px-bounds.max[0]),dy=Math.max(bounds.min[1]-py,0,py-bounds.max[1]),dz=Math.max(bounds.min[2]-pz,0,pz-bounds.max[2]);
     if(dx*dx+dy*dy+dz*dz>maxDistance*maxDistance)return Infinity;
-    const data=surface.triangles;let best=maxDistance*maxDistance,found=false,inside=true,bx=0,by=0,bz=0,nx=0,ny=1,nz=0;
-    for(let i=0;i<data.length;i+=19){
-      const plane=data[i+9]*px+data[i+10]*py+data[i+11]*pz-data[i+12];if(plane>1e-7)inside=false;
-      const dx=Math.max(data[i+13]-px,0,px-data[i+16]),dy=Math.max(data[i+14]-py,0,py-data[i+17]),dz=Math.max(data[i+15]-pz,0,pz-data[i+18]);
-      if(dx*dx+dy*dy+dz*dz>best)continue;
-      const ax=data[i],ay=data[i+1],az=data[i+2],abx=data[i+3]-ax,aby=data[i+4]-ay,abz=data[i+5]-az,acx=data[i+6]-ax,acy=data[i+7]-ay,acz=data[i+8]-az;
-      const apx=px-ax,apy=py-ay,apz=pz-az,d1=abx*apx+aby*apy+abz*apz,d2=acx*apx+acy*apy+acz*apz;
-      let cx,cy,cz;
-      if(d1<=0&&d2<=0){cx=ax;cy=ay;cz=az;}
-      else{
-        const bpx=px-data[i+3],bpy=py-data[i+4],bpz=pz-data[i+5],d3=abx*bpx+aby*bpy+abz*bpz,d4=acx*bpx+acy*bpy+acz*bpz;
-        if(d3>=0&&d4<=d3){cx=data[i+3];cy=data[i+4];cz=data[i+5];}
+    const data=surface.triangles,groups=surface.groups,stride=surface.groupStride||data.length;
+    let best=maxDistance*maxDistance,found=false,bx=0,by=0,bz=0,nx=0,ny=1,nz=0;
+    for(let start=0,g=0;start<data.length;start+=stride,g+=6){
+      if(groups){
+        const dx=Math.max(groups[g]-px,0,px-groups[g+3]),dy=Math.max(groups[g+1]-py,0,py-groups[g+4]),dz=Math.max(groups[g+2]-pz,0,pz-groups[g+5]);
+        if(dx*dx+dy*dy+dz*dz>best)continue;
+      }
+      for(let i=start,end=Math.min(start+stride,data.length);i<end;i+=19){
+        const dx=Math.max(data[i+13]-px,0,px-data[i+16]),dy=Math.max(data[i+14]-py,0,py-data[i+17]),dz=Math.max(data[i+15]-pz,0,pz-data[i+18]);
+        if(dx*dx+dy*dy+dz*dz>best)continue;
+        const ax=data[i],ay=data[i+1],az=data[i+2],abx=data[i+3]-ax,aby=data[i+4]-ay,abz=data[i+5]-az,acx=data[i+6]-ax,acy=data[i+7]-ay,acz=data[i+8]-az;
+        const apx=px-ax,apy=py-ay,apz=pz-az,d1=abx*apx+aby*apy+abz*apz,d2=acx*apx+acy*apy+acz*apz;
+        let cx,cy,cz;
+        if(d1<=0&&d2<=0){cx=ax;cy=ay;cz=az;}
         else{
-          const vc=d1*d4-d3*d2;
-          if(vc<=0&&d1>=0&&d3<=0){const v=d1/(d1-d3);cx=ax+abx*v;cy=ay+aby*v;cz=az+abz*v;}
+          const bpx=px-data[i+3],bpy=py-data[i+4],bpz=pz-data[i+5],d3=abx*bpx+aby*bpy+abz*bpz,d4=acx*bpx+acy*bpy+acz*bpz;
+          if(d3>=0&&d4<=d3){cx=data[i+3];cy=data[i+4];cz=data[i+5];}
           else{
-            const cpx=px-data[i+6],cpy=py-data[i+7],cpz=pz-data[i+8],d5=abx*cpx+aby*cpy+abz*cpz,d6=acx*cpx+acy*cpy+acz*cpz;
-            if(d6>=0&&d5<=d6){cx=data[i+6];cy=data[i+7];cz=data[i+8];}
+            const vc=d1*d4-d3*d2;
+            if(vc<=0&&d1>=0&&d3<=0){const v=d1/(d1-d3);cx=ax+abx*v;cy=ay+aby*v;cz=az+abz*v;}
             else{
-              const vb=d5*d2-d1*d6;
-              if(vb<=0&&d2>=0&&d6<=0){const w=d2/(d2-d6);cx=ax+acx*w;cy=ay+acy*w;cz=az+acz*w;}
+              const cpx=px-data[i+6],cpy=py-data[i+7],cpz=pz-data[i+8],d5=abx*cpx+aby*cpy+abz*cpz,d6=acx*cpx+acy*cpy+acz*cpz;
+              if(d6>=0&&d5<=d6){cx=data[i+6];cy=data[i+7];cz=data[i+8];}
               else{
-                const va=d3*d6-d5*d4;
-                if(va<=0&&(d4-d3)>=0&&(d5-d6)>=0){const w=(d4-d3)/((d4-d3)+(d5-d6));cx=data[i+3]+(data[i+6]-data[i+3])*w;cy=data[i+4]+(data[i+7]-data[i+4])*w;cz=data[i+5]+(data[i+8]-data[i+5])*w;}
-                else{const denom=va+vb+vc;if(Math.abs(denom)<1e-20)continue;const v=vb/denom,w=vc/denom;cx=ax+abx*v+acx*w;cy=ay+aby*v+acy*w;cz=az+abz*v+acz*w;}
+                const vb=d5*d2-d1*d6;
+                if(vb<=0&&d2>=0&&d6<=0){const w=d2/(d2-d6);cx=ax+acx*w;cy=ay+acy*w;cz=az+acz*w;}
+                else{
+                  const va=d3*d6-d5*d4;
+                  if(va<=0&&(d4-d3)>=0&&(d5-d6)>=0){const w=(d4-d3)/((d4-d3)+(d5-d6));cx=data[i+3]+(data[i+6]-data[i+3])*w;cy=data[i+4]+(data[i+7]-data[i+4])*w;cz=data[i+5]+(data[i+8]-data[i+5])*w;}
+                  else{const denom=va+vb+vc;if(Math.abs(denom)<1e-20)continue;const v=vb/denom,w=vc/denom;cx=ax+abx*v+acx*w;cy=ay+aby*v+acy*w;cz=az+abz*v+acz*w;}
+                }
               }
             }
           }
         }
+        const ex=px-cx,ey=py-cy,ez=pz-cz,distance=ex*ex+ey*ey+ez*ez;
+        if(distance<=best){best=distance;found=true;bx=cx;by=cy;bz=cz;nx=data[i+9];ny=data[i+10];nz=data[i+11];}
       }
-      const ex=px-cx,ey=py-cy,ez=pz-cz,distance=ex*ex+ey*ey+ez*ez;
-      if(distance<=best){best=distance;found=true;bx=cx;by=cy;bz=cz;nx=data[i+9];ny=data[i+10];nz=data[i+11];}
     }
     if(!found)return Infinity;
+    // An outside point needs just one separating plane. Interior points still
+    // test every plane using the same signed-distance tolerance.
+    let inside=true;
+    for(let i=0;i<data.length;i+=19){
+      if(data[i+9]*px+data[i+10]*py+data[i+11]*pz-data[i+12]>1e-7){inside=false;break;}
+    }
     target.set(bx,by,bz);const distance=Math.sqrt(best);
     if(inside||distance<1e-8)normal.set(nx,ny,nz).normalize();else normal.set((px-bx)/distance,(py-by)/distance,(pz-bz)/distance);
     return inside?-distance:distance;

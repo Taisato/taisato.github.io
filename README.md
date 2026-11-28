@@ -78,7 +78,7 @@ Lilac outlines identify pinned upgrades. Rare upgrades have a gold outline with 
 
 Each draft with an open slot has a 20% chance to offer one rare upgrade. **1 Life Slot** adds a slot and restores one life, **Extra Touch** adds a touch per chance, and **Power Strike** adds 10% shot strength. Picking a rare leaves its slot open, and repeat picks stack.
 
-First-Time Finish I, Double From Distance I and Woodwork Credit III each add one goal for a qualifying finish. With all three equipped, scoring off the post or crossbar on your first strike from outside the box is worth four goals and restores one life. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime.
+First-Time Finish I, Double From Distance I, Woodwork Credit III and Left foot maestro III each add one goal for a qualifying finish. With all four equipped in Freeroam, a first-time left-foot goal from outside the box that goes in off the woodwork counts for five. Each 3 Touch run opens under Blue. Confirming a draft choice advances to the next of ten colored skies, returning to Blue after Lime.
 
 | Tree | Phase I | Phase II | Phase III |
 | --- | --- | --- | --- |
@@ -93,6 +93,9 @@ First-Time Finish I, Double From Distance I and Woodwork Credit III each add one
 | Long-Range Bonus | A goal from outside the box adds one touch to your next chance. | Keep that extra touch in reserve until you spend it. | Bank up to two extra touches and spend both in one chance. |
 | Keeper Setback | Lower the keeper difficulty by five goal levels. | The keeper takes 0.12 s longer to reverse after committing. | Once per chance, a wrong-footed keeper parries a ball they would have caught. |
 | Last Chance | Once per run, a miss on your last life gives a same-spot retry. | Start a chance or retry on your last life with one extra touch. | Your run can use two retries in total. |
+| Left foot maestro | Left-foot strikes gain 25% shot power. | Left-foot shots gain 25% sideways curve. | Score with your left foot to add one goal. |
+
+On desktop, press **Q** to kick with the left foot. **Space** or a click kicks with the right. In VR, use the corresponding tracked boot.
 
 Quick Feet increases movement speed. Its extra run-up speed can add up to 10% to the forward pace of a shot compared with the same swing and contact at ordinary running speed. A stationary swing gets no extra pace from Quick Feet.
 

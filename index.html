@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#080d1d">
 <link rel="icon" href="data:,">
 <title>First Touch · VR Football</title>
-<link rel="stylesheet" href="./styles/main.css?v=a6bc3590a9fc">
+<link rel="stylesheet" href="./styles/main.css?v=7c108f38b869">
 </head>
 <body>
 <svg class="symbols" aria-hidden="true"><defs>
@@ -24,7 +24,7 @@
 <button id="mode-challenge" class="mode challenge" type="button" aria-pressed="false" aria-label="3 Touch: three touches, three lives"><span class="mode-title">3 TOUCH<i class="selected-dot" aria-hidden="true"></i></span><span class="mode-pips" aria-hidden="true"><span class="touch-pips"><svg><use href="#icon-ball"/></svg><svg><use href="#icon-ball"/></svg><svg><use href="#icon-ball"/></svg></span><span class="life-pips"><svg><use href="#icon-heart"/></svg><svg><use href="#icon-heart"/></svg><svg><use href="#icon-heart"/></svg></span></span></button>
 </div>
 <div class="play-actions"><button class="primary" id="enter-vr" disabled>Enter VR <span aria-hidden="true">↗</span></button><button class="secondary" id="desktop" disabled>Play on screen</button><button class="primary" id="resume" hidden>Resume</button><button class="secondary" id="restart" hidden>New run</button><button class="secondary" id="settings" type="button" aria-controls="settings-page" aria-expanded="false" disabled>Settings</button><button class="secondary" id="exit" hidden>Exit</button></div>
-<details class="controls-help"><summary>Controls <span aria-hidden="true">+</span></summary><div class="controls vr-controls"><span><b>L stick</b> Move</span><span><b>R stick</b> Turn</span><span><b>Trigger</b> Instep</span><span><b>Grip</b> Sprint</span><span class="free-control"><b>A</b> New ball</span><span><b>X</b> Calibrate</span><span><b>Y</b> Menu</span></div><div class="controls desktop-controls"><span><b>WASD</b> Move</span><span><b>Mouse / ← →</b> Turn</span><span><b>Space / Click</b> Kick</span><span><b>Shift</b> Sprint</span><span><b>E</b> Instep</span><span class="free-control"><b>B</b> New ball</span><span><b>Esc</b> Menu</span></div></details>
+<details class="controls-help"><summary>Controls <span aria-hidden="true">+</span></summary><div class="controls vr-controls"><span><b>L stick</b> Move</span><span><b>R stick</b> Turn</span><span><b>Trigger</b> Instep</span><span><b>Grip</b> Sprint</span><span class="free-control"><b>A</b> New ball</span><span><b>X</b> Calibrate</span><span><b>Y</b> Menu</span></div><div class="controls desktop-controls"><span><b>WASD</b> Move</span><span><b>Mouse / ← →</b> Turn</span><span><b>Q</b> Left kick</span><span><b>Space / Click</b> Right kick</span><span><b>Shift</b> Sprint</span><span><b>E</b> Instep</span><span class="free-control"><b>B</b> New ball</span><span><b>Esc</b> Menu</span></div></details>
 </div>
 <section id="settings-page" class="settings-page" hidden aria-labelledby="settings-title">
 <h2 id="settings-title">Settings</h2>
@@ -79,7 +79,7 @@
 </section>
 </main>
 <canvas id="desktop-hud" width="900" height="250" hidden role="img" aria-label="Challenge status"></canvas>
-<div id="desktop-hint" hidden><b>WASD</b> Move <b>Space</b> Kick <b>Esc</b> Menu</div>
+<div id="desktop-hint" hidden><b>WASD</b> Move <b>Q</b> Left kick <b>Space</b> Right kick <b>Esc</b> Menu</div>
 <section id="desktop-rewards" hidden role="dialog" aria-modal="true" aria-labelledby="reward-title" aria-describedby="reward-hint" tabindex="-1">
   <div class="reward-panel">
     <div class="reward-meta"><span>3 TOUCH</span><span id="reward-score"></span></div>
@@ -98,48 +98,48 @@
 <script type="importmap">
 {
   "imports": {
-    "./src/app.js": "./src/app.js?v=a6bc3590a9fc",
-    "./src/assets.js": "./src/assets.js?v=a6bc3590a9fc",
-    "./src/audio.js": "./src/audio.js?v=a6bc3590a9fc",
-    "./src/config.js": "./src/config.js?v=a6bc3590a9fc",
-    "./src/game/abilities.js": "./src/game/abilities.js?v=a6bc3590a9fc",
-    "./src/game/ability-draft.js": "./src/game/ability-draft.js?v=a6bc3590a9fc",
-    "./src/game/challenge.js": "./src/game/challenge.js?v=a6bc3590a9fc",
-    "./src/keeper/footwork.js": "./src/keeper/footwork.js?v=a6bc3590a9fc",
-    "./src/keeper/keeper.js": "./src/keeper/keeper.js?v=a6bc3590a9fc",
-    "./src/keeper/meshes.js": "./src/keeper/meshes.js?v=a6bc3590a9fc",
-    "./src/keeper/player-contact.js": "./src/keeper/player-contact.js?v=a6bc3590a9fc",
-    "./src/keeper/ragdoll.js": "./src/keeper/ragdoll.js?v=a6bc3590a9fc",
-    "./src/keeper/visuals.js": "./src/keeper/visuals.js?v=a6bc3590a9fc",
-    "./src/main.js": "./src/main.js?v=a6bc3590a9fc",
-    "./src/physics/ball.js": "./src/physics/ball.js?v=a6bc3590a9fc",
-    "./src/physics/nets.js": "./src/physics/nets.js?v=a6bc3590a9fc",
-    "./src/physics/shot-surface.js": "./src/physics/shot-surface.js?v=a6bc3590a9fc",
-    "./src/player/boots.js": "./src/player/boots.js?v=a6bc3590a9fc",
-    "./src/player/calibration-storage.js": "./src/player/calibration-storage.js?v=a6bc3590a9fc",
-    "./src/player/controls.js": "./src/player/controls.js?v=a6bc3590a9fc",
-    "./src/player/visuals.js": "./src/player/visuals.js?v=a6bc3590a9fc",
-    "./src/render/markings.js": "./src/render/markings.js?v=a6bc3590a9fc",
-    "./src/render/motion.js": "./src/render/motion.js?v=a6bc3590a9fc",
-    "./src/render/net.js": "./src/render/net.js?v=a6bc3590a9fc",
-    "./src/render/optics.js": "./src/render/optics.js?v=a6bc3590a9fc",
-    "./src/render/shot-trail.js": "./src/render/shot-trail.js?v=a6bc3590a9fc",
-    "./src/render/xr-resolution.js": "./src/render/xr-resolution.js?v=a6bc3590a9fc",
-    "./src/settings.js": "./src/settings.js?v=a6bc3590a9fc",
-    "./src/ui/ability-switcher.js": "./src/ui/ability-switcher.js?v=a6bc3590a9fc",
-    "./src/ui/calibration.js": "./src/ui/calibration.js?v=a6bc3590a9fc",
-    "./src/ui/hud.js": "./src/ui/hud.js?v=a6bc3590a9fc",
-    "./src/ui/menu-pages.js": "./src/ui/menu-pages.js?v=a6bc3590a9fc",
-    "./src/ui/menu.js": "./src/ui/menu.js?v=a6bc3590a9fc",
-    "./src/ui/rewards.js": "./src/ui/rewards.js?v=a6bc3590a9fc",
-    "./src/ui/theme.js": "./src/ui/theme.js?v=a6bc3590a9fc",
-    "./src/world/field.js": "./src/world/field.js?v=a6bc3590a9fc",
-    "./src/world/sky.js": "./src/world/sky.js?v=a6bc3590a9fc",
-    "./src/world/stand.js": "./src/world/stand.js?v=a6bc3590a9fc",
-    "./vendor/three.js": "./vendor/three.js?v=a6bc3590a9fc"
+    "./src/app.js": "./src/app.js?v=7c108f38b869",
+    "./src/assets.js": "./src/assets.js?v=7c108f38b869",
+    "./src/audio.js": "./src/audio.js?v=7c108f38b869",
+    "./src/config.js": "./src/config.js?v=7c108f38b869",
+    "./src/game/abilities.js": "./src/game/abilities.js?v=7c108f38b869",
+    "./src/game/ability-draft.js": "./src/game/ability-draft.js?v=7c108f38b869",
+    "./src/game/challenge.js": "./src/game/challenge.js?v=7c108f38b869",
+    "./src/keeper/footwork.js": "./src/keeper/footwork.js?v=7c108f38b869",
+    "./src/keeper/keeper.js": "./src/keeper/keeper.js?v=7c108f38b869",
+    "./src/keeper/meshes.js": "./src/keeper/meshes.js?v=7c108f38b869",
+    "./src/keeper/player-contact.js": "./src/keeper/player-contact.js?v=7c108f38b869",
+    "./src/keeper/ragdoll.js": "./src/keeper/ragdoll.js?v=7c108f38b869",
+    "./src/keeper/visuals.js": "./src/keeper/visuals.js?v=7c108f38b869",
+    "./src/main.js": "./src/main.js?v=7c108f38b869",
+    "./src/physics/ball.js": "./src/physics/ball.js?v=7c108f38b869",
+    "./src/physics/nets.js": "./src/physics/nets.js?v=7c108f38b869",
+    "./src/physics/shot-surface.js": "./src/physics/shot-surface.js?v=7c108f38b869",
+    "./src/player/boots.js": "./src/player/boots.js?v=7c108f38b869",
+    "./src/player/calibration-storage.js": "./src/player/calibration-storage.js?v=7c108f38b869",
+    "./src/player/controls.js": "./src/player/controls.js?v=7c108f38b869",
+    "./src/player/visuals.js": "./src/player/visuals.js?v=7c108f38b869",
+    "./src/render/markings.js": "./src/render/markings.js?v=7c108f38b869",
+    "./src/render/motion.js": "./src/render/motion.js?v=7c108f38b869",
+    "./src/render/net.js": "./src/render/net.js?v=7c108f38b869",
+    "./src/render/optics.js": "./src/render/optics.js?v=7c108f38b869",
+    "./src/render/shot-trail.js": "./src/render/shot-trail.js?v=7c108f38b869",
+    "./src/render/xr-resolution.js": "./src/render/xr-resolution.js?v=7c108f38b869",
+    "./src/settings.js": "./src/settings.js?v=7c108f38b869",
+    "./src/ui/ability-switcher.js": "./src/ui/ability-switcher.js?v=7c108f38b869",
+    "./src/ui/calibration.js": "./src/ui/calibration.js?v=7c108f38b869",
+    "./src/ui/hud.js": "./src/ui/hud.js?v=7c108f38b869",
+    "./src/ui/menu-pages.js": "./src/ui/menu-pages.js?v=7c108f38b869",
+    "./src/ui/menu.js": "./src/ui/menu.js?v=7c108f38b869",
+    "./src/ui/rewards.js": "./src/ui/rewards.js?v=7c108f38b869",
+    "./src/ui/theme.js": "./src/ui/theme.js?v=7c108f38b869",
+    "./src/world/field.js": "./src/world/field.js?v=7c108f38b869",
+    "./src/world/sky.js": "./src/world/sky.js?v=7c108f38b869",
+    "./src/world/stand.js": "./src/world/stand.js?v=7c108f38b869",
+    "./vendor/three.js": "./vendor/three.js?v=7c108f38b869"
   }
 }
 </script>
-<script type="module" src="./src/main.js?v=a6bc3590a9fc"></script>
+<script type="module" src="./src/main.js?v=7c108f38b869"></script>
 </body>
 </html>
