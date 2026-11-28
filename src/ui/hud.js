@@ -73,14 +73,17 @@ class FootballHUD{
  }
  update(snapshot,visible=true,desktop=false,viewCamera=this.camera){
   if(!visible||!(snapshot?.mode==='challenge'||snapshot?.practice)){this.hide();return;}
-  this.mesh.visible=!desktop;if(this.desktopCanvas)this.desktopCanvas.hidden=!desktop;
+  this.mesh.visible=!desktop;if(this.desktopCanvas&&this.desktopCanvas.hidden===desktop)this.desktopCanvas.hidden=!desktop;
   if(!desktop)this.fitToCamera(viewCamera);
   const touches=snapshot.touches??snapshot.touchesLeft??3,maxTouches=snapshot.maxTouches??3,lives=snapshot.lives??3,maxLives=snapshot.maxLives??3;
   const key=[snapshot.mode,snapshot.practice,snapshot.phase,snapshot.score,lives,maxLives,touches,maxTouches,snapshot.outcome,snapshot.goalValue,desktop].join('|');if(key===this.key)return;this.key=key;drawHUD(this.context,snapshot,900,250,this.textRegions);this.texture.needsUpdate=true;
-  if(this.desktopContext){this.desktopContext.clearRect(0,0,900,250);this.desktopContext.drawImage(this.canvas,0,0);}if(this.desktopCanvas)this.desktopCanvas.setAttribute?.('aria-label',`${snapshot.practice?DEMO_LABEL+', ':''}${snapshot.score||0} goals, ${touches} of ${maxTouches} touches, ${lives} of ${maxLives} lives`);
+  if(this.desktopContext){
+    this.desktopContext.clearRect(0,0,900,250);this.desktopContext.drawImage(this.canvas,0,0);
+  }
+  this.desktopCanvas?.setAttribute('aria-label',`${snapshot.practice?DEMO_LABEL+', ':''}${snapshot.score||0} goals, ${touches} of ${maxTouches} touches, ${lives} of ${maxLives} lives`);
  }
  hide(){
-  this.mesh.visible=false;if(this.desktopCanvas)this.desktopCanvas.hidden=true;
+  this.mesh.visible=false;if(this.desktopCanvas&&!this.desktopCanvas.hidden)this.desktopCanvas.hidden=true;
   if(!this.key)return;
   this.key='';this.context.clearRect(0,0,this.canvas.width,this.canvas.height);this.texture.needsUpdate=true;
   this.desktopContext?.clearRect(0,0,this.canvas.width,this.canvas.height);

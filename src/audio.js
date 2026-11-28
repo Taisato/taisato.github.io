@@ -65,7 +65,8 @@ class FootballAudio {
       const buffer=context.createBuffer(channels,count-fade,sampleRate),middle=count-2*fade;
       for(let channel=0;channel<channels;channel++){
         const output=buffer.getChannelData(channel);
-        for(let i=0;i<middle;i++)output[i]=read(channel,begin+fade+i);
+        if(!mono)output.set(input[channel].subarray(begin+fade,end-fade));
+        else for(let i=0;i<middle;i++)output[i]=read(channel,begin+fade+i);
         for(let i=0;i<fade;i++){
           const angle=i/Math.max(1,fade-1)*Math.PI*.5;
           output[middle+i]=read(channel,end-fade+i)*Math.cos(angle)+read(channel,begin+i)*Math.sin(angle);
@@ -91,7 +92,8 @@ class FootballAudio {
     this.timeScale=1;this.timeDetune=0;
     this.wind='normal';this.windActive=false;this.windApplied=null;this.windVoices=new Map();
     this.rolling=null;this.strongVariant=0;this.netVariant=0;this.seed=3729;
-    this.forward=new FT.Vector3();this.up=new FT.Vector3();this.listenerPosition=new FT.Vector3();
+    this.forward=new FT.Vector3();this.up=new FT.Vector3();
+    this.listenerPosition=new FT.Vector3(NaN,NaN,NaN);this.listenerOrientation=new FT.Quaternion(0,0,0,0);
     this.fallbackKick=null;this.fallbackNet=null;this.decoding=null;
   }
   async start(){
@@ -260,14 +262,22 @@ class FootballAudio {
   whistle(){return this.available()&&this.play('whistle_start_01',.65,null);}
   updateListener(controls){
     if(!controls?.headWorld||!controls.viewOrientation)return;
-    const listener=this.context.listener;this.listenerPosition.copy(controls.headWorld);
-    this.forward.set(0,0,-1).applyQuaternion(controls.viewOrientation);this.up.set(0,1,0).applyQuaternion(controls.viewOrientation);
-    const p=this.listenerPosition,f=this.forward,u=this.up;
-    if(listener.positionX){
-      listener.positionX.value=p.x;listener.positionY.value=p.y;listener.positionZ.value=p.z;
-      listener.forwardX.value=f.x;listener.forwardY.value=f.y;listener.forwardZ.value=f.z;
-      listener.upX.value=u.x;listener.upY.value=u.y;listener.upZ.value=u.z;
-    }else{listener.setPosition(p.x,p.y,p.z);listener.setOrientation(f.x,f.y,f.z,u.x,u.y,u.z);}
+    const listener=this.context.listener;
+    // Web Audio keeps the last value. Walking and turning can change these
+    // independently, so only send the part of the pose that actually moved.
+    if(!this.listenerPosition.equals(controls.headWorld)){
+      const p=this.listenerPosition.copy(controls.headWorld);
+      if(listener.positionX){listener.positionX.value=p.x;listener.positionY.value=p.y;listener.positionZ.value=p.z;}
+      else listener.setPosition(p.x,p.y,p.z);
+    }
+    if(!this.listenerOrientation.equals(controls.viewOrientation)){
+      const q=this.listenerOrientation.copy(controls.viewOrientation);
+      const f=this.forward.set(0,0,-1).applyQuaternion(q),u=this.up.set(0,1,0).applyQuaternion(q);
+      if(listener.forwardX){
+        listener.forwardX.value=f.x;listener.forwardY.value=f.y;listener.forwardZ.value=f.z;
+        listener.upX.value=u.x;listener.upY.value=u.y;listener.upZ.value=u.z;
+      }else listener.setOrientation(f.x,f.y,f.z,u.x,u.y,u.z);
+    }
   }
   update(ball,controls,active,dt){
     if(!this.context||this.disposed)return;

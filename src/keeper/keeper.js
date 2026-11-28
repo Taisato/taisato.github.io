@@ -166,7 +166,7 @@ class FootballGoalkeeper {
 
   _capture(initial = false) {
     const capsules = this.visual.capsules;
-    this.maxTravel = 0;
+    let maxTravelSquared = 0;
     for (let i = 0; i < capsules.length; i++) {
       const source = capsules[i];
       let capsule = this.colliders[i];
@@ -179,8 +179,9 @@ class FootballGoalkeeper {
       capsule.a.copy(source.a); capsule.b.copy(source.b);
       capsule.radius = source.radius; capsule.kind = source.kind;
       if (initial) {capsule.previousA.copy(capsule.a); capsule.previousB.copy(capsule.b);}
-      this.maxTravel = Math.max(this.maxTravel, capsule.a.distanceTo(capsule.previousA), capsule.b.distanceTo(capsule.previousB));
+      maxTravelSquared = Math.max(maxTravelSquared, capsule.a.distanceToSquared(capsule.previousA), capsule.b.distanceToSquared(capsule.previousB));
     }
+    this.maxTravel = Math.sqrt(maxTravelSquared);
   }
 
   _predict(ball) {

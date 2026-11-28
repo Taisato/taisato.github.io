@@ -2,6 +2,14 @@ import { FT } from "../../vendor/three.js";
 import { footballClamp } from "../config.js";
 
 const MAX_FRAYS=128,FRAY_SEGMENTS=8,FRAY_SIDES=5;
+const CORD_RING = Array.from({length:FRAY_SIDES}, (_, side) => {
+  const angle = side / FRAY_SIDES * Math.PI * 2;
+  return [Math.cos(angle), Math.sin(angle)];
+});
+const CORD_BEND = Array.from({length:FRAY_SEGMENTS}, (_, segment) => {
+  const u = (segment + .5) / FRAY_SEGMENTS;
+  return Math.sin(u * Math.PI);
+});
 
 /* Filtered cord coverage on the actual deformed contact triangles. Panel edges
    share physical node IDs, including the back/roof/sides, and the mouth is open. */
@@ -67,7 +75,7 @@ class FootballGoalNetVisual {
     const frayGeometry=this.field.geometry(new FT.BufferGeometry());frayGeometry.setAttribute('position',frayAttribute);frayGeometry.setIndex(frayIndices);frayGeometry.setDrawRange(0,0);
     const frayMesh=new FT.Mesh(frayGeometry,this.frayMaterial);frayMesh.name=mesh.name+' loose cord ends';frayMesh.frustumCulled=false;frayMesh.visible=false;this.root.add(frayMesh);
     return{net,mesh,positions,attribute,particles:new Uint16Array(particles),originalIndices,index,nodeVertex,edges:[...edgeMap.values()],
-      damageRevision:-1,topologyUpdates:0,frayCount:0,frayMesh,frayAttribute,frayPositions,
+      damageRevision:-1,topologyUpdates:0,frayCount:0,frayMesh,frayAttribute,frayPositions,frayRange:{start:0,count:0},
       frayNodes:new Uint16Array(MAX_FRAYS*3),frayParameters:new Float32Array(MAX_FRAYS*7),
       frayPoints:new Float32Array((FRAY_SEGMENTS+1)*3),frayTime:-1,latestTear:-10,
       revision:-1,alpha:-1,updates:0};
@@ -113,7 +121,7 @@ class FootballGoalNetVisual {
       const age=Math.max(0,time-parameters[j+3]),decay=Math.exp(-age*2.8),settle=1-Math.exp(-age*5),phase=seed*Math.PI*2;
       const nx=parameters[j+4],ny=parameters[j+5],nz=parameters[j+6],swing=Math.cos(age*(10+seed*5)+phase)*decay;
       for(let k=1;k<=FRAY_SEGMENTS;k++){
-        const u=(k-.5)/FRAY_SEGMENTS,forward=1-u*.77,flutter=(.6*decay+.36*swing)*Math.sin(u*Math.PI)+.12*Math.sin(u*5+phase);
+        const u=(k-.5)/FRAY_SEGMENTS,forward=1-u*.77,flutter=(.6*decay+.36*swing)*CORD_BEND[k-1]+.12*Math.sin(u*5+phase);
         let tx=dx*forward+nx*flutter,ty=dy*forward-1.05*u*settle+ny*flutter,tz=dz*forward+nz*flutter;
         const step=length/FRAY_SEGMENTS/Math.max(1e-9,Math.hypot(tx,ty,tz));x+=tx*step;y+=ty*step;z+=tz*step;
         const q=k*3;points[q]=x;points[q+1]=Math.max(.003,y);points[q+2]=z;
@@ -125,17 +133,31 @@ class FootballGoalNetVisual {
         const invU=1/Math.max(1e-9,Math.hypot(ux,uy,uz));ux*=invU;uy*=invU;uz*=invU;
         const vx=ty*uz-tz*uy,vy=tz*ux-tx*uz,vz=tx*uy-ty*ux,radius=.002*(k===FRAY_SEGMENTS?.68:1);
         for(let s=0;s<FRAY_SIDES;s++){
-          const angle=s/FRAY_SIDES*Math.PI*2,co=Math.cos(angle)*radius,si=Math.sin(angle)*radius,target=((f*(FRAY_SEGMENTS+1)+k)*FRAY_SIDES+s)*3;
+          const co=CORD_RING[s][0]*radius,si=CORD_RING[s][1]*radius,target=((f*(FRAY_SEGMENTS+1)+k)*FRAY_SIDES+s)*3;
           out[target]=points[q]+ux*co+vx*si;out[target+1]=points[q+1]+uy*co+vy*si;out[target+2]=points[q+2]+uz*co+vz*si;
         }
       }
     }
-    data.frayAttribute.needsUpdate=true;data.frayTime=time;
+    // The unused tail is preallocated for subsequent tears. Only upload live cords.
+    const attribute=data.frayAttribute;
+    data.frayRange.count=data.frayCount*(FRAY_SEGMENTS+1)*FRAY_SIDES*3;
+    attribute.updateRanges[0]=data.frayRange;
+    attribute.needsUpdate=true;data.frayTime=time;
+    if(data.net.sleeping){
+      const cloth=data.mesh.geometry.boundingSphere,geometry=data.frayMesh.geometry;
+      // Keep the original sort centre. Loose cords follow surface knots and
+      // their longest possible end is .28 m plus the .002 m cord radius.
+      if(!geometry.boundingSphere)geometry.computeBoundingSphere();
+      geometry.boundingSphere.radius=geometry.boundingSphere.center.distanceTo(cloth.center)+cloth.radius+.29;
+    }
   }
   render(alpha=1){
     if(this.disposed)return;
     for(const data of this.goals){
       const net=data.net,t=net.sleeping?1:footballClamp(alpha,0,1),revision=net.revision||0;
+      // A settled net uses current positions only. Moving nets retain their
+      // full draw through interpolation, even during a large contact.
+      data.mesh.frustumCulled=data.frayMesh.frustumCulled=net.sleeping;
       const damageChanged=data.damageRevision!==(net.damageRevision||0);if(damageChanged)this._damage(data);
       const changed=damageChanged||data.revision!==revision||(!net.sleeping&&data.alpha!==t);
       const frayTime=Math.min(this.nets.time,data.latestTear+3);
@@ -148,6 +170,18 @@ class FootballGoalNetVisual {
         p[target+2]=previous[source+2]+(current[source+2]-previous[source+2])*t;
       }
       data.attribute.needsUpdate=true;data.revision=revision;data.alpha=t;data.updates++;
+      const geometry=data.mesh.geometry;
+      if(!geometry.boundingSphere){
+        geometry.computeBoundingSphere();
+        const centre=geometry.boundingSphere.center,rest=net.rest;
+        let radiusSq=0;
+        for(let i=0;i<rest.length;i+=3){
+          const dx=rest[i]-centre.x,dy=rest[i+1]-centre.y,dz=rest[i+2]-centre.z;
+          radiusSq=Math.max(radiusSq,dx*dx+dy*dy+dz*dz);
+        }
+        data.restRadius=Math.sqrt(radiusSq)+.001;
+      }
+      if(net.sleeping)geometry.boundingSphere.radius=data.restRadius+net.maxDisplacement;
       if(data.frayCount)this._frays(data,frayTime);
     }
   }

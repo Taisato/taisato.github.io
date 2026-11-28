@@ -64,41 +64,53 @@ float pitchPaintCoverage(vec2 point) {
   vec2 p = abs(point), signs = sign(point);
   float halfX = uPitchExtent.x, halfZ = uPitchExtent.y;
   float coverage = 0.0;
-  // The folded shapes continue across the symmetry axes. Filtering a false
-  // zero-length end there would halve the paint at the centre of the pitch.
-  float across = pitchBelow(p.x, halfX + pitchHalfWidth, footprint.x);
-  float along = pitchBelow(p.y, halfZ + pitchHalfWidth, footprint.y);
-  coverage = max(coverage, pitchBand(p.x - halfX, footprint.x) * along);
-  coverage = max(coverage, pitchBand(p.y - halfZ, footprint.y) * across);
-  coverage = max(coverage, pitchBand(point.y, footprint.y) * across);
-
   float penaltyFront = halfZ - ${PITCH_PAINT.penaltyDepth.toFixed(1)}, penaltyHalf = uPitchGoalHalf + ${PITCH_PAINT.penaltyDepth.toFixed(1)};
   float smallFront = halfZ - ${PITCH_PAINT.goalAreaDepth.toFixed(1)}, smallHalf = uPitchGoalHalf + ${PITCH_PAINT.goalAreaDepth.toFixed(1)};
-  coverage = max(coverage, pitchBand(p.y - penaltyFront, footprint.y) * pitchBelow(p.x, penaltyHalf + pitchHalfWidth, footprint.x));
-  coverage = max(coverage, pitchBand(p.x - penaltyHalf, footprint.x) * pitchSpan(p.y, penaltyFront, halfZ, footprint.y));
-  coverage = max(coverage, pitchBand(p.y - smallFront, footprint.y) * pitchBelow(p.x, smallHalf + pitchHalfWidth, footprint.x));
-  coverage = max(coverage, pitchBand(p.x - smallHalf, footprint.x) * pitchSpan(p.y, smallFront, halfZ, footprint.y));
+  // A pixel wholly between the straight markings needs none of their interval filters.
+  vec2 nearest = min(abs(p - uPitchExtent), abs(p - vec2(penaltyHalf, penaltyFront)));
+  nearest = min(nearest, abs(p - vec2(smallHalf, smallFront)));
+  nearest.y = min(nearest.y, p.y);
+  if (any(lessThanEqual(nearest, footprint + pitchHalfWidth))) {
+    float across = pitchBelow(p.x, halfX + pitchHalfWidth, footprint.x);
+    float along = pitchBelow(p.y, halfZ + pitchHalfWidth, footprint.y);
+    coverage = max(coverage, pitchBand(p.x - halfX, footprint.x) * along);
+    coverage = max(coverage, pitchBand(p.y - halfZ, footprint.y) * across);
+    coverage = max(coverage, pitchBand(point.y, footprint.y) * across);
+    coverage = max(coverage, pitchBand(p.y - penaltyFront, footprint.y) * pitchBelow(p.x, penaltyHalf + pitchHalfWidth, footprint.x));
+    coverage = max(coverage, pitchBand(p.x - penaltyHalf, footprint.x) * pitchSpan(p.y, penaltyFront, halfZ, footprint.y));
+    coverage = max(coverage, pitchBand(p.y - smallFront, footprint.y) * pitchBelow(p.x, smallHalf + pitchHalfWidth, footprint.x));
+    coverage = max(coverage, pitchBand(p.x - smallHalf, footprint.x) * pitchSpan(p.y, smallFront, halfZ, footprint.y));
+  }
 
   float pixelArea = abs(dx.x * dy.y - dx.y * dy.x);
-  float centreDistance = length(p);
-  float centreFootprint = pitchCircleFootprint(p, centreDistance, signs, dx, dy);
-  coverage = max(coverage, pitchBand(centreDistance - 9.15, centreFootprint));
-  coverage = max(coverage, pitchSpot(p, centreDistance, .12, centreFootprint, footprint, pixelArea));
+  // A radial footprint is no larger than the sum of its axis footprints.
+  // Include the entire antialiasing filter before skipping a distant arc.
+  float padding = pitchHalfWidth + footprint.x + footprint.y;
+  if (max(p.x, p.y) <= 9.15 + padding) {
+    float centreDistance = length(p);
+    float centreFootprint = pitchCircleFootprint(p, centreDistance, signs, dx, dy);
+    coverage = max(coverage, pitchBand(centreDistance - 9.15, centreFootprint));
+    coverage = max(coverage, pitchSpot(p, centreDistance, .12, centreFootprint, footprint, pixelArea));
+  }
 
   vec2 penaltyPoint = p - vec2(0.0, halfZ - 11.0);
-  float penaltyDistance = length(penaltyPoint);
-  float penaltyFootprint = pitchCircleFootprint(penaltyPoint, penaltyDistance, signs, dx, dy);
-  float penaltyArc = pitchBand(penaltyDistance - 9.15, penaltyFootprint);
-  penaltyArc *= pitchBelow(p.y, penaltyFront + pitchHalfWidth, footprint.y);
-  coverage = max(coverage, penaltyArc);
-  coverage = max(coverage, pitchSpot(penaltyPoint, penaltyDistance, .105, penaltyFootprint, footprint, pixelArea));
+  if (max(p.x, abs(penaltyPoint.y)) <= 9.15 + padding) {
+    float penaltyDistance = length(penaltyPoint);
+    float penaltyFootprint = pitchCircleFootprint(penaltyPoint, penaltyDistance, signs, dx, dy);
+    float penaltyArc = pitchBand(penaltyDistance - 9.15, penaltyFootprint);
+    penaltyArc *= pitchBelow(p.y, penaltyFront + pitchHalfWidth, footprint.y);
+    coverage = max(coverage, penaltyArc);
+    coverage = max(coverage, pitchSpot(penaltyPoint, penaltyDistance, .105, penaltyFootprint, footprint, pixelArea));
+  }
 
   vec2 cornerPoint = p - uPitchExtent;
-  float cornerDistance = length(cornerPoint);
-  float cornerFootprint = pitchCircleFootprint(cornerPoint, cornerDistance, signs, dx, dy);
-  float cornerArc = pitchBand(cornerDistance - 1.0, cornerFootprint);
-  cornerArc *= pitchBelow(p.x, halfX + pitchHalfWidth, footprint.x) * pitchBelow(p.y, halfZ + pitchHalfWidth, footprint.y);
-  coverage = max(coverage, cornerArc);
+  if (max(abs(cornerPoint.x), abs(cornerPoint.y)) <= 1.0 + padding) {
+    float cornerDistance = length(cornerPoint);
+    float cornerFootprint = pitchCircleFootprint(cornerPoint, cornerDistance, signs, dx, dy);
+    float cornerArc = pitchBand(cornerDistance - 1.0, cornerFootprint);
+    cornerArc *= pitchBelow(p.x, halfX + pitchHalfWidth, footprint.x) * pitchBelow(p.y, halfZ + pitchHalfWidth, footprint.y);
+    coverage = max(coverage, cornerArc);
+  }
   return coverage;
 }
 `;

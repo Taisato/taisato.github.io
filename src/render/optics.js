@@ -443,6 +443,13 @@ class FootballOptics {
     }
     this.uniforms.tDepth.value = this.target.depthTexture;
     this.uniforms.uCopyDepth.value = copyDepth ? 1 : 0;
+    // When the compositor ignores depth, this pass outputs 1.0 everywhere.
+    // The ordinary far-depth clear already supplied that value to both eyes.
+    const clearedFarDepth = this.renderer.autoClear && this.renderer.autoClearDepth &&
+      !this.renderer.capabilities?.reversedDepthBuffer;
+    const writeDepth = copyDepth || !clearedFarDepth;
+    this.material.depthTest = writeDepth;
+    this.material.depthWrite = writeDepth;
     this.uniforms.uResolution.value.set(w, h);
   }
 

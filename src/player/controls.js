@@ -113,6 +113,7 @@ class FootballControls {
       else if(this.calibration.stage==='stance')this.beginCalibration();
     }
     this.invalidate();
+    // The input pass only needs the rig matrix. The scene render updates its camera and HUD children.
     this.rig.position.y=-this.floorY;this.resetCalibrationWindow();
     if(enabled){this.headLocal.set(0,1.7,0);this.headOrientation.setFromAxisAngle(new FT.Vector3(1,0,0),this.desktopPitch);}
   }
@@ -420,8 +421,9 @@ class FootballControls {
     return target.normalize();
   }
   refreshHead() {
+    // The input pass only needs the rig matrix. The scene render updates its camera and HUD children.
     this.rig.position.y=-this.floorY;
-    this.rig.updateMatrixWorld(true);
+    this.rig.updateWorldMatrix(false,false);
     this.headWorld.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
     this.viewOrientation.copy(this.rig.quaternion).multiply(this.headOrientation);
     this.horizontalForward(this.viewOrientation,this.forward);
@@ -452,7 +454,7 @@ class FootballControls {
     if(blocked||!this.poseValid||!this.isCalibrated||(!this.desktop&&this.calibration.awaitRelease)){this.velocity.set(0,0,0);this.runBonusSpeed=0;return;}
     const yaw=-this.turn*FB.turnSpeed*this.turnSpeedMultiplier*dt;
     if(Math.abs(yaw)>1e-6){
-      this.temp.copy(this.headWorld);this.rig.rotation.y+=yaw;this.rig.updateMatrixWorld(true);
+      this.temp.copy(this.headWorld);this.rig.rotation.y+=yaw;this.rig.updateWorldMatrix(false,false);
       this.temp2.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
       this.rig.position.x+=this.temp.x-this.temp2.x;this.rig.position.z+=this.temp.z-this.temp2.z;
       this.refreshHead();
@@ -475,7 +477,7 @@ class FootballControls {
       if(this.velocity.lengthSq()<1e-8)this.velocity.set(0,0,0);
     }
     const startX=this.rig.position.x,startZ=this.rig.position.z;
-    this.rig.position.addScaledVector(this.velocity,dt);this.rig.updateMatrixWorld(true);
+    this.rig.position.addScaledVector(this.velocity,dt);this.rig.updateWorldMatrix(false,false);
     this.temp.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
     const bx=FB.halfWidth+5,bz=FB.halfLength+5;
     this.rig.position.x+=footballClamp(this.temp.x,-bx,bx)-this.temp.x;
@@ -490,13 +492,13 @@ class FootballControls {
   place(position,yaw=0) {
     this.horizontalForward(this.headOrientation,this.temp);
     const localYaw=Math.atan2(-this.temp.x,-this.temp.z);
-    this.rig.rotation.set(0,yaw-localYaw,0);this.rig.position.set(0,-this.floorY,0);this.rig.updateMatrixWorld(true);
+    this.rig.rotation.set(0,yaw-localYaw,0);this.rig.position.set(0,-this.floorY,0);this.rig.updateWorldMatrix(false,false);
     this.temp.copy(this.headLocal).applyMatrix4(this.rig.matrixWorld);
     this.rig.position.set(position.x-this.temp.x,-this.floorY,position.z-this.temp.z);
     this.velocity.set(0,0,0);this.invalidate();this.refreshHead();
   }
   prepareFeet(dt,blocked) {
-    this.rig.updateMatrixWorld(true);
+    this.rig.updateWorldMatrix(false,false);
     for(const hand of this.hands){
       hand.ray.visible=false;
       // Menu aiming can remain available even when the boot has no trusted

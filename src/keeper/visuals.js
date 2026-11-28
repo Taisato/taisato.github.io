@@ -28,10 +28,21 @@ class FootballGoalkeeperVisual {
       const boot=new FT.Mesh(owner.geometry(this.makeKeeperBoot(hand)),this.bootMaterial);boot.name=hand+' 285 mm black goalkeeper boot';boot.scale.setScalar(1/(FootballBoots.authorScale*this.scale));this.root.add(boot);this.boots.push(boot);
     }
     this.landmarks={};for(const name of ['pelvis','chest','neck','head','handL','handR','wristL','wristR','elbowL','elbowR','shoulderL','shoulderR','hipL','hipR','kneeL','kneeR','ankleL','ankleR','toeL','toeR'])this.landmarks[name]=new FT.Vector3();
+    // Both the fixed-step solver and the rendered pose use these same joints.
+    const b=this.bone,lm=this.landmarks;
+    this.landmarkOrigins=[[lm.pelvis,b.pelvis.position],[lm.neck,b.head.position]];
+    this.limbs=['L','R'].map(side=>{
+      const joints={};
+      for(const name of ['thigh','shin','foot','knee','upperArm','forearm','hand','elbow'])joints[name]=b[name+side];
+      for(const [point,joint] of [['hip','thigh'],['knee','shin'],['ankle','foot'],['shoulder','upperArm'],['elbow','forearm'],['wrist','hand']])
+        this.landmarkOrigins.push([lm[point+side],joints[joint].position]);
+      joints.palmCentre=lm['hand'+side];joints.toe=lm['toe'+side];
+      return joints;
+    });
     const capsule=(aName,bName,radius,kind)=>({aName,bName,a:this.landmarks[aName],b:this.landmarks[bName],radius,kind});
     this.capsules=[capsule('handL','handL',.103,'glove'),capsule('handR','handR',.103,'glove'),capsule('pelvis','chest',.173,'body'),capsule('head','head',.098,'body')];
     for(const s of ['L','R'])this.capsules.push(capsule('shoulder'+s,'elbow'+s,.064,'body'),capsule('elbow'+s,'wrist'+s,.053,'body'),capsule('hip'+s,'knee'+s,.077,'leg'),capsule('knee'+s,'ankle'+s,.055,'leg'),capsule('ankle'+s,'toe'+s,.043,'leg'));
-    const canvas=document.createElement('canvas');canvas.width=canvas.height=64;const c=canvas.getContext('2d'),gradient=c.createRadialGradient(32,32,1,32,32,31);gradient.addColorStop(0,'rgba(0,0,0,.50)');gradient.addColorStop(.5,'rgba(0,0,0,.22)');gradient.addColorStop(1,'rgba(0,0,0,0)');c.fillStyle=gradient;c.fillRect(0,0,64,64);const shadowMap=new FT.CanvasTexture(canvas);owner.textures.add(shadowMap);this.shadowMaterial=owner.material(new FT.MeshBasicMaterial({map:shadowMap,transparent:true,depthWrite:false,side:2,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));this.shadow=new FT.Mesh(owner.geometry(new FT.PlaneGeometry(1,1)),this.shadowMaterial);this.shadow.name='Goalkeeper contact shadow';this.shadow.rotation.x=-Math.PI/2;this.shadow.frustumCulled=false;owner.root.add(this.shadow);
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=64;const c=canvas.getContext('2d'),gradient=c.createRadialGradient(32,32,1,32,32,31);gradient.addColorStop(0,'rgba(0,0,0,.50)');gradient.addColorStop(.5,'rgba(0,0,0,.22)');gradient.addColorStop(1,'rgba(0,0,0,0)');c.fillStyle=gradient;c.fillRect(0,0,64,64);const shadowMap=new FT.CanvasTexture(canvas);owner.textures.add(shadowMap);this.shadowMaterial=owner.material(new FT.MeshBasicMaterial({map:shadowMap,transparent:true,depthWrite:false,side:2,forceSinglePass:true,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));this.shadow=new FT.Mesh(owner.geometry(new FT.PlaneGeometry(1,1)),this.shadowMaterial);this.shadow.name='Goalkeeper contact shadow';this.shadow.rotation.x=-Math.PI/2;owner.root.add(this.shadow);
     this.ragdollPoints=Object.fromEntries(Object.keys(this.landmarks).map(name=>[name,new FT.Vector3()]));
     this.ragdollSegments=[];this.ragdollJoints=[];
     const footAxis=new FT.Vector3(0,-.035,-.178).normalize(),handAxis=this.handCentreLocal.clone().normalize();
@@ -94,7 +105,7 @@ class FootballGoalkeeperVisual {
     const along=(l1*l1-l2*l2+distance*distance)/(2*distance),height=Math.sqrt(Math.max(0,l1*l1-along*along));
     this.v2.copy(bend).addScaledVector(this.v,-bend.dot(this.v));if(this.v2.lengthSq()<.00001)this.v2.set(0,0,-1);this.v2.normalize();return out.copy(root).addScaledVector(this.v,along).addScaledVector(this.v2,height);
   }
-  aimBone(name,from,to){const b=this.bone[name];b.position.copy(from);this.v.subVectors(to,from).normalize();b.quaternion.setFromUnitVectors(this.down,this.v);return b;}
+  aimBone(bone,from,to){bone.position.copy(from);this.v.subVectors(to,from).normalize();bone.quaternion.setFromUnitVectors(this.down,this.v);return bone;}
   readyHandQuaternion(wrist,elbow,side,armQuaternion,blend,out){
     // The lowered hands continue the forearms, keeping the wrists neutral.
     // Open palms face into play and slightly toward one another.
@@ -154,7 +165,7 @@ class FootballGoalkeeperVisual {
     this.bone.torso.position.set(0,-.01,0).applyQuaternion(this.bodyQ).add(this.hip);this.bone.torso.quaternion.copy(this.upperQ);
     this.bone.head.position.set(0,.556,0).applyQuaternion(this.upperQ).add(this.hip);this.bone.head.quaternion.copy(this.upperQ).multiply(this.q.setFromAxisAngle(this.xAxis,.045+effort*.035));
     for(let i=0;i<2;i++){
-      const s=i?'R':'L',sg=i?1:-1,hand=i?'right':'left',hip=this.bone['thigh'+s].position,ankle=this.bone['foot'+s].position,knee=this.bone['shin'+s].position;
+      const bones=this.limbs[i],sg=i?1:-1,hand=i?'right':'left',hip=bones.thigh.position,ankle=bones.foot.position,knee=bones.shin.position;
       hip.set(sg*.095,0,0).applyQuaternion(this.bodyQ).add(this.hip);
       ankle.copy(this.ankleTargets[i]);
       if(activeDive>0){
@@ -166,14 +177,14 @@ class FootballGoalkeeperVisual {
         const kneel=this.smooth(0,.42,t)*(1-this.smooth(.55,1,t));this.v3.set(sg*.18,.080,sg===dir?-.27:.27);ankle.lerp(this.v3,kneel);ankle.lerp(this.v4.set(sg*.231,.080,-.018),this.smooth(.52,1,t));
       }
       const f=fw.feet[i],bootYaw=f.previousYaw+Math.atan2(Math.sin(f.yaw-f.previousYaw),Math.cos(f.yaw-f.previousYaw))*alpha-yaw;
-      const footQ=this.bone['foot'+s].quaternion;this.rotate(footQ,-.04+feetWeight*this.mix(f.previousPitch,f.pitch,alpha),sg*.08+feetWeight*Math.atan2(Math.sin(bootYaw),Math.cos(bootYaw)),0);if(activeDive>0)footQ.slerp(this.q.copy(this.bodyQ).multiply(this.q2.setFromAxisAngle(this.xAxis,sg===dir?-.27:.24)),activeDive);
+      const footQ=bones.foot.quaternion;this.rotate(footQ,-.04+feetWeight*this.mix(f.previousPitch,f.pitch,alpha),sg*.08+feetWeight*Math.atan2(Math.sin(bootYaw),Math.cos(bootYaw)),0);if(activeDive>0)footQ.slerp(this.q.copy(this.bodyQ).multiply(this.q2.setFromAxisAngle(this.xAxis,sg===dir?-.27:.24)),activeDive);
       const clearance=FootballBoots.groundClearance(footQ,hand)/(FootballBoots.authorScale*this.scale);ankle.y=Math.max(ankle.y,clearance);
       // Clamp after sole support correction; this keeps the ankle continuous
       // with the shin rather than floating a separately rendered boot.
-      this.v3.set(0,.04,-1).applyQuaternion(this.bodyQ);this.solveJoint(hip,ankle,.43,.44,this.v3,knee);this.aimBone('thigh'+s,hip,knee);this.aimBone('shin'+s,knee,ankle);
-      this.bone['knee'+s].position.copy(knee);this.bone['knee'+s].quaternion.copy(this.bone['thigh'+s].quaternion).slerp(this.bone['shin'+s].quaternion,.5);
+      this.v3.set(0,.04,-1).applyQuaternion(this.bodyQ);this.solveJoint(hip,ankle,.43,.44,this.v3,knee);this.aimBone(bones.thigh,hip,knee);this.aimBone(bones.shin,knee,ankle);
+      bones.knee.position.copy(knee);bones.knee.quaternion.copy(bones.thigh.quaternion).slerp(bones.shin.quaternion,.5);
       this.boots[i].position.copy(ankle);this.boots[i].quaternion.copy(footQ);
-      const shoulder=this.bone['upperArm'+s].position,wrist=this.bone['hand'+s].position,elbow=this.bone['forearm'+s].position;
+      const shoulder=bones.upperArm.position,wrist=bones.hand.position,elbow=bones.forearm.position;
       shoulder.set(sg*.207,.485,0).applyQuaternion(this.upperQ).add(this.hip);
       wrist.set(sg*(.32-.035*push),hipY+.13-.025*push,-.34+.035*push);
       wrist.z-=sg*footballClamp(legLead*.19,-.088,.088)*feetWeight;
@@ -190,9 +201,9 @@ class FootballGoalkeeperVisual {
       if(phase==='recover'){
         const support=this.smooth(.08,.30,t)*(1-this.smooth(.48,.84,t));this.v4.set(dir*(sg===dir?.30:.12),sg===dir?.11:.45,sg===dir?-.10:-.30);wrist.lerp(this.v4,support);
       }
-      this.v3.set(sg*.40,-.60,-.40).lerp(this.v4.set(sg*.22,-.55,1),activeDive);this.solveJoint(shoulder,wrist,.281,.259,this.v3,elbow);this.aimBone('upperArm'+s,shoulder,elbow);this.aimBone('forearm'+s,elbow,wrist);
-      this.readyHandQuaternion(wrist,elbow,sg,this.bone['forearm'+s].quaternion,activeDive,this.bone['hand'+s].quaternion);this.bone['elbow'+s].position.copy(elbow);this.bone['elbow'+s].quaternion.copy(this.bone['upperArm'+s].quaternion).slerp(this.bone['forearm'+s].quaternion,.5);
-      this.hands[i].position.copy(wrist);this.hands[i].quaternion.copy(this.bone['hand'+s].quaternion);
+      this.v3.set(sg*.40,-.60,-.40).lerp(this.v4.set(sg*.22,-.55,1),activeDive);this.solveJoint(shoulder,wrist,.281,.259,this.v3,elbow);this.aimBone(bones.upperArm,shoulder,elbow);this.aimBone(bones.forearm,elbow,wrist);
+      this.readyHandQuaternion(wrist,elbow,sg,bones.forearm.quaternion,activeDive,bones.hand.quaternion);bones.elbow.position.copy(elbow);bones.elbow.quaternion.copy(bones.upperArm.quaternion).slerp(bones.forearm.quaternion,.5);
+      this.hands[i].position.copy(wrist);this.hands[i].quaternion.copy(bones.hand.quaternion);
     }
     // Collision landmarks and actual skin share the very same authored pose.
     // The ground check reads the root transform and local joints. Publish the
@@ -280,7 +291,7 @@ class FootballGoalkeeperVisual {
       bone.quaternion.slerp(readyRotation,readyWeight);
     }
     for(let i=0;i<2;i++){
-      const side=i?'R':'L',hand=b['hand'+side],foot=b['foot'+side];
+      const {hand,foot}=this.limbs[i];
       this.hands[i].position.copy(hand.position);this.hands[i].quaternion.copy(hand.quaternion);
       this.boots[i].position.copy(foot.position);this.boots[i].quaternion.copy(foot.quaternion);
     }
@@ -293,9 +304,14 @@ class FootballGoalkeeperVisual {
     this.shadowMaterial.opacity=1-footballClamp((pose.pelvis.y-.85)*.35,0,.45);
   }
   updateLandmarks(){
-    const lm=this.landmarks,b=this.bone,to=(name,p)=>lm[name].copy(p).applyMatrix4(this.root.matrixWorld);
-    to('pelvis',b.pelvis.position);to('chest',this.v.set(0,.34,0).applyQuaternion(b.torso.quaternion).add(b.torso.position));to('neck',b.head.position);to('head',this.v.set(0,.18,0).applyQuaternion(b.head.quaternion).add(b.head.position));
-    for(let i=0;i<2;i++){const s=i?'R':'L';to('hand'+s,this.v.copy(this.handCentreLocal).applyQuaternion(b['hand'+s].quaternion).add(b['hand'+s].position));to('wrist'+s,b['hand'+s].position);to('elbow'+s,b['forearm'+s].position);to('shoulder'+s,b['upperArm'+s].position);to('hip'+s,b['thigh'+s].position);to('knee'+s,b['shin'+s].position);to('ankle'+s,b['foot'+s].position);to('toe'+s,this.v.set(0,-.035,-.178).applyQuaternion(b['foot'+s].quaternion).add(b['foot'+s].position));}
+    const world=this.root.matrixWorld,b=this.bone;
+    for(const pair of this.landmarkOrigins)pair[0].copy(pair[1]).applyMatrix4(world);
+    this.landmarks.chest.set(0,.34,0).applyQuaternion(b.torso.quaternion).add(b.torso.position).applyMatrix4(world);
+    this.landmarks.head.set(0,.18,0).applyQuaternion(b.head.quaternion).add(b.head.position).applyMatrix4(world);
+    for(const limb of this.limbs){
+      limb.palmCentre.copy(this.handCentreLocal).applyQuaternion(limb.hand.quaternion).add(limb.hand.position).applyMatrix4(world);
+      limb.toe.set(0,-.035,-.178).applyQuaternion(limb.foot.quaternion).add(limb.foot.position).applyMatrix4(world);
+    }
   }
   updateSkinBounds(){
     // Every weighted vertex lies in the convex hull of its bone-transformed

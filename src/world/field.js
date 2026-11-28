@@ -23,9 +23,9 @@ class FootballField {
     this._makeGoals();
     this._makeBall();
     this.player=new FootballPlayerVisuals(this);
-    // The headset's actual viewport clips the scene. Do not make individual
-    // field pieces or the ball disappear near a view edge.
-    this.root.traverse(object=>{if(object.isMesh)object.frustumCulled=false;});
+    // The turf and instanced frames span the pitch. The moving ball and its
+    // flat shadow each have their own tight sphere for stereo frustum tests.
+    this.turfMesh.frustumCulled=this.goalFrames.frustumCulled=this.goalJoints.frustumCulled=false;
   }
 
   geometry(geometry) { this.geometries.add(geometry); return geometry; }
@@ -213,7 +213,7 @@ class FootballField {
     const sc=shadowCanvas.getContext('2d'),gradient=sc.createRadialGradient(64,64,10,64,64,62);
     gradient.addColorStop(0,'rgba(0,0,0,.75)');gradient.addColorStop(.35,'rgba(0,0,0,.48)');gradient.addColorStop(1,'rgba(0,0,0,0)');
     sc.fillStyle=gradient;sc.fillRect(0,0,128,128);const shadowMap=new FT.CanvasTexture(shadowCanvas);this.textures.add(shadowMap);
-    this.ballShadowMaterial=this.material(new FT.MeshBasicMaterial({map:shadowMap,color:0x0b1806,transparent:true,opacity:.72,depthWrite:false,side:2}));
+    this.ballShadowMaterial=this.material(new FT.MeshBasicMaterial({map:shadowMap,color:0x0b1806,transparent:true,opacity:.72,depthWrite:false,side:2,forceSinglePass:true}));
     this.ballShadow=new FT.Mesh(this.geometry(new FT.PlaneGeometry(2,2)),this.ballShadowMaterial);
     this.ballShadow.rotation.x=-Math.PI/2;this.ballShadow.scale.set(.19,.19,1);this.ballShadow.position.y=.014;this.root.add(this.ballShadow);
     this.ballPanelCounts = {pentagons: 12, hexagons: 20};

@@ -60,6 +60,11 @@ class FootballGoalNets {
     panel('right',nz,ny,(k,j)=>node(nx,j,k),0,-1);
     panel('roof',nx,nz,(i,k)=>node(i,ny,k),1,-1);
     const rest=new Float32Array(nodes),relaxed=rest.slice(),offsets=FootballGoalNets.relaxedOffsets();let relaxedDisplacement=0;
+    for(const panel of panels){
+      // The rows run along height on the upright panels and depth on the roof.
+      const axis=panel.axis===1?2:1;panel.rowEdges=new Float32Array(panel.rows+1);
+      for(let row=0;row<=panel.rows;row++)panel.rowEdges[row]=rest[panel.nodes[row*(panel.columns+1)]*3+axis];
+    }
     for(let i=0;i<rest.length;i+=3){const x=offsets[i]*.0001,y=offsets[i+1]*.0001,z=offsets[i+2]*.0001*-sign;relaxed[i]+=x;relaxed[i+1]+=y;relaxed[i+2]+=z;relaxedDisplacement=Math.max(relaxedDisplacement,Math.sqrt(x*x+y*y+z*z));}
     const positions=relaxed.slice(),previous=relaxed.slice(),neighborSets=Array.from({length:pins.length},()=>new Set()),constraintLookup=new Map();
     for(let k=0;k<constraints.length;k+=4){const a=constraints[k],b=constraints[k+1];constraintLookup.set(Math.min(a,b)*4096+Math.max(a,b),k/4);if(constraints[k+3]<.001){neighborSets[a].add(b);neighborSets[b].add(a);}}
@@ -73,9 +78,23 @@ class FootballGoalNets {
         else if(!other)faceEdges.set(key,{pi,t});
       }
     }
+    // Index offsets and rest lengths are fixed. Only a handful of mass and
+    // compliance combinations need a timestep-specific projection coefficient.
+    const links=new Float32Array(constraints),mass=new Float32Array(pins),linkCount=links.length/4;
+    const endpoints=new Uint16Array(linkCount*2),restSquared=new Float64Array(linkCount);
+    const linkType=new Uint8Array(linkCount),types=[];
+    for(let i=0;i<linkCount;i++){
+      const k=i*4,a=links[k],b=links[k+1];
+      endpoints[i*2]=a*3;endpoints[i*2+1]=b*3;restSquared[i]=links[k+2]*links[k+2];
+      const wa=mass[a],wb=mass[b],compliance=links[k+3];
+      let type=types.findIndex(t=>t.wa===wa&&t.wb===wb&&t.compliance===compliance);
+      if(type===-1){type=types.length;types.push({wa,wb,compliance,alpha:0,denominator:0});}
+      linkType[i]=type;
+    }
     return{sign,end:sign,rest,relaxed,relaxedDisplacement,positions,current:positions,previous,renderPrevious:previous,
-      velocity:new Float32Array(rest.length),normalPositions:new Float32Array(rest.length),normals:new Float32Array(rest.length),normalsDirty:false,inverseMass:new Float32Array(pins),
-      indices:new Uint16Array(triangles),panels,constraints:new Float32Array(constraints),lambda:new Float32Array(constraints.length/4),
+      velocity:new Float32Array(rest.length),normalPositions:new Float32Array(rest.length),normals:new Float32Array(rest.length),normalsDirty:false,inverseMass:mass,
+      indices:new Uint16Array(triangles),panels,constraints:links,lambda:new Float32Array(linkCount),
+      endpoints,restSquared,linkType,types,queryDisplacement:Infinity,
       neighbors,neighborLinks,constraintLookup,seamEdges:new Uint16Array(seamEdges),visited:new Uint32Array(pins.length),
       triangleActive:new Uint8Array(triangles.length/3).fill(1),constraintActive:new Uint8Array(constraints.length/4).fill(1),
       nodeDamage:new Float32Array(pins.length),damageRest:rest.slice(),nodeSupport:new Uint16Array(pins.length),edgeSupport:new Uint8Array(constraints.length/4),
@@ -88,6 +107,7 @@ class FootballGoalNets {
     this.clearContacts(true);
     for(const net of this.goals){
       if(!repair&&net.tearCount){net.ballInside=null;net.exteriorMask=0;net.revision++;continue;}
+      net.queryDisplacement=Infinity;
       net.positions.set(net.relaxed);net.previous.set(net.relaxed);net.velocity.fill(0);net.lambda.fill(0);net.normals.fill(0);net.normalsDirty=false;net.sleeping=true;net.active=false;net.quietTime=0;net.maxDisplacement=net.relaxedDisplacement;net.maxSpeed=0;net.ballInside=null;net.exteriorMask=0;net.ballContact=false;net.footContact=false;net.revision++;
       if(repair){net.triangleActive.fill(1);net.constraintActive.fill(1);net.nodeDamage.fill(0);net.damageRest.set(net.rest);net.nodeSupport.fill(0);net.edgeSupport.fill(0);net.tornCount=0;net.tearCount=0;net.tears.length=0;net.lastTearTime=-10;net.damageRevision++;}
     }
@@ -147,28 +167,33 @@ class FootballGoalNets {
       }else{v[j]=(v[j]+(r[j]-p[j])*spring)*damping;v[j+1]=(v[j+1]+((r[j+1]-p[j+1])*26-9.81)*h)*damping;v[j+2]=(v[j+2]+(r[j+2]-p[j+2])*spring)*damping;}
       p[j]+=v[j]*h;p[j+1]+=v[j+1]*h;p[j+2]+=v[j+2]*h;
     }
-    net.lambda.fill(0);const invH2=1/(h*h);
-    for(let pass=0;pass<2;pass++)for(let order=0;order<c.length;order+=4){
-      const k=pass?c.length-4-order:order;
-      if(!net.constraintActive[k>>2])continue;
-      const a=c[k]|0,b=c[k+1]|0,wa=w[a],wb=w[b];if(wa+wb===0)continue;
-      const ai=a*3,bi=b*3,dx=p[bi]-p[ai],dy=p[bi+1]-p[ai+1],dz=p[bi+2]-p[ai+2],lengthSq=dx*dx+dy*dy+dz*dz,restLength=c[k+2];
+    const {lambda,endpoints,restSquared,linkType,types,constraintActive}=net,count=lambda.length;
+    lambda.fill(0);const invH2=1/(h*h);
+    for(const type of types){type.alpha=type.compliance*invH2;type.denominator=type.wa+type.wb+type.alpha;}
+    for(let pass=0;pass<2;pass++)for(let order=0;order<count;order++){
+      const i=pass?count-1-order:order;
+      if(!constraintActive[i])continue;
+      const ai=endpoints[i*2],bi=endpoints[i*2+1],dx=p[bi]-p[ai],dy=p[bi+1]-p[ai+1],dz=p[bi+2]-p[ai+2],lengthSq=dx*dx+dy*dy+dz*dz;
       // Cord resists extension; a loose span folds instead of pushing apart
       // like a compressed spring. Soft bending links keep the fold coherent.
-      if(lengthSq<=restLength*restLength)continue;
-      const length=sqrt(lengthSq);if(length<=restLength||length<1e-7)continue;
-      const alpha=c[k+3]*invH2,lambda=net.lambda[k>>2],change=(-(length-restLength)-alpha*lambda)/(wa+wb+alpha);net.lambda[k>>2]+=change;
+      if(lengthSq<=restSquared[i])continue;
+      const type=types[linkType[i]],wa=type.wa,wb=type.wb;if(wa+wb===0)continue;
+      const restLength=c[i*4+2],length=sqrt(lengthSq);if(length<=restLength||length<1e-7)continue;
+      const change=(-(length-restLength)-type.alpha*lambda[i])/type.denominator;lambda[i]+=change;
       const scale=change/length;p[ai]-=wa*dx*scale;p[ai+1]-=wa*dy*scale;p[ai+2]-=wa*dz*scale;p[bi]+=wb*dx*scale;p[bi+1]+=wb*dy*scale;p[bi+2]+=wb*dz*scale;
     }
+    let maxDisplacementSquared=0;
     for(let i=0;i<w.length;i++){
       if(!w[i])continue;const j=i*3;
       if(p[j+1]<.004)p[j+1]=.004;
       const dx=p[j]-r[j],dy=p[j+1]-r[j+1],dz=p[j+2]-r[j+2],distanceSq=dx*dx+dy*dy+dz*dz;
+      maxDisplacementSquared=Math.max(maxDisplacementSquared,distanceSq);
       // Tension limiting is applied to the visible particles themselves.
       if(distanceSq>1.8225){const factor=1.35/sqrt(distanceSq);p[j]=r[j]+dx*factor;p[j+1]=r[j+1]+dy*factor;p[j+2]=r[j+2]+dz*factor;}
       let vx=(p[j]-start[j])/h,vy=(p[j+1]-start[j+1])/h,vz=(p[j+2]-start[j+2])/h,speedSq=vx*vx+vy*vy+vz*vz;
       if(speedSq>256){const q=16/sqrt(speedSq);vx*=q;vy*=q;vz*=q;}v[j]=vx;v[j+1]=vy;v[j+2]=vz;
     }
+    net.queryDisplacement=sqrt(maxDisplacementSquared)+.00001;
     this.stats.clothSteps++;
     // Only a ball contact uses these normals. Snapshot the exact solved shape,
     // since a boot can move shared particles before that contact in the same tick.
@@ -178,6 +203,16 @@ class FootballGoalNets {
     const normals=net.normals,idx=net.indices;normals.fill(0);net.normalsDirty=false;
     for(let t=0;t<idx.length;t+=3){if(!net.triangleActive[t/3])continue;const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3,ax=p[b]-p[a],ay=p[b+1]-p[a+1],az=p[b+2]-p[a+2],bx=p[c]-p[a],by=p[c+1]-p[a+1],bz=p[c+2]-p[a+2],nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx;
       normals[a]+=nx;normals[a+1]+=ny;normals[a+2]+=nz;normals[b]+=nx;normals[b+1]+=ny;normals[b+2]+=nz;normals[c]+=nx;normals[c+1]+=ny;normals[c+2]+=nz;}
+  }
+  _rowNear(net,panel,row,point,radius){
+    // Preserve the original triangle order. A whole row can be excluded only
+    // if even the most displaced knot cannot bring it into the contact range.
+    const value=panel.axis===1?point.z:point.y,a=panel.rowEdges[row],b=panel.rowEdges[row+1],range=radius+net.queryDisplacement;
+    return value>=Math.min(a,b)-range&&value<=Math.max(a,b)+range;
+  }
+  _growQueryBounds(net,j){
+    const p=net.positions,r=net.rest;
+    net.queryDisplacement=Math.max(net.queryDisplacement,Math.abs(p[j]-r[j]),Math.abs(p[j+1]-r[j+1]),Math.abs(p[j+2]-r[j+2]));
   }
   _closestTriangle(px,py,pz,p,ia,ib,ic) {
     const a=ia*3,b=ib*3,c=ic*3,ax=p[a],ay=p[a+1],az=p[a+2],abx=p[b]-ax,aby=p[b+1]-ay,abz=p[b+2]-az,acx=p[c]-ax,acy=p[c+1]-ay,acz=p[c+2]-az;
@@ -307,6 +342,7 @@ class FootballGoalNets {
       for(let j=0;j<2;j++){const id=t/3+j;if(net.triangleActive[id]){net.triangleActive[id]=0;net.tornTriangles[net.tornCount++]=id;removed++;}}
     }
     if(!removed)return false;
+    net.queryDisplacement=Infinity;
     net.tearCount++;net.lastTearTime=this.time;net.damageRevision++;net.revision++;net.sleeping=false;net.active=true;net.quietTime=0;net.energyContact=true;
     this._rebuildDamage(net,firstTorn);
     for(let i=0;i<net.nodeDamage.length;i++){
@@ -374,60 +410,64 @@ class FootballGoalNets {
     if(this._sweptBreak(net,physics))return;
     for(let panelIndex=0;panelIndex<net.panels.length;panelIndex++){
       const panel=net.panels[panelIndex],retainSide=net.ballInside||!!(net.exteriorMask&(1<<panelIndex));
-      const end=panel.triangleStart+panel.triangleCount;
-      for(let t=panel.triangleStart;t<end;t+=3){
-        if(!net.triangleActive[t/3])continue;
-        const ia=idx[t],ib=idx[t+1],ic=idx[t+2];
-        if(!this._triangleNear(p,ia,ib,ic,bp.x,bp.y,bp.z,r+.04,retainSide?panel.axis:-1))continue;
-        if(!this._closestTriangle(bp.x,bp.y,bp.z,p,ia,ib,ic))continue;
-        const nearestDistanceSq=(bp.x-this._closest[0])**2+(bp.y-this._closest[1])**2+(bp.z-this._closest[2])**2;
-        const projected=retainSide&&this._projectedTriangle(bp.x,bp.y,bp.z,p,ia,ib,ic,panel.axis);
-        const bary=this._bary,q=this._closest,n=this._normal,wa=bary[0],wb=bary[1],wc=bary[2],dx=bp.x-q[0],dy=bp.y-q[1],dz=bp.z-q[2];
-        const orientation=(net.ballInside?1:-1)*panel.inward;
-        if(n.getComponent(panel.axis)*orientation<0)n.negate();
-        const signed=dx*n.x+dy*n.y+dz*n.z,distance=Math.sqrt(dx*dx+dy*dy+dz*dz);
-        // Retention catches crossings, but an approaching sphere must touch
-        // the finite triangle, not only its extended sloping plane.
-        if(projected&&signed>=0&&nearestDistanceSq>=r*r)continue;
-        // A diagonal or welded cell edge is still a continuous sheet. Retain
-        // its sided contact when a fast sphere crosses the exact shared edge.
-        const tangentSq=Math.max(0,distance*distance-signed*signed);
-        const face=projected||(wa>1e-7&&wb>1e-7&&wc>1e-7)||tangentSq<1e-9||(net.ballInside&&signed<0&&tangentSq<r*r*.95);
-        if(!face){if(distance>=r)continue;if(distance>1e-7)n.set(dx/distance,dy/distance,dz/distance);}
-        else if(signed>=r||(!retainSide&&signed<-.10))continue;
-        const penetration=face?r-signed:r-distance;
-        if(penetration<=0||penetration>1.6)continue;
-        // A ball can go around a post and later approach a different panel
-        // from outside. Remember that material side at the actual first touch.
-        if(!net.ballInside&&signed>=-.10)net.exteriorMask|=1<<panelIndex;
-        const ca=ia*3,cb=ib*3,cc=ic*3,invCloth=wa*wa*w[ia]+wb*wb*w[ib]+wc*wc*w[ic],total=ballW+invCloth;
-        this._surface.set(vel[ca]*wa+vel[cb]*wb+vel[cc]*wc,vel[ca+1]*wa+vel[cb+1]*wb+vel[cc+1]*wc,vel[ca+2]*wa+vel[cb+2]*wb+vel[cc+2]*wc);
-        if(net.normalsDirty)this._updateNormals(net,net.normalPositions);
-        const response=this._impulseNormal,normals=net.normals,patchInverse=this._contactPatch(net,ia,ib,ic,wa,wb,wc),patchIds=this._patchIds,patchWeights=this._patchWeights;
-        response.set(0,0,0);for(let k=0;k<this._patchCount;k++){const j=patchIds[k]*3,pw=patchWeights[k];response.x+=normals[j]*pw;response.y+=normals[j+1]*pw;response.z+=normals[j+2]*pw;}
-        if(response.lengthSq()<1e-12)response.copy(n);else response.normalize();if(response.dot(n)<0)response.negate();response.multiplyScalar(.97).addScaledVector(n,.03).normalize();
-        const incoming=-(ball.velocity.x-this._surface.x)*response.x-(ball.velocity.y-this._surface.y)*response.y-(ball.velocity.z-this._surface.z)*response.z;
-        // The sphere has reached this finite sheet. A strong outward impact
-        // ruptures its local cords before the retention constraint pulls back.
-        if(net.ballInside&&incoming>=this.tearSpeed&&ball.velocity.lengthSq()>=this.tearSpeed*this.tearSpeed&&nearestDistanceSq<=r*r&&this._tear(net,physics,panelIndex,t,incoming))return;
-        const correction=(penetration+.00005)/total;
-        bp.addScaledVector(n,correction*ballW);
-        const ids=this._ids,weights=this._weights;ids[0]=ia;ids[1]=ib;ids[2]=ic;weights[0]=wa;weights[1]=wb;weights[2]=wc;
-        for(let k=0;k<3;k++){const id=ids[k],j=id*3,d=-correction*weights[k]*w[id];p[j]+=n.x*d;p[j+1]+=n.y*d;p[j+2]+=n.z*d;}
-        if(incoming>0){
-          if(incoming>.2)net.energyContact=true;
-          physics.redirectPlayerShot('net');
-          // The tensioned neighboring knots share the collision impulse. This
-          // is a real distributed cloth mass, not an oversized ball collider.
-          const impulse=incoming*1.04/(ballW+patchInverse);
-          ball.velocity.addScaledVector(response,impulse*ballW);
-          for(let k=0;k<this._patchCount;k++){const id=patchIds[k],j=id*3,d=-impulse*patchWeights[k]*w[id];vel[j]+=response.x*d;vel[j+1]+=response.y*d;vel[j+2]+=response.z*d;}
-          this._velocity.copy(ball.velocity);physics.surfaceFriction(response,this._surface,impulse*ballW*.075);
-          this._velocity.sub(ball.velocity).multiplyScalar(ball.mass);
-          for(let k=0;k<this._patchCount;k++){const id=patchIds[k],j=id*3,d=patchWeights[k]*w[id];vel[j]+=this._velocity.x*d;vel[j+1]+=this._velocity.y*d;vel[j+2]+=this._velocity.z*d;}
-          if(!net.ballContact&&incoming>1.1&&physics.time-this._lastEvent>.14){physics.events.push({type:'net',speed:incoming,position:new FT.Vector3(q[0],q[1],q[2])});this._lastEvent=physics.time;}
+      const rowSize=panel.columns*6;
+      for(let row=0;row<panel.rows;row++){
+        if(!this._rowNear(net,panel,row,bp,r+.04))continue;
+        const start=panel.triangleStart+row*rowSize;
+        for(let t=start;t<start+rowSize;t+=3){
+          if(!net.triangleActive[t/3])continue;
+          const ia=idx[t],ib=idx[t+1],ic=idx[t+2];
+          if(!this._triangleNear(p,ia,ib,ic,bp.x,bp.y,bp.z,r+.04,retainSide?panel.axis:-1))continue;
+          if(!this._closestTriangle(bp.x,bp.y,bp.z,p,ia,ib,ic))continue;
+          const nearestDistanceSq=(bp.x-this._closest[0])**2+(bp.y-this._closest[1])**2+(bp.z-this._closest[2])**2;
+          const projected=retainSide&&this._projectedTriangle(bp.x,bp.y,bp.z,p,ia,ib,ic,panel.axis);
+          const bary=this._bary,q=this._closest,n=this._normal,wa=bary[0],wb=bary[1],wc=bary[2],dx=bp.x-q[0],dy=bp.y-q[1],dz=bp.z-q[2];
+          const orientation=(net.ballInside?1:-1)*panel.inward;
+          if(n.getComponent(panel.axis)*orientation<0)n.negate();
+          const signed=dx*n.x+dy*n.y+dz*n.z,distance=Math.sqrt(dx*dx+dy*dy+dz*dz);
+          // Retention catches crossings, but an approaching sphere must touch
+          // the finite triangle, not only its extended sloping plane.
+          if(projected&&signed>=0&&nearestDistanceSq>=r*r)continue;
+          // A diagonal or welded cell edge is still a continuous sheet. Retain
+          // its sided contact when a fast sphere crosses the exact shared edge.
+          const tangentSq=Math.max(0,distance*distance-signed*signed);
+          const face=projected||(wa>1e-7&&wb>1e-7&&wc>1e-7)||tangentSq<1e-9||(net.ballInside&&signed<0&&tangentSq<r*r*.95);
+          if(!face){if(distance>=r)continue;if(distance>1e-7)n.set(dx/distance,dy/distance,dz/distance);}
+          else if(signed>=r||(!retainSide&&signed<-.10))continue;
+          const penetration=face?r-signed:r-distance;
+          if(penetration<=0||penetration>1.6)continue;
+          // A ball can go around a post and later approach a different panel
+          // from outside. Remember that material side at the actual first touch.
+          if(!net.ballInside&&signed>=-.10)net.exteriorMask|=1<<panelIndex;
+          const ca=ia*3,cb=ib*3,cc=ic*3,invCloth=wa*wa*w[ia]+wb*wb*w[ib]+wc*wc*w[ic],total=ballW+invCloth;
+          this._surface.set(vel[ca]*wa+vel[cb]*wb+vel[cc]*wc,vel[ca+1]*wa+vel[cb+1]*wb+vel[cc+1]*wc,vel[ca+2]*wa+vel[cb+2]*wb+vel[cc+2]*wc);
+          if(net.normalsDirty)this._updateNormals(net,net.normalPositions);
+          const response=this._impulseNormal,normals=net.normals,patchInverse=this._contactPatch(net,ia,ib,ic,wa,wb,wc),patchIds=this._patchIds,patchWeights=this._patchWeights;
+          response.set(0,0,0);for(let k=0;k<this._patchCount;k++){const j=patchIds[k]*3,pw=patchWeights[k];response.x+=normals[j]*pw;response.y+=normals[j+1]*pw;response.z+=normals[j+2]*pw;}
+          if(response.lengthSq()<1e-12)response.copy(n);else response.normalize();if(response.dot(n)<0)response.negate();response.multiplyScalar(.97).addScaledVector(n,.03).normalize();
+          const incoming=-(ball.velocity.x-this._surface.x)*response.x-(ball.velocity.y-this._surface.y)*response.y-(ball.velocity.z-this._surface.z)*response.z;
+          // The sphere has reached this finite sheet. A strong outward impact
+          // ruptures its local cords before the retention constraint pulls back.
+          if(net.ballInside&&incoming>=this.tearSpeed&&ball.velocity.lengthSq()>=this.tearSpeed*this.tearSpeed&&nearestDistanceSq<=r*r&&this._tear(net,physics,panelIndex,t,incoming))return;
+          const correction=(penetration+.00005)/total;
+          bp.addScaledVector(n,correction*ballW);
+          const ids=this._ids,weights=this._weights;ids[0]=ia;ids[1]=ib;ids[2]=ic;weights[0]=wa;weights[1]=wb;weights[2]=wc;
+          for(let k=0;k<3;k++){const id=ids[k],j=id*3,d=-correction*weights[k]*w[id];p[j]+=n.x*d;p[j+1]+=n.y*d;p[j+2]+=n.z*d;this._growQueryBounds(net,j);}
+          if(incoming>0){
+            if(incoming>.2)net.energyContact=true;
+            physics.redirectPlayerShot('net');
+            // The tensioned neighboring knots share the collision impulse. This
+            // is a real distributed cloth mass, not an oversized ball collider.
+            const impulse=incoming*1.04/(ballW+patchInverse);
+            ball.velocity.addScaledVector(response,impulse*ballW);
+            for(let k=0;k<this._patchCount;k++){const id=patchIds[k],j=id*3,d=-impulse*patchWeights[k]*w[id];vel[j]+=response.x*d;vel[j+1]+=response.y*d;vel[j+2]+=response.z*d;}
+            this._velocity.copy(ball.velocity);physics.surfaceFriction(response,this._surface,impulse*ballW*.075);
+            this._velocity.sub(ball.velocity).multiplyScalar(ball.mass);
+            for(let k=0;k<this._patchCount;k++){const id=patchIds[k],j=id*3,d=patchWeights[k]*w[id];vel[j]+=this._velocity.x*d;vel[j+1]+=this._velocity.y*d;vel[j+2]+=this._velocity.z*d;}
+            if(!net.ballContact&&incoming>1.1&&physics.time-this._lastEvent>.14){physics.events.push({type:'net',speed:incoming,position:new FT.Vector3(q[0],q[1],q[2])});this._lastEvent=physics.time;}
+          }
+          net.ballContact=true;this.stats.ballContacts++;
         }
-        net.ballContact=true;this.stats.ballContacts++;
       }
     }
   }
@@ -488,44 +528,48 @@ class FootballGoalNets {
       this._seeds[3].set(min[0]*.5,cy,min[2]+dz*.4).applyQuaternion(this._quaternion).add(this._ankle);
       this._seeds[4].set(max[0]*.5,cy,min[2]+dz*.4).applyQuaternion(this._quaternion).add(this._ankle);
       for(let panelIndex=0;panelIndex<net.panels.length;panelIndex++){
-      const panel=net.panels[panelIndex],bit=1<<panelIndex,end=panel.triangleStart+panel.triangleCount;
-      for(let t=panel.triangleStart;t<end;t+=3){
-        if(!net.triangleActive[t/3])continue;
-        const ia=idx[t],ib=idx[t+1],ic=idx[t+2];if(!this._triangleNear(p,ia,ib,ic,this._ankle.x,this._ankle.y,this._ankle.z,.39))continue;
-        for(let s=0;s<this._seeds.length;s++){
-          const seed=this._seeds[s];if(!this._closestTriangle(seed.x,seed.y,seed.z,p,ia,ib,ic))continue;
-          const q=this._closest;this._point.set(q[0],q[1],q[2]);
-          if(this._point.distanceToSquared(seed)>.04)continue;
-          this._local.copy(this._point).sub(this._ankle).applyQuaternion(this._inverse);
-          if(this._local.x<min[0]-.004||this._local.x>max[0]+.004||this._local.y<min[1]-.004||this._local.y>max[1]+.004||this._local.z<min[2]-.004||this._local.z>max[2]+.004)continue;
-          const side=state.mask&bit?state.sides[panelIndex]:(this._point.getComponent(panel.axis)>=this._ankle.getComponent(panel.axis)?1:-1);
-          const direction=this._bootDirection.set(0,0,0).setComponent(panel.axis,side).applyQuaternion(this._inverse),hull=shape.triangles;let distance=Infinity;
-          if(hull){
-            // Half-space tests include deep interior points and reject distant
-            // exterior points cheaply. Only a near exterior needs the full
-            // closest-triangle query; an interior exits the real convex hull.
-            let planeMax=-Infinity,exit=Infinity;
-            for(let k=0;k<hull.length;k+=19){const plane=hull[k+9]*this._local.x+hull[k+10]*this._local.y+hull[k+11]*this._local.z-hull[k+12];if(plane>planeMax)planeMax=plane;if(plane>.004)break;
-              const denominator=hull[k+9]*direction.x+hull[k+10]*direction.y+hull[k+11]*direction.z;if(denominator>1e-7){const t=-plane/denominator;if(t>=-1e-5&&t<exit)exit=t;}}
-            if(planeMax>.004)continue;
-            if(planeMax<=1e-7&&Number.isFinite(exit)&&exit<.5){distance=-Math.max(0,exit);this._shoeNormal.copy(direction);}
-            else distance=shape.query(this._local,this._shoePoint,this._shoeNormal,.004);
-          }else distance=shape.query(this._local,this._shoePoint,this._shoeNormal,.36);
-          if(!Number.isFinite(distance)||distance>=.004)continue;
-          const bary=this._bary,wa=bary[0],wb=bary[1],wc=bary[2],total=wa*wa*w[ia]+wb*wb*w[ib]+wc*wc*w[ic];if(total<1e-9)continue;
-          if(!(state.mask&bit)){state.sides[panelIndex]=side;state.mask|=bit;}
-          state.lastTouch[panelIndex]=physics.time;
-          this._normal.copy(this._shoeNormal).applyQuaternion(this._quaternion).normalize();
-          const correction=Math.min(.065,.004-distance)/total,ids=this._ids,weights=this._weights,n=this._normal;ids[0]=ia;ids[1]=ib;ids[2]=ic;weights[0]=wa;weights[1]=wb;weights[2]=wc;
-          this._surface.copy(foot.ankleVelocity);this._arm.copy(this._point).sub(this._ankle);this._velocity.crossVectors(foot.bootDriveAngularVelocity,this._arm);this._surface.add(this._velocity).clampLength(0,12);
-          const ca=ia*3,cb=ib*3,cc=ic*3,normalSpeed=(this._surface.x-(vel[ca]*wa+vel[cb]*wb+vel[cc]*wc))*n.x+(this._surface.y-(vel[ca+1]*wa+vel[cb+1]*wb+vel[cc+1]*wc))*n.y+(this._surface.z-(vel[ca+2]*wa+vel[cb+2]*wb+vel[cc+2]*wc))*n.z;
-          if(normalSpeed>.2)net.energyContact=true;
-          for(let k=0;k<3;k++){const id=ids[k],j=id*3,d=correction*weights[k]*w[id];p[j]+=n.x*d;p[j+1]+=n.y*d;p[j+2]+=n.z*d;
-            if(normalSpeed>0){const dv=normalSpeed*.72*weights[k]*w[id]/total;vel[j]+=n.x*dv;vel[j+1]+=n.y*dv;vel[j+2]+=n.z*dv;}}
-          if(!net.footContact&&normalSpeed>.7&&physics.time-this._lastEvent>.18){physics.events.push({type:'net',footId:foot.id,speed:normalSpeed,position:this._point.clone()});this._lastEvent=physics.time;}
-          net.footContact=true;this.stats.bootContacts++;break;
+        const panel=net.panels[panelIndex],bit=1<<panelIndex,rowSize=panel.columns*6;
+        for(let row=0;row<panel.rows;row++){
+          if(!this._rowNear(net,panel,row,this._ankle,.39))continue;
+          const start=panel.triangleStart+row*rowSize;
+          for(let t=start;t<start+rowSize;t+=3){
+            if(!net.triangleActive[t/3])continue;
+            const ia=idx[t],ib=idx[t+1],ic=idx[t+2];if(!this._triangleNear(p,ia,ib,ic,this._ankle.x,this._ankle.y,this._ankle.z,.39))continue;
+            for(let s=0;s<this._seeds.length;s++){
+              const seed=this._seeds[s];if(!this._closestTriangle(seed.x,seed.y,seed.z,p,ia,ib,ic))continue;
+              const q=this._closest;this._point.set(q[0],q[1],q[2]);
+              if(this._point.distanceToSquared(seed)>.04)continue;
+              this._local.copy(this._point).sub(this._ankle).applyQuaternion(this._inverse);
+              if(this._local.x<min[0]-.004||this._local.x>max[0]+.004||this._local.y<min[1]-.004||this._local.y>max[1]+.004||this._local.z<min[2]-.004||this._local.z>max[2]+.004)continue;
+              const side=state.mask&bit?state.sides[panelIndex]:(this._point.getComponent(panel.axis)>=this._ankle.getComponent(panel.axis)?1:-1);
+              const direction=this._bootDirection.set(0,0,0).setComponent(panel.axis,side).applyQuaternion(this._inverse),hull=shape.triangles;let distance=Infinity;
+              if(hull){
+                // Half-space tests include deep interior points and reject distant
+                // exterior points cheaply. Only a near exterior needs the full
+                // closest-triangle query; an interior exits the real convex hull.
+                let planeMax=-Infinity,exit=Infinity;
+                for(let k=0;k<hull.length;k+=19){const plane=hull[k+9]*this._local.x+hull[k+10]*this._local.y+hull[k+11]*this._local.z-hull[k+12];if(plane>planeMax)planeMax=plane;if(plane>.004)break;
+                  const denominator=hull[k+9]*direction.x+hull[k+10]*direction.y+hull[k+11]*direction.z;if(denominator>1e-7){const t=-plane/denominator;if(t>=-1e-5&&t<exit)exit=t;}}
+                if(planeMax>.004)continue;
+                if(planeMax<=1e-7&&Number.isFinite(exit)&&exit<.5){distance=-Math.max(0,exit);this._shoeNormal.copy(direction);}
+                else distance=shape.query(this._local,this._shoePoint,this._shoeNormal,.004);
+              }else distance=shape.query(this._local,this._shoePoint,this._shoeNormal,.36);
+              if(!Number.isFinite(distance)||distance>=.004)continue;
+              const bary=this._bary,wa=bary[0],wb=bary[1],wc=bary[2],total=wa*wa*w[ia]+wb*wb*w[ib]+wc*wc*w[ic];if(total<1e-9)continue;
+              if(!(state.mask&bit)){state.sides[panelIndex]=side;state.mask|=bit;}
+              state.lastTouch[panelIndex]=physics.time;
+              this._normal.copy(this._shoeNormal).applyQuaternion(this._quaternion).normalize();
+              const correction=Math.min(.065,.004-distance)/total,ids=this._ids,weights=this._weights,n=this._normal;ids[0]=ia;ids[1]=ib;ids[2]=ic;weights[0]=wa;weights[1]=wb;weights[2]=wc;
+              this._surface.copy(foot.ankleVelocity);this._arm.copy(this._point).sub(this._ankle);this._velocity.crossVectors(foot.bootDriveAngularVelocity,this._arm);this._surface.add(this._velocity).clampLength(0,12);
+              const ca=ia*3,cb=ib*3,cc=ic*3,normalSpeed=(this._surface.x-(vel[ca]*wa+vel[cb]*wb+vel[cc]*wc))*n.x+(this._surface.y-(vel[ca+1]*wa+vel[cb+1]*wb+vel[cc+1]*wc))*n.y+(this._surface.z-(vel[ca+2]*wa+vel[cb+2]*wb+vel[cc+2]*wc))*n.z;
+              if(normalSpeed>.2)net.energyContact=true;
+              for(let k=0;k<3;k++){const id=ids[k],j=id*3,d=correction*weights[k]*w[id];p[j]+=n.x*d;p[j+1]+=n.y*d;p[j+2]+=n.z*d;this._growQueryBounds(net,j);
+                if(normalSpeed>0){const dv=normalSpeed*.72*weights[k]*w[id]/total;vel[j]+=n.x*dv;vel[j+1]+=n.y*dv;vel[j+2]+=n.z*dv;}}
+              if(!net.footContact&&normalSpeed>.7&&physics.time-this._lastEvent>.18){physics.events.push({type:'net',footId:foot.id,speed:normalSpeed,position:this._point.clone()});this._lastEvent=physics.time;}
+              net.footContact=true;this.stats.bootContacts++;break;
+            }
+          }
         }
-      }
       }
     }
   }

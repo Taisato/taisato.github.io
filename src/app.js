@@ -157,7 +157,7 @@ class FootballApp {
       if(this.controls.desktop&&this.active&&!this.menu&&!this.rewardActive&&document.pointerLockElement===this.renderer.domElement){
         const yaw=-(event.movementX||0)*.0023*this.controls.turnSpeedMultiplier;
         this.controls.refreshHead();this.controls.temp.copy(this.controls.headWorld);
-        this.rig.rotation.y+=yaw;this.rig.updateMatrixWorld(true);
+        this.rig.rotation.y+=yaw;this.rig.updateWorldMatrix(false,false);
         this.controls.temp2.copy(this.controls.headLocal).applyMatrix4(this.rig.matrixWorld);
         this.rig.position.x+=this.controls.temp.x-this.controls.temp2.x;this.rig.position.z+=this.controls.temp.z-this.controls.temp2.z;
         this.controls.desktopPitch=footballClamp(this.controls.desktopPitch-(event.movementY||0)*.0023,-1.25,.7);

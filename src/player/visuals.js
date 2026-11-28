@@ -93,7 +93,7 @@ class FootballPlayerVisuals {
   makeFoot(hand){
     const root=new FT.Group();root.name=hand+' calibrated foot';
     const boot=new FT.Mesh(this.owner.geometry(FootballBoots.create(hand)),this.material),shin=new FT.Mesh(this.shinGeometry,this.material);
-    boot.name=hand+' boot';shin.name=hand+' short shin';boot.frustumCulled=false;shin.frustumCulled=false;root.add(boot,shin);
+    boot.name=hand+' boot';shin.name=hand+' short shin';root.add(boot,shin);
     const inverse=new FT.Quaternion(),alignment=new FT.Quaternion(),direction=new FT.Vector3(),referenceUp=new FT.Vector3(),up=new FT.Vector3(0,1,0);
     const foot={root,boot,shin,legMesh:shin,shinContactShape:shin.geometry.userData.footballShin.contact,length:.91,visibleHeight:FootballPlayerVisuals.shinHeight,
       setLength:length=>{foot.length=Math.max(.2,length);},

@@ -202,6 +202,9 @@ class FootballPhysics {
       const shinBounds=foot.shinContactShape?.bounds;
       const shinRadius=shinBounds?Math.hypot(Math.max(Math.abs(shinBounds.min[0]),Math.abs(shinBounds.max[0])),Math.max(Math.abs(shinBounds.min[1]),Math.abs(shinBounds.max[1])),Math.max(Math.abs(shinBounds.min[2]),Math.abs(shinBounds.max[2]))):0;
       f.distance=f.previousAnkle.distanceTo(f.targetAnkle)+Math.max(f.previousOrientation.angleTo(f.targetOrientation)*sweepRadius,f.previousShinOrientation.angleTo(f.targetShinOrientation)*shinRadius);
+      // Include the whole swept boot and shin, at any intermediate rotation.
+      const bounded=(!foot.contactShape||bounds)&&(!foot.shinContactShape||shinBounds);
+      f.contactReach=bounded?Math.max(sweepRadius,shinRadius)+f.distance+this.ball.radius+this.config.contactSkin:Infinity;
       let state = this.footStates.get(f.id);
       if (!state) {
         state = {contact: false, seen: false, present: true, strikeUntil: 0, releaseUntil: 0,
@@ -263,7 +266,7 @@ class FootballPhysics {
     if (nets) nets.endStep();
     for (let i = 0; i < footCount; i++) {
       const f = this.footData[i];
-      if (!f.state.seen) {
+      if (!f.state.seen && (f.state.contact || f.state===this._launchedFoot || f.state.strikeUntil>this.time)) {
         f.orientation.copy(f.targetOrientation);f.inverse.copy(f.orientation).invert();f.axis.set(0,0,1).applyQuaternion(f.orientation);
         f.shinOrientation.copy(f.targetShinOrientation);f.shinInverse.copy(f.shinOrientation).invert();
         this._footCenter.copy(f.foot.position);
@@ -586,6 +589,7 @@ class FootballPhysics {
 
   collideFoot(f, alpha, dt) {
     const b = this.ball, foot = f.foot, state = f.state, cfg = this.config;
+    if(b.position.distanceToSquared(f.targetAnkle)>f.contactReach*f.contactReach)return;
     const instep=Number.isFinite(foot.instepAmount)?Math.max(0,Math.min(1,foot.instepAmount)):Number(!!foot.instep);
     f.orientation.slerpQuaternions(f.previousOrientation,f.targetOrientation,alpha);
     f.inverse.copy(f.orientation).invert();f.axis.set(0,0,1).applyQuaternion(f.orientation);
@@ -797,9 +801,11 @@ class FootballPhysics {
 
   collideFrame(frame) {
     const b = this.ball;
+    const total=b.radius+FB.postRadius;
+    if(b.position.z<Math.min(frame.a.z,frame.b.z)-total||b.position.z>Math.max(frame.a.z,frame.b.z)+total)return;
     this.closestPoint(b.position, frame.a, frame.b, this._point);
     this._normal.subVectors(b.position, this._point);
-    const total = b.radius + FB.postRadius, sq = this._normal.lengthSq();
+    const sq = this._normal.lengthSq();
     if (sq >= total * total) return;
     const distance = Math.sqrt(sq);
     if (distance > 1e-7) this._normal.multiplyScalar(1 / distance);
